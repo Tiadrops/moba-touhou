@@ -9,16 +9,23 @@ export class BulletPool {
   private scene: Phaser.Scene;
   private pool: Bullet[] = [];
   private maxSize: number;
+  private group: Phaser.Physics.Arcade.Group;
 
   constructor(scene: Phaser.Scene, initialSize: number = 50, maxSize: number = 200) {
     this.scene = scene;
     this.maxSize = maxSize;
+
+    // Phaser Physics Groupを作成（classTypeを指定しない）
+    this.group = scene.physics.add.group({
+      runChildUpdate: false, // update()は手動で呼ぶ
+    });
 
     // 初期プールを作成
     for (let i = 0; i < initialSize; i++) {
       const bullet = new Bullet(scene, 0, 0);
       bullet.deactivate();
       this.pool.push(bullet);
+      this.group.add(bullet, true); // addToWorldパラメータをtrue
     }
   }
 
@@ -38,6 +45,7 @@ export class BulletPool {
       const bullet = new Bullet(this.scene, 0, 0);
       bullet.deactivate();
       this.pool.push(bullet);
+      this.group.add(bullet, true); // addToWorldパラメータをtrue
       return bullet;
     }
 
@@ -62,6 +70,13 @@ export class BulletPool {
    */
   getActiveBullets(): Bullet[] {
     return this.pool.filter(bullet => bullet.getIsActive());
+  }
+
+  /**
+   * Physics Groupを取得（衝突判定用）
+   */
+  getGroup(): Phaser.Physics.Arcade.Group {
+    return this.group;
   }
 
   /**

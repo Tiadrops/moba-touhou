@@ -17,6 +17,7 @@ export default defineConfig({
     },
   },
   build: {
+    sourcemap: true,
     rollupOptions: {
       output: {
         manualChunks: {
@@ -32,5 +33,13 @@ export default defineConfig({
     watch: {
       usePolling: true,
     },
+    // Force HMR to reload completely
+    hmr: {
+      overlay: true,
+    },
+  },
+  // Disable source maps to force fresh compile
+  css: {
+    devSourcemap: false,
   },
 });

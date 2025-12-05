@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { BulletType } from '@/types';
-import { DEPTH, COLORS } from '@/config/GameConfig';
+import { DEPTH, COLORS, GAME_CONFIG } from '@/config/GameConfig';
 import { Enemy } from './Enemy';
 
 /**
@@ -12,6 +12,8 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
   private speed: number;
   private isActive: boolean = false;
   private target: Enemy | null = null; // 追尾対象
+  private startX: number = 0; // 発射開始位置X
+  private startY: number = 0; // 発射開始位置Y
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'bullet_player');
@@ -19,7 +21,7 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     // 初期値
     this.bulletType = BulletType.PLAYER_NORMAL;
     this.damage = 10;
-    this.speed = 500;
+    this.speed = 300; // 速度を500から300に減速
 
     // 物理エンジンに追加
     scene.add.existing(this);
@@ -30,10 +32,10 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     this.setVisible(false);
     this.setDepth(DEPTH.BULLETS_PLAYER);
 
-    // 当たり判定
+    // 当たり判定（プレイヤー弾は大きめ、敵弾は小さめ）
     const body = this.body as Phaser.Physics.Arcade.Body;
     if (body) {
-      body.setCircle(4);
+      body.setCircle(4); // デフォルトは敵弾サイズ
     }
   }
 
@@ -54,18 +56,40 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     this.isActive = true;
     this.target = target;
 
-    // 位置を設定
+    // 発射開始位置を記録
+    this.startX = x;
+    this.startY = y;
+
+    // 物理ボディを有効化（重要: setActive/setVisibleの前に行う）
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    if (body) {
+      body.enable = true;
+    }
+
+    // 位置を設定（setPositionの前にbodyを有効化）
     this.setPosition(x, y);
     this.setActive(true);
     this.setVisible(true);
+    this.setScale(1); // スケールを明示的に1に設定
+    this.setAlpha(1); // 透明度を明示的に1に設定
 
     // テクスチャと色を設定
     if (bulletType === BulletType.PLAYER_NORMAL) {
       this.setTexture('bullet_player');
       this.setTint(COLORS.BULLET_PLAYER);
+      // プレイヤー弾は当たり判定を大きめに
+      const body = this.body as Phaser.Physics.Arcade.Body;
+      if (body) {
+        body.setCircle(8);
+      }
     } else if (bulletType === BulletType.ENEMY_NORMAL || bulletType === BulletType.ENEMY_AIMED) {
       this.setTexture('bullet_enemy');
       this.setTint(COLORS.BULLET_ENEMY);
+      // 敵弾は当たり判定を小さめに
+      const body = this.body as Phaser.Physics.Arcade.Body;
+      if (body) {
+        body.setCircle(4);
+      }
     }
 
     // 初期方向を計算
@@ -109,8 +133,10 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
       this.setRotation(angle);
     }
 
-    // 画面外に出たら非アクティブ化
-    if (this.x < -50 || this.x > 2000 || this.y < -50 || this.y > 1200) {
+    // 画面外に出たら非アクティブ化（プレイエリア外）
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    if (this.x < X || this.x > X + WIDTH ||
+        this.y < Y || this.y > Y + HEIGHT) {
       this.deactivate();
     }
   }
@@ -124,6 +150,12 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     this.setActive(false);
     this.setVisible(false);
     this.setVelocity(0, 0);
+
+    // 物理ボディを無効化
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    if (body) {
+      body.enable = false;
+    }
   }
 
   /**
@@ -145,5 +177,12 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
    */
   getIsActive(): boolean {
     return this.isActive;
+  }
+
+  /**
+   * 発射開始位置を取得
+   */
+  getStartPosition(): { x: number; y: number } {
+    return { x: this.startX, y: this.startY };
   }
 }

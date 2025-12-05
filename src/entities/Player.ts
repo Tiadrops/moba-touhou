@@ -150,7 +150,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // 被弾エフェクト
     this.flashDamage();
 
-    // TODO: HPが0になったら死亡処理
+    // HPが0になったら死亡処理
     if (this.currentHp <= 0) {
       this.onDeath();
     }

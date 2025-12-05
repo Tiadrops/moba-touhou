@@ -2,9 +2,10 @@ import Phaser from 'phaser';
 import { SCENES, GAME_CONFIG, COLORS, DEPTH } from '@/config/GameConfig';
 import { Player } from '@/entities/Player';
 import { Enemy } from '@/entities/Enemy';
+import { Bullet } from '@/entities/Bullet';
 import { InputManager } from '@/systems/InputManager';
 import { BulletPool } from '@/utils/ObjectPool';
-import { CharacterType, EnemyType } from '@/types';
+import { CharacterType, EnemyType, BulletType } from '@/types';
 
 /**
  * GameScene - メインゲームプレイシーン
@@ -20,6 +21,7 @@ export class GameScene extends Phaser.Scene {
   private inputManager!: InputManager;
   private bulletPool!: BulletPool;
   private enemies: Enemy[] = [];
+  private bulletTrailGraphics!: Phaser.GameObjects.Graphics; // 弾道補助線用
 
   // 敵の生成管理
   private lastEnemySpawnTime: number = 0;
@@ -63,11 +65,20 @@ export class GameScene extends Phaser.Scene {
     // 弾の更新
     if (this.bulletPool) {
       this.bulletPool.update();
+
+      // 弾道補助線を描画（設定でONの場合のみ）
+      if (GAME_CONFIG.SHOW_BULLET_TRAILS) {
+        this.drawBulletTrails();
+      }
     }
 
     // 敵の更新
     for (const enemy of this.enemies) {
       if (enemy.getIsActive()) {
+        // プレイヤー位置を敵に設定（弾幕の狙い先）
+        if (this.player) {
+          enemy.setPlayerPosition(this.player.x, this.player.y);
+        }
         enemy.update(time, delta);
       }
     }
@@ -81,6 +92,51 @@ export class GameScene extends Phaser.Scene {
     // デバッグ情報の更新
     if (GAME_CONFIG.DEBUG && this.player && this.debugText) {
       this.updateDebugText();
+    }
+  }
+
+  /**
+   * 弾道補助線を描画
+   */
+  private drawBulletTrails(): void {
+    if (!this.bulletTrailGraphics) return;
+
+    // 前フレームの描画をクリア
+    this.bulletTrailGraphics.clear();
+
+    // プレイエリアの境界を取得
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const minX = X;
+    const maxX = X + WIDTH;
+    const minY = Y;
+    const maxY = Y + HEIGHT;
+
+    // 座標をプレイエリア内にクランプするヘルパー関数
+    const clamp = (value: number, min: number, max: number) =>
+      Math.max(min, Math.min(max, value));
+
+    // すべてのアクティブな弾の軌跡を描画
+    const activeBullets = this.bulletPool.getActiveBullets();
+    for (const bullet of activeBullets) {
+      const startPos = bullet.getStartPosition();
+      const bulletType = bullet.getBulletType();
+
+      // 弾の種類に応じて軌跡の色を変える
+      if (bulletType === BulletType.PLAYER_NORMAL) {
+        // プレイヤー弾: 緑
+        this.bulletTrailGraphics.lineStyle(2, COLORS.TRAIL_PLAYER, 0.7);
+      } else {
+        // 敵弾: マゼンタ
+        this.bulletTrailGraphics.lineStyle(2, COLORS.TRAIL_ENEMY, 0.7);
+      }
+
+      // 軌跡の座標をプレイエリア内にクランプ
+      this.bulletTrailGraphics.lineBetween(
+        clamp(startPos.x, minX, maxX),
+        clamp(startPos.y, minY, maxY),
+        clamp(bullet.x, minX, maxX),
+        clamp(bullet.y, minY, maxY)
+      );
     }
   }
 
@@ -190,8 +246,12 @@ export class GameScene extends Phaser.Scene {
    * ゲームプレイ開始
    */
   private startGameplay(): void {
-    // 弾プールを作成
-    this.bulletPool = new BulletPool(this, 50, 200);
+    // 弾プールを作成（初期50個、最大10000個まで拡張可能）
+    this.bulletPool = new BulletPool(this, 50, 10000);
+
+    // 弾道補助線用のGraphicsを作成
+    this.bulletTrailGraphics = this.add.graphics();
+    this.bulletTrailGraphics.setDepth(DEPTH.BULLETS_PLAYER - 1); // 弾の下に描画
 
     // 敵を事前生成
     this.createEnemyPool();
@@ -252,15 +312,31 @@ export class GameScene extends Phaser.Scene {
     }
 
     // プレイエリア内のランダムな位置に生成
-    const { X, WIDTH } = GAME_CONFIG.PLAY_AREA;
+    const { X, Y, WIDTH } = GAME_CONFIG.PLAY_AREA;
     const spawnX = X + Math.random() * WIDTH;
-    const spawnY = -50;
+    const spawnY = Y - 50; // プレイエリアの上端から少し上に生成
 
     // ランダムな移動パターン
     const patterns: Array<'straight' | 'wave' | 'zigzag'> = ['straight', 'wave', 'zigzag'];
     const pattern = Phaser.Utils.Array.GetRandom(patterns);
 
-    enemy.spawn(spawnX, spawnY, EnemyType.NORMAL, pattern);
+    // ランダムな敵タイプ（重み付き）
+    const rand = Math.random();
+    let enemyType: EnemyType;
+    if (rand < 0.6) {
+      enemyType = EnemyType.NORMAL; // 60%
+    } else if (rand < 0.85) {
+      enemyType = EnemyType.ELITE; // 25%
+    } else if (rand < 0.97) {
+      enemyType = EnemyType.MINI_BOSS; // 12%
+    } else {
+      enemyType = EnemyType.BOSS; // 3%
+    }
+
+    // 弾プールとプレイヤー位置を設定
+    enemy.setBulletPool(this.bulletPool);
+
+    enemy.spawn(spawnX, spawnY, enemyType, pattern);
   }
 
   /**
@@ -269,14 +345,17 @@ export class GameScene extends Phaser.Scene {
   private setupCollisions(): void {
     // プレイヤーの弾と敵の衝突
     this.physics.add.overlap(
-      this.bulletPool.getActiveBullets(),
-      this.enemies.filter(e => e.getIsActive()),
-      (bulletObj, enemyObj) => {
-        const bullet = bulletObj as any;
-        const enemy = enemyObj as any;
+      this.enemies,
+      this.bulletPool.getGroup(),
+      (enemyObj, bulletObj) => {
+        const enemy = enemyObj as Enemy;
+        const bullet = bulletObj as Bullet;
 
-        if (!bullet.getIsActive || !bullet.getIsActive()) return;
-        if (!enemy.getIsActive || !enemy.getIsActive()) return;
+        if (!bullet.getIsActive()) return;
+        if (!enemy.getIsActive()) return;
+
+        // プレイヤー弾のみ処理（敵弾は無視）
+        if (bullet.getBulletType() !== BulletType.PLAYER_NORMAL) return;
 
         // 敵にダメージ（必中：弾が当たった時点でダメージ）
         const destroyed = enemy.takeDamage(bullet.getDamage());
@@ -292,17 +371,37 @@ export class GameScene extends Phaser.Scene {
     // 敵とプレイヤーの衝突
     this.physics.add.overlap(
       this.player,
-      this.enemies.filter(e => e.getIsActive()),
+      this.enemies,
       (playerObj, enemyObj) => {
-        const enemy = enemyObj as any;
+        const enemy = enemyObj as Enemy;
 
-        if (!enemy.getIsActive || !enemy.getIsActive()) return;
+        if (!enemy.getIsActive()) return;
 
         // プレイヤーがダメージを受ける
         this.player.takeDamage(enemy.getDamage());
 
         // 敵も消える
         enemy.deactivate();
+      }
+    );
+
+    // 敵弾とプレイヤーの衝突
+    this.physics.add.overlap(
+      this.player,
+      this.bulletPool.getGroup(),
+      (playerObj, bulletObj) => {
+        const bullet = bulletObj as Bullet;
+
+        if (!bullet.getIsActive()) return;
+
+        // プレイヤー弾は無視（BulletTypeの値で判定）
+        if (bullet.getBulletType() === BulletType.PLAYER_NORMAL) return;
+
+        // プレイヤーがダメージを受ける
+        this.player.takeDamage(bullet.getDamage());
+
+        // 弾を消す
+        bullet.deactivate();
       }
     );
   }

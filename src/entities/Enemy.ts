@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
-import { EnemyType } from '@/types';
-import { DEPTH, COLORS } from '@/config/GameConfig';
+import { EnemyType, BulletType } from '@/types';
+import { DEPTH, COLORS, GAME_CONFIG } from '@/config/GameConfig';
+import { BulletPool } from '@/utils/ObjectPool';
 
 /**
  * 敵クラス
@@ -17,6 +18,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   // 移動パターン
   private movePattern: 'straight' | 'wave' | 'zigzag' = 'straight';
   private patternTime: number = 0;
+
+  // 弾幕システム
+  private bulletPool: BulletPool | null = null;
+  private lastShootTime: number = 0;
+  private shootInterval: number = 2000; // 2秒ごとに発射
+  private playerPosition: { x: number; y: number } | null = null;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'enemy');
@@ -118,8 +125,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // 移動パターンを更新
     this.updateMovement(delta);
 
-    // 画面外に出たら非アクティブ化
-    if (this.y > 1200 || this.x < -100 || this.x > 2100) {
+    // 弾幕発射
+    this.updateShooting(time);
+
+    // 画面外に出たら非アクティブ化（プレイエリア外）
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const margin = 100;
+    if (this.x < X - margin || this.x > X + WIDTH + margin ||
+        this.y < Y - margin || this.y > Y + HEIGHT + margin) {
       this.deactivate();
     }
   }
@@ -128,6 +141,13 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
    * 移動パターンを更新
    */
   private updateMovement(delta: number): void {
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const enemyRadius = 16; // 敵のサイズを考慮
+    const leftBound = X + enemyRadius;
+    const rightBound = X + WIDTH - enemyRadius;
+    const topBound = Y + enemyRadius;
+    const bottomBound = Y + HEIGHT - enemyRadius;
+
     let vx = 0;
     let vy = this.moveSpeed;
 
@@ -146,6 +166,27 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         // ジグザグに移動
         vx = Math.sin(this.patternTime / 300) * 150;
         break;
+    }
+
+    // プレイエリアの境界でX方向の速度を制限
+    if (this.x <= leftBound && vx < 0) {
+      vx = Math.abs(vx); // 右に反転
+    } else if (this.x >= rightBound && vx > 0) {
+      vx = -Math.abs(vx); // 左に反転
+    }
+
+    // 位置を強制的にプレイエリア内にクランプ（X軸）
+    if (this.x < leftBound) {
+      this.x = leftBound;
+    } else if (this.x > rightBound) {
+      this.x = rightBound;
+    }
+
+    // 位置を強制的にプレイエリア内にクランプ（Y軸）
+    if (this.y < topBound) {
+      this.y = topBound;
+    } else if (this.y > bottomBound) {
+      this.y = bottomBound;
     }
 
     this.setVelocity(vx, vy);
@@ -194,6 +235,123 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
+   * 弾幕発射処理
+   */
+  private updateShooting(time: number): void {
+    if (!this.bulletPool || !this.playerPosition) {
+      return;
+    }
+
+    // 発射間隔チェック
+    if (time - this.lastShootTime < this.shootInterval) {
+      return;
+    }
+
+    this.lastShootTime = time;
+
+    // 敵タイプに応じて弾幕パターンを変更
+    switch (this.enemyType) {
+      case EnemyType.NORMAL:
+        // プレイヤーを狙う単発弾
+        this.shootAimedBullet();
+        break;
+
+      case EnemyType.ELITE:
+        // プレイヤーを狙う3-way弾
+        this.shootThreeWay();
+        break;
+
+      case EnemyType.MINI_BOSS:
+        // 8方向の放射状弾幕
+        this.shootRadial(8);
+        break;
+
+      case EnemyType.BOSS:
+        // 5方向の放射状弾幕
+        this.shootRadial(5);
+        break;
+    }
+  }
+
+  /**
+   * プレイヤーを狙う単発弾
+   */
+  private shootAimedBullet(): void {
+    if (!this.bulletPool || !this.playerPosition) return;
+
+    const bullet = this.bulletPool.acquire();
+    if (bullet) {
+      bullet.fire(
+        this.x,
+        this.y,
+        this.playerPosition.x,
+        this.playerPosition.y,
+        BulletType.ENEMY_AIMED,
+        this.damage
+      );
+    }
+  }
+
+  /**
+   * 3-way弾（プレイヤー方向 + 左右に広がる）
+   */
+  private shootThreeWay(): void {
+    if (!this.bulletPool || !this.playerPosition) return;
+
+    const angle = Phaser.Math.Angle.Between(
+      this.x,
+      this.y,
+      this.playerPosition.x,
+      this.playerPosition.y
+    );
+
+    // 中央、左、右の3発
+    const angles = [angle, angle - 0.3, angle + 0.3];
+
+    for (const shootAngle of angles) {
+      const bullet = this.bulletPool.acquire();
+      if (bullet) {
+        const targetX = this.x + Math.cos(shootAngle) * 500;
+        const targetY = this.y + Math.sin(shootAngle) * 500;
+        bullet.fire(
+          this.x,
+          this.y,
+          targetX,
+          targetY,
+          BulletType.ENEMY_NORMAL,
+          this.damage
+        );
+      }
+    }
+  }
+
+  /**
+   * 放射状弾幕
+   */
+  private shootRadial(count: number): void {
+    if (!this.bulletPool) return;
+
+    const angleStep = (Math.PI * 2) / count;
+
+    for (let i = 0; i < count; i++) {
+      const angle = angleStep * i;
+      const bullet = this.bulletPool.acquire();
+      if (bullet) {
+        const targetX = this.x + Math.cos(angle) * 500;
+        const targetY = this.y + Math.sin(angle) * 500;
+        bullet.fire(
+          this.x,
+          this.y,
+          targetX,
+          targetY,
+          BulletType.ENEMY_NORMAL,
+          this.damage
+        );
+      }
+    }
+  }
+
+  /**
    * 非アクティブ化
    */
   deactivate(): void {
@@ -202,6 +360,20 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.setVisible(false);
     this.setVelocity(0, 0);
     this.setScale(1);
+  }
+
+  /**
+   * 弾プールを設定
+   */
+  setBulletPool(pool: BulletPool): void {
+    this.bulletPool = pool;
+  }
+
+  /**
+   * プレイヤー位置を設定
+   */
+  setPlayerPosition(x: number, y: number): void {
+    this.playerPosition = { x, y };
   }
 
   // ゲッター

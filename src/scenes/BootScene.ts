@@ -78,16 +78,16 @@ export class BootScene extends Phaser.Scene {
     enemyGraphics.generateTexture('enemy', 32, 32);
     enemyGraphics.destroy();
 
-    // プレイヤーの弾（シアンの小さい円）
+    // プレイヤーの弾（白色の大きい円 - setTint()で色を変更するため）
     const playerBulletGraphics = this.add.graphics();
-    playerBulletGraphics.fillStyle(COLORS.BULLET_PLAYER, 1);
-    playerBulletGraphics.fillCircle(4, 4, 4);
-    playerBulletGraphics.generateTexture('bullet_player', 8, 8);
+    playerBulletGraphics.fillStyle(0xffffff, 1); // 白色
+    playerBulletGraphics.fillCircle(8, 8, 8); // サイズを2倍に
+    playerBulletGraphics.generateTexture('bullet_player', 16, 16);
     playerBulletGraphics.destroy();
 
-    // 敵の弾（赤の小さい円）
+    // 敵の弾（白色の小さい円 - setTint()で色を変更するため）
     const enemyBulletGraphics = this.add.graphics();
-    enemyBulletGraphics.fillStyle(COLORS.BULLET_ENEMY, 1);
+    enemyBulletGraphics.fillStyle(0xffffff, 1); // 白色
     enemyBulletGraphics.fillCircle(4, 4, 4);
     enemyBulletGraphics.generateTexture('bullet_enemy', 8, 8);
     enemyBulletGraphics.destroy();

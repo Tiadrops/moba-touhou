@@ -24,6 +24,9 @@ export const GAME_CONFIG = {
 
   // デバッグモード
   DEBUG: true,
+
+  // 弾道軌跡線の表示設定
+  SHOW_BULLET_TRAILS: false,  // false にすると軌跡線を非表示
 } as const;
 
 /**
@@ -54,9 +57,9 @@ export const GAMEPLAY_CONFIG = {
  */
 export const PHYSICS_CONFIG: Phaser.Types.Physics.Arcade.ArcadeWorldConfig = {
   gravity: { x: 0, y: 0 },
-  debug: GAME_CONFIG.DEBUG,
-  debugShowBody: true,
-  debugShowStaticBody: true,
+  debug: false,  // 物理デバッグ表示を無効化（緑の線を消す）
+  debugShowBody: false,
+  debugShowStaticBody: false,
 };
 
 /**
@@ -70,8 +73,12 @@ export const COLORS = {
   PLAYER: 0x00ff88,
   ENEMY: 0xff4444,
 
-  BULLET_PLAYER: 0x00ffff,
-  BULLET_ENEMY: 0xff0000,
+  BULLET_PLAYER: 0x00ffff,  // シアン（味方弾 - 視認性向上）
+  BULLET_ENEMY: 0xff6600,   // オレンジ（敵弾）
+
+  // 弾道補助線専用の色
+  TRAIL_PLAYER: 0x00ff00,   // 緑（味方弾の軌跡）
+  TRAIL_ENEMY: 0xff00ff,    // マゼンタ（敵弾の軌跡）- 視認性向上
 
   UI_TEXT: 0xffffff,
   UI_HP_BAR: 0x00ff00,
@@ -87,8 +94,8 @@ export const DEPTH = {
   ITEMS: 10,
   BULLETS_ENEMY: 20,
   PLAYER: 30,
-  BULLETS_PLAYER: 40,
-  ENEMIES: 50,
+  ENEMIES: 40,
+  BULLETS_PLAYER: 50, // プレイヤー弾を最前面に
   EFFECTS: 60,
   UI: 100,
 } as const;

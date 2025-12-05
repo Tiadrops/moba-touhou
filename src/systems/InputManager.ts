@@ -99,9 +99,9 @@ export class InputManager {
       this.markerTween.remove();
     }
 
-    // 新しいマーカーを作成
+    // 新しいマーカーを作成（プレイヤー弾と同じ黄色）
     this.moveMarker = this.scene.add.graphics();
-    this.moveMarker.lineStyle(2, COLORS.PLAYER, 1);
+    this.moveMarker.lineStyle(2, COLORS.BULLET_PLAYER, 1);
     this.moveMarker.strokeCircle(0, 0, 20);
     this.moveMarker.setPosition(x, y);
     this.moveMarker.setDepth(1000);
@@ -142,7 +142,21 @@ export class InputManager {
     // 通常の左クリック：クリックした位置の敵を攻撃
     const clickedEnemy = this.getEnemyAtPosition(x, y);
     if (clickedEnemy) {
-      this.player.attackTarget(this.scene.time.now, clickedEnemy);
+      // 射程内かチェック
+      const distance = Phaser.Math.Distance.Between(
+        this.player.x,
+        this.player.y,
+        clickedEnemy.x,
+        clickedEnemy.y
+      );
+
+      if (distance <= this.player.getAttackRange()) {
+        // 射程内なら即座に攻撃
+        this.player.attackTarget(this.scene.time.now, clickedEnemy);
+      } else {
+        // 射程外なら敵の方向に移動して攻撃
+        this.moveAndAttackEnemy(clickedEnemy);
+      }
     }
   }
 
@@ -174,16 +188,15 @@ export class InputManager {
    * 3. 移動中に射程内の敵がいたら攻撃
    */
   private handleAttackMoveKey(): void {
-    console.log('Attack Move Click executed');
-
     // 現在のマウスカーソル位置を取得
     const pointer = this.scene.input.activePointer;
-    const x = pointer.x;
-    const y = pointer.y;
+    let x = pointer.x;
+    let y = pointer.y;
 
-    // プレイエリア内かチェック
+    // プレイエリア外の場合は、プレイエリア内にクランプ
     if (!this.playAreaBounds.contains(x, y)) {
-      return;
+      x = Phaser.Math.Clamp(x, this.playAreaBounds.x, this.playAreaBounds.x + this.playAreaBounds.width);
+      y = Phaser.Math.Clamp(y, this.playAreaBounds.y, this.playAreaBounds.y + this.playAreaBounds.height);
     }
 
     // Attack Move実行
@@ -199,11 +212,9 @@ export class InputManager {
       return;
     }
 
-    // カーソル位置に最も近い敵を探す
-    const nearestEnemy = this.player.findNearestEnemyToPosition(x, y);
-
+    // 現在射程内に敵がいるかチェック
+    const nearestEnemy = this.player.findNearestEnemy();
     if (nearestEnemy) {
-      // 敵がプレイヤーの射程内かチェック
       const distance = Phaser.Math.Distance.Between(
         this.player.x,
         this.player.y,
@@ -212,13 +223,14 @@ export class InputManager {
       );
 
       if (distance <= this.player.getAttackRange()) {
-        // 射程内なら即攻撃
+        // 既に射程内なら即座に攻撃して停止（移動しない）
         this.player.attackTarget(this.scene.time.now, nearestEnemy);
+        this.player.stopMovement();
         return;
       }
     }
 
-    // 射程外なら移動開始（移動中に敵を見つけたら攻撃）
+    // 射程内に敵がいない場合のみ、指定位置に向けてAttack Moveを開始
     this.player.setAttackMove(x, y);
     this.showMoveMarker(x, y);
   }
@@ -245,10 +257,10 @@ export class InputManager {
       this.attackRangeCircle.destroy();
     }
 
-    // 攻撃範囲の円を作成
+    // 攻撃範囲の円を作成（プレイヤー弾と同じ黄色）
     this.attackRangeCircle = this.scene.add.graphics();
-    this.attackRangeCircle.lineStyle(2, COLORS.PLAYER, 0.5);
-    this.attackRangeCircle.fillStyle(COLORS.PLAYER, 0.1);
+    this.attackRangeCircle.lineStyle(2, COLORS.BULLET_PLAYER, 0.5);
+    this.attackRangeCircle.fillStyle(COLORS.BULLET_PLAYER, 0.1);
     this.attackRangeCircle.fillCircle(0, 0, this.player.getAttackRange());
     this.attackRangeCircle.strokeCircle(0, 0, this.player.getAttackRange());
     this.attackRangeCircle.setDepth(DEPTH.UI - 1);
@@ -283,6 +295,40 @@ export class InputManager {
         this.player.attackTarget(this.scene.time.now, nearestEnemy);
       }
     }
+  }
+
+  /**
+   * 敵に向かって移動して攻撃
+   */
+  private moveAndAttackEnemy(enemy: Enemy): void {
+    // 敵の方向の攻撃範囲ギリギリの位置を計算
+    const angle = Phaser.Math.Angle.Between(
+      this.player.x,
+      this.player.y,
+      enemy.x,
+      enemy.y
+    );
+    const attackRange = this.player.getAttackRange();
+    const targetX = enemy.x - Math.cos(angle) * (attackRange - 10); // 10px手前に移動
+    const targetY = enemy.y - Math.sin(angle) * (attackRange - 10);
+
+    // プレイエリア内にクランプ
+    const clampedX = Phaser.Math.Clamp(
+      targetX,
+      this.playAreaBounds.x,
+      this.playAreaBounds.x + this.playAreaBounds.width
+    );
+    const clampedY = Phaser.Math.Clamp(
+      targetY,
+      this.playAreaBounds.y,
+      this.playAreaBounds.y + this.playAreaBounds.height
+    );
+
+    // 移動指示
+    this.player.setTargetPosition(clampedX, clampedY);
+    this.showMoveMarker(clampedX, clampedY);
+
+    // TODO: 移動中に敵が射程内に入ったら自動的に攻撃する処理を追加
   }
 
   /**
