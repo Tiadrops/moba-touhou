@@ -1,0 +1,21 @@
+{
+  "name": "moba-touhou",
+  "version": "0.1.0",
+  "description": "MOBA x Touhou-style Danmaku Shooting Game",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "phaser": "^3.80.1",
+    "zustand": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.11"
+  }
+}
