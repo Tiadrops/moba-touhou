@@ -134,17 +134,27 @@ export const SKILL_CONFIG = {
     BUFF_DURATION: 5000,         // バフ持続時間（ms）
     COOLDOWN: 7000,              // クールダウン（ms）
     TARGET_DETECTION_RANGE: 0.5 * 55, // ターゲット検出範囲（0.5m = 27.5px）
-    DAMAGE_MULTIPLIER: 1.0,      // ダメージ倍率
+    // スキルダメージ設定（テスト用: 固定100 + 攻撃力100% = 200/発, 3発で600）
+    DAMAGE: {
+      BASE_DAMAGE: 100,          // 固定ダメージ
+      SCALING_RATIO: 1.0,        // 攻撃力増幅率（100%）
+    },
   },
-  // 霊夢のWスキル
+  // 霊夢のWスキル（封魔陣）
   REIMU_W: {
-    CAST_TIME: 400,              // キャスト時間（ms）
-    PROJECTILE_COUNT: 7,         // 発射弾数（7way）
-    SPREAD_ANGLE: 90,            // 拡散角度（度）
-    MAX_STACKS: 2,               // 最大スタック数
-    COOLDOWN: 7000,              // クールダウン（ms）- スタック回復時間
-    DAMAGE_MULTIPLIER: 1.0,      // ダメージ倍率
-    PROJECTILE_RANGE: 500,       // 弾の射程（px）
+    CAST_TIME: 250,              // キャスト時間（ms）
+    MOTION_TIME: 150,            // スキルモーション硬直（ms）
+    PROJECTILE_WIDTH: 0.5 * 55,  // 弾の幅（0.5m = 27.5px）
+    PROJECTILE_HEIGHT: 0.75 * 55, // 弾の高さ（0.75m = 41.25px）
+    PROJECTILE_RANGE: 7 * 55,    // 射程（7m = 385px）
+    PROJECTILE_TRAVEL_TIME: 400, // 最大射程到達時間（ms）
+    STUN_DURATION: 500,          // スタン時間（ms）
+    COOLDOWN: 7000,              // クールダウン（ms）
+    // スキルダメージ設定（テスト用: 固定100 + 攻撃力10% = 110/発）
+    DAMAGE: {
+      BASE_DAMAGE: 100,          // 固定ダメージ
+      SCALING_RATIO: 0.1,        // 攻撃力増幅率（10%）
+    },
   },
   // 霊夢のEスキル
   REIMU_E: {
@@ -158,7 +168,11 @@ export const SKILL_CONFIG = {
     DURATION: 2000,              // 効果時間（ms）
     AREA_SIZE: 10 * 55,          // 範囲サイズ（10m = 550px、正方形の一辺）
     DAMAGE_INTERVAL: 200,        // ダメージ間隔（ms）
-    DAMAGE_MULTIPLIER: 0.5,      // ダメージ倍率（AD x 0.5）
     COOLDOWN: 60000,             // クールダウン（ms）
+    // スキルダメージ設定（テスト用: 固定200 + 攻撃力50% = 250/tick）
+    DAMAGE: {
+      BASE_DAMAGE: 200,          // 固定ダメージ
+      SCALING_RATIO: 0.5,        // 攻撃力増幅率（50%）
+    },
   },
 } as const;

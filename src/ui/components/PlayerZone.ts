@@ -172,17 +172,19 @@ export class PlayerZone extends Phaser.GameObjects.Container {
 
     const effectiveAS = this.player.getEffectiveAttackSpeed();
     const effectiveSPD = this.player.getEffectiveMoveSpeed();
-    const effectiveATK = this.player.getEffectiveAttackDamage();
+    const effectiveATK = this.player.getEffectiveAttackPower();
 
     const hasASBuff = effectiveAS !== stats.attackSpeed;
     const hasSPDBuff = effectiveSPD !== stats.moveSpeed;
-    const hasATKBuff = effectiveATK !== stats.attackDamage;
+    const hasATKBuff = effectiveATK !== stats.attackPower;
 
     const lines = [
       `HP: ${Math.ceil(this.player.getCurrentHp())} / ${stats.maxHp}`,
-      `ATK: ${stats.attackDamage}${hasATKBuff ? ` (${effectiveATK.toFixed(1)})` : ''}`,
+      `ATK: ${stats.attackPower}${hasATKBuff ? ` (${effectiveATK.toFixed(1)})` : ''}`,
       `AS: ${stats.attackSpeed.toFixed(1)}${hasASBuff ? ` (${effectiveAS.toFixed(1)})` : ''}`,
       `SPD: ${stats.moveSpeed}${hasSPDBuff ? ` (${effectiveSPD.toFixed(0)})` : ''}`,
+      `DEF: ${stats.defense}`,
+      `CRIT: ${(stats.critChance * 100).toFixed(0)}%`,
     ];
 
     this.statsText.setText(lines.join('\n'));
@@ -238,11 +240,7 @@ export class PlayerZone extends Phaser.GameObjects.Container {
     this.slotOrder.forEach((slot, index) => {
       const slotUI = this.skillSlots[index];
 
-      if (slot === SkillSlot.W) {
-        const stacks = this.player.getWSkillStacks();
-        const nextStackTime = this.player.getWSkillNextStackTime(time);
-        slotUI.updateStackState(stacks, SKILL_CONFIG.REIMU_W.MAX_STACKS, nextStackTime);
-      } else if (slot === SkillSlot.D || slot === SkillSlot.F) {
+      if (slot === SkillSlot.D || slot === SkillSlot.F) {
         slotUI.updateState(SkillState.READY, 0, 0);
       } else {
         const cooldownRemaining = this.player.getSkillCooldownRemaining(slot, time);

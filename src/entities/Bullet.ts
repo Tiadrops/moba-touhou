@@ -14,6 +14,7 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
   private target: Enemy | null = null; // 追尾対象
   private startX: number = 0; // 発射開始位置X
   private startY: number = 0; // 発射開始位置Y
+  private isCritical: boolean = false; // クリティカルヒットフラグ
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'bullet_player');
@@ -49,12 +50,14 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     targetY: number,
     bulletType: BulletType = BulletType.PLAYER_NORMAL,
     damage: number = 10,
-    target: Enemy | null = null
+    target: Enemy | null = null,
+    isCritical: boolean = false
   ): void {
     this.bulletType = bulletType;
     this.damage = damage;
     this.isActive = true;
     this.target = target;
+    this.isCritical = isCritical;
 
     // 発射開始位置を記録
     this.startX = x;
@@ -190,5 +193,12 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
    */
   getStartPosition(): { x: number; y: number } {
     return { x: this.startX, y: this.startY };
+  }
+
+  /**
+   * クリティカルヒットかどうか
+   */
+  getIsCritical(): boolean {
+    return this.isCritical;
   }
 }

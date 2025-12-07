@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
-import { CharacterType, CharacterConfig, Position, BulletType, SkillSlot, SkillState, Buff, BuffType } from '@/types';
+import { CharacterType, CharacterConfig, Position, BulletType, SkillSlot, SkillState, Buff, BuffType, SkillDamageConfig } from '@/types';
 import { CHARACTER_DATA } from '@/config/CharacterData';
 import { DEPTH, COLORS, SKILL_CONFIG, GAME_CONFIG } from '@/config/GameConfig';
 import { BulletPool } from '@/utils/ObjectPool';
+import { DamageCalculator } from '@/utils/DamageCalculator';
 import { Enemy } from './Enemy';
+import { SkillProjectile } from './SkillProjectile';
 
 /**
  * プレイヤーキャラクタークラス
@@ -49,10 +51,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // 現在キャスト中のスキル
   private currentCastingSkill: SkillSlot | null = null;
 
-  // Wスキル用（方向指定・スタックシステム）
+  // Wスキル用（方向指定）
   private skillTargetDirection: number = 0; // ラジアン
-  private wSkillStacks: number = SKILL_CONFIG.REIMU_W.MAX_STACKS;
-  private wSkillNextStackTime: number = 0; // 次のスタック回復時刻
+  private wSkillProjectile: SkillProjectile | null = null;
+  private wSkillMotionTime: number = 0; // モーション硬直残り時間
 
   // Eスキル用（ダッシュ）
   private isDashing: boolean = false;
@@ -237,8 +239,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
    * スキルの更新処理
    */
   private updateSkill(time: number, delta: number): void {
-    // Wスキルのスタック回復
-    this.updateWSkillStacks(time);
+    // Wスキルのモーション硬直と投射物の更新
+    this.updateWSkillMotion(delta);
 
     if (this.currentSkillState === SkillState.CASTING) {
       // キャスト中
@@ -248,7 +250,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         if (this.currentCastingSkill === SkillSlot.Q) {
           this.startQSkillExecution(time);
         } else if (this.currentCastingSkill === SkillSlot.W) {
-          this.executeWSkill();
+          this.executeWSkill(time);
         } else if (this.currentCastingSkill === SkillSlot.E) {
           this.executeESkill(time);
         }
@@ -270,17 +272,20 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * Wスキルのスタック回復処理
+   * Wスキルのモーション硬直更新
    */
-  private updateWSkillStacks(time: number): void {
-    if (this.wSkillStacks < SKILL_CONFIG.REIMU_W.MAX_STACKS && time >= this.wSkillNextStackTime) {
-      this.wSkillStacks++;
-      console.log(`W skill stack recovered: ${this.wSkillStacks}/${SKILL_CONFIG.REIMU_W.MAX_STACKS}`);
-
-      // まだ最大でなければ次のスタック回復タイマーを設定
-      if (this.wSkillStacks < SKILL_CONFIG.REIMU_W.MAX_STACKS) {
-        this.wSkillNextStackTime = time + SKILL_CONFIG.REIMU_W.COOLDOWN;
+  private updateWSkillMotion(delta: number): void {
+    if (this.wSkillMotionTime > 0) {
+      this.wSkillMotionTime -= delta;
+      if (this.wSkillMotionTime <= 0) {
+        this.wSkillMotionTime = 0;
+        // モーション終了
       }
+    }
+
+    // Wスキル投射物の更新
+    if (this.wSkillProjectile && this.wSkillProjectile.getIsActive()) {
+      this.wSkillProjectile.update(0, delta);
     }
   }
 
@@ -322,8 +327,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
    * Wスキルを使用開始
    */
   useWSkill(currentTime: number, targetX: number, targetY: number): boolean {
-    // スタックチェック
-    if (this.wSkillStacks <= 0) {
+    // クールダウンチェック
+    if (!this.canUseSkill(SkillSlot.W, currentTime)) {
       return false;
     }
 
@@ -332,13 +337,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       return false;
     }
 
-    // スタック消費
-    this.wSkillStacks--;
-    console.log(`W skill used! Stacks remaining: ${this.wSkillStacks}/${SKILL_CONFIG.REIMU_W.MAX_STACKS}`);
-
-    // スタック回復タイマーを開始（まだ開始していなければ）
-    if (this.wSkillStacks === SKILL_CONFIG.REIMU_W.MAX_STACKS - 1) {
-      this.wSkillNextStackTime = currentTime + SKILL_CONFIG.REIMU_W.COOLDOWN;
+    // モーション硬直中は使用不可
+    if (this.wSkillMotionTime > 0) {
+      return false;
     }
 
     // 方向を計算
@@ -351,6 +352,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     // 移動を停止
     this.stopMovement();
+
+    console.log('W skill casting started');
 
     return true;
   }
@@ -368,43 +371,48 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * Wスキル実行（キャスト完了後、即座に7way弾発射）
+   * Wスキル実行（キャスト完了後、長方形弾を発射）
    */
-  private executeWSkill(): void {
-    if (!this.bulletPool) {
-      this.currentSkillState = SkillState.READY;
-      this.currentCastingSkill = null;
-      return;
+  private executeWSkill(time: number): void {
+    const { PROJECTILE_WIDTH, PROJECTILE_HEIGHT, PROJECTILE_RANGE, PROJECTILE_TRAVEL_TIME, STUN_DURATION, DAMAGE, MOTION_TIME, COOLDOWN } = SKILL_CONFIG.REIMU_W;
+
+    // スキルダメージ計算
+    const rawDamage = DAMAGE.BASE_DAMAGE +
+      this.characterConfig.stats.attackPower * DAMAGE.SCALING_RATIO;
+
+    // 方向ベクトルを正規化
+    const dirX = Math.cos(this.skillTargetDirection);
+    const dirY = Math.sin(this.skillTargetDirection);
+
+    // SkillProjectileを作成（なければ新規作成）
+    if (!this.wSkillProjectile) {
+      this.wSkillProjectile = new SkillProjectile(this.scene);
     }
 
-    const { PROJECTILE_COUNT, SPREAD_ANGLE, PROJECTILE_RANGE, DAMAGE_MULTIPLIER } = SKILL_CONFIG.REIMU_W;
-    const spreadRad = Phaser.Math.DegToRad(SPREAD_ANGLE);
-    const angleStep = spreadRad / (PROJECTILE_COUNT - 1);
-    const startAngle = this.skillTargetDirection - spreadRad / 2;
+    // 投射物を発射
+    this.wSkillProjectile.fire(
+      this.x,
+      this.y,
+      dirX,
+      dirY,
+      PROJECTILE_WIDTH,
+      PROJECTILE_HEIGHT,
+      PROJECTILE_RANGE,
+      PROJECTILE_TRAVEL_TIME,
+      rawDamage,
+      STUN_DURATION,
+      this.enemies
+    );
 
-    // 7way弾を発射
-    for (let i = 0; i < PROJECTILE_COUNT; i++) {
-      const angle = startAngle + angleStep * i;
-      const targetX = this.x + Math.cos(angle) * PROJECTILE_RANGE;
-      const targetY = this.y + Math.sin(angle) * PROJECTILE_RANGE;
+    console.log(`W skill executed! Projectile fired (${PROJECTILE_WIDTH}x${PROJECTILE_HEIGHT}px, Damage: ${rawDamage}, Stun: ${STUN_DURATION}ms)`);
 
-      const bullet = this.bulletPool.acquire();
-      if (bullet) {
-        bullet.fire(
-          this.x,
-          this.y,
-          targetX,
-          targetY,
-          BulletType.PLAYER_NORMAL,
-          this.characterConfig.stats.attackDamage * DAMAGE_MULTIPLIER,
-          null // 追尾しない
-        );
-      }
-    }
+    // クールダウン開始
+    this.skillCooldowns[SkillSlot.W] = time + COOLDOWN;
 
-    console.log(`W skill executed! Fired ${PROJECTILE_COUNT} bullets in ${SPREAD_ANGLE}° spread`);
+    // モーション硬直開始
+    this.wSkillMotionTime = MOTION_TIME;
 
-    // スキル完了
+    // スキル完了（モーション硬直は別で管理）
     this.currentSkillState = SkillState.READY;
     this.currentCastingSkill = null;
   }
@@ -455,11 +463,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.dashTotalTime = DASH_DURATION;
     this.dashTimeRemaining = DASH_DURATION;
 
-    // Wスキルのスタックを1回復
-    if (this.wSkillStacks < SKILL_CONFIG.REIMU_W.MAX_STACKS) {
-      this.wSkillStacks++;
-      console.log(`E skill: W stack recovered! ${this.wSkillStacks}/${SKILL_CONFIG.REIMU_W.MAX_STACKS}`);
-    }
+    // WスキルのCDを完全回復
+    this.skillCooldowns[SkillSlot.W] = 0;
+    console.log('E skill: W cooldown reset!');
 
     // QスキルのCDを完全回復
     this.skillCooldowns[SkillSlot.Q] = 0;
@@ -520,7 +526,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
    * Rスキルの更新処理
    */
   private updateRSkill(delta: number): void {
-    const { AREA_SIZE, DAMAGE_INTERVAL, DAMAGE_MULTIPLIER } = SKILL_CONFIG.REIMU_R;
+    const { AREA_SIZE, DAMAGE_INTERVAL, DAMAGE } = SKILL_CONFIG.REIMU_R;
     const halfSize = AREA_SIZE / 2;
 
     // 範囲表示をプレイヤーに追従
@@ -531,15 +537,19 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // ダメージタイマー更新
     this.rSkillDamageTimer -= delta;
     if (this.rSkillDamageTimer <= 0) {
-      // 範囲内の敵にダメージ
-      const damage = this.characterConfig.stats.attackDamage * DAMAGE_MULTIPLIER;
+      // スキルダメージ計算
+      const rawDamage = DAMAGE.BASE_DAMAGE +
+        this.characterConfig.stats.attackPower * DAMAGE.SCALING_RATIO;
+
       for (const enemy of this.enemies) {
         if (!enemy.getIsActive()) continue;
 
         // 長方形範囲内かチェック
         if (Math.abs(enemy.x - this.x) <= halfSize &&
             Math.abs(enemy.y - this.y) <= halfSize) {
-          enemy.takeDamage(damage);
+          // 敵の防御力を考慮したダメージを適用
+          const finalDamage = DamageCalculator.calculateDamageReduction(enemy.getDefense()) * rawDamage;
+          enemy.takeDamage(Math.max(1, Math.floor(finalDamage)));
         }
       }
 
@@ -601,6 +611,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       return;
     }
 
+    // スキルダメージ計算
+    const { DAMAGE } = SKILL_CONFIG.REIMU_Q;
+    const rawDamage = DAMAGE.BASE_DAMAGE +
+      this.characterConfig.stats.attackPower * DAMAGE.SCALING_RATIO;
+
     const bullet = this.bulletPool.acquire();
     if (bullet) {
       bullet.fire(
@@ -609,7 +624,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.skillTarget.x,
         this.skillTarget.y,
         BulletType.PLAYER_NORMAL,
-        this.characterConfig.stats.attackDamage * SKILL_CONFIG.REIMU_Q.DAMAGE_MULTIPLIER,
+        rawDamage,
         this.skillTarget // 追尾弾
       );
     }
@@ -638,20 +653,17 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * Wスキルのスタック数を取得
+   * Wスキルのモーション硬直中か確認
    */
-  getWSkillStacks(): number {
-    return this.wSkillStacks;
+  isWSkillInMotion(): boolean {
+    return this.wSkillMotionTime > 0;
   }
 
   /**
-   * Wスキルの次のスタック回復までの時間を取得
+   * Wスキルのモーション硬直残り時間を取得
    */
-  getWSkillNextStackTime(currentTime: number): number {
-    if (this.wSkillStacks >= SKILL_CONFIG.REIMU_W.MAX_STACKS) {
-      return 0;
-    }
-    return Math.max(0, this.wSkillNextStackTime - currentTime);
+  getWSkillMotionTimeRemaining(): number {
+    return this.wSkillMotionTime;
   }
 
   /**
@@ -939,6 +951,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     this.lastAttackTime = currentTime;
 
+    // AAダメージ計算（クリティカル判定込み）
+    const stats = this.characterConfig.stats;
+    const isCritical = Math.random() < stats.critChance;
+    const critMultiplier = isCritical ? 1.5 : 1.0;
+    const aaDamage = stats.attackPower * stats.aaMultiplier * critMultiplier;
+
     // 弾を発射（追尾弾）
     if (this.bulletPool) {
       const bullet = this.bulletPool.acquire();
@@ -949,9 +967,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
           target.x,
           target.y,
           BulletType.PLAYER_NORMAL,
-          this.characterConfig.stats.attackDamage,
-          target // 追尾対象を渡す
+          aaDamage,
+          target, // 追尾対象を渡す
+          isCritical // クリティカルフラグ
         );
+
+        if (isCritical) {
+          console.log(`Critical hit! Damage: ${aaDamage.toFixed(1)}`);
+        }
       }
     }
   }
@@ -1053,13 +1076,27 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   /**
    * バフ込みの実効攻撃力を取得
    */
-  getEffectiveAttackDamage(): number {
+  getEffectiveAttackPower(): number {
     let multiplier = 1;
     for (const buff of this.buffs) {
-      if (buff.type === BuffType.DAMAGE) {
+      if (buff.type === BuffType.DAMAGE || buff.type === BuffType.ATTACK_POWER) {
         multiplier *= buff.multiplier;
       }
     }
-    return this.characterConfig.stats.attackDamage * multiplier;
+    return this.characterConfig.stats.attackPower * multiplier;
+  }
+
+  /**
+   * 防御力を取得
+   */
+  getDefense(): number {
+    return this.characterConfig.stats.defense;
+  }
+
+  /**
+   * 戦闘ステータスを取得
+   */
+  getCombatStats() {
+    return this.characterConfig.stats;
   }
 }

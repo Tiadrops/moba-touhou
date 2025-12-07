@@ -1,42 +1,105 @@
-import { CharacterType, CharacterConfig, CharacterStats } from '@/types';
+import { CharacterType, CharacterConfig, CharacterStats, EnemyType, EnemyStats } from '@/types';
 
 /**
  * キャラクターの基本ステータス定義
+ * 新戦闘システム対応: attackPower, aaMultiplier, defense, critChance
  */
 const REIMU_STATS: CharacterStats = {
   maxHp: 100,
-  moveSpeed: 300,           // ピクセル/秒
-  attackDamage: 10,
-  attackSpeed: 2.0,          // 1秒に2回攻撃（0.5秒クールダウン）→ バフ後: 3.0 (0.33秒)
-  attackRange: 150,         // 攻撃範囲を半分に調整
+  attackPower: 100,          // テスト用: 攻撃力100
+  aaMultiplier: 0,           // テスト用: AAダメージ増幅0
+  defense: 5,                // 防御力
+  attackSpeed: 2.0,          // 1秒に2回攻撃（0.5秒クールダウン）
+  critChance: 0,             // テスト用: クリティカル確率0
+  moveSpeed: 300,            // ピクセル/秒
+  attackRange: 150,          // 攻撃範囲
   hitboxRadius: 8,           // 当たり判定は小さめ（弾幕回避のため）
 };
 
 const MARISA_STATS: CharacterStats = {
   maxHp: 80,
-  moveSpeed: 320,
-  attackDamage: 15,
+  attackPower: 15,           // 高火力
+  aaMultiplier: 1.2,         // AAダメージ増幅（120%）
+  defense: 0,                // 防御力なし
   attackSpeed: 1.5,
+  critChance: 0.10,          // クリティカル確率 10%
+  moveSpeed: 320,
   attackRange: 250,
   hitboxRadius: 8,
 };
 
 const SAKUYA_STATS: CharacterStats = {
   maxHp: 90,
+  attackPower: 12,
+  aaMultiplier: 0.9,         // AAダメージ増幅（90%）手数で補う
+  defense: 3,
+  attackSpeed: 3.0,          // 高速攻撃
+  critChance: 0.15,          // クリティカル確率 15%
   moveSpeed: 280,
-  attackDamage: 12,
-  attackSpeed: 3,
   attackRange: 200,
   hitboxRadius: 8,
 };
 
 const YOUMU_STATS: CharacterStats = {
   maxHp: 110,
-  moveSpeed: 310,
-  attackDamage: 8,
+  attackPower: 8,
+  aaMultiplier: 1.3,         // AAダメージ増幅（130%）近接ボーナス
+  defense: 10,               // 高防御
   attackSpeed: 2.5,
+  critChance: 0.20,          // クリティカル確率 20%（剣士）
+  moveSpeed: 310,
   attackRange: 150,
   hitboxRadius: 8,
+};
+
+/**
+ * 敵のステータス定義
+ */
+export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
+  [EnemyType.NORMAL]: {
+    maxHp: 1000,
+    attackPower: 10,
+    aaMultiplier: 1.0,
+    defense: 0,
+    attackSpeed: 1.0,
+    critChance: 0,
+    moveSpeed: 100,
+    hitboxRadius: 12,
+    scoreValue: 100,
+  },
+  [EnemyType.ELITE]: {
+    maxHp: 100,
+    attackPower: 20,
+    aaMultiplier: 1.0,
+    defense: 10,
+    attackSpeed: 1.2,
+    critChance: 0,
+    moveSpeed: 80,
+    hitboxRadius: 16,
+    scoreValue: 300,
+  },
+  [EnemyType.MINI_BOSS]: {
+    maxHp: 5000,             // テスト用: HP5000
+    attackPower: 30,
+    aaMultiplier: 1.0,
+    defense: 100,            // テスト用: 防御力100（50%軽減）
+    attackSpeed: 1.5,
+    critChance: 0.05,
+    moveSpeed: 0,            // テスト用: 移動しない
+    hitboxRadius: 24,
+    scoreValue: 1000,
+  },
+  [EnemyType.BOSS]: {
+    maxHp: 2000,
+    attackPower: 50,
+    aaMultiplier: 1.2,
+    defense: 50,
+    attackSpeed: 2.0,
+    critChance: 0.10,
+    moveSpeed: 30,
+    hitboxRadius: 32,
+    scoreValue: 5000,
+  },
 };
 
 /**

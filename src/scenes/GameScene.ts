@@ -5,6 +5,7 @@ import { Enemy } from '@/entities/Enemy';
 import { Bullet } from '@/entities/Bullet';
 import { InputManager } from '@/systems/InputManager';
 import { BulletPool } from '@/utils/ObjectPool';
+import { DamageCalculator } from '@/utils/DamageCalculator';
 import { UIManager } from '@/ui/UIManager';
 import { CharacterType, EnemyType, BulletType } from '@/types';
 
@@ -316,6 +317,9 @@ export class GameScene extends Phaser.Scene {
     // UIマネージャーを初期化
     this.uiManager = new UIManager(this, this.player);
 
+    // テスト用: 画面中央に固定中ボスを配置
+    this.spawnTestMiniBoss();
+
     // 操作説明を表示
     this.showControls();
   }
@@ -329,6 +333,40 @@ export class GameScene extends Phaser.Scene {
       enemy.deactivate();
       this.enemies.push(enemy);
     }
+  }
+
+  /**
+   * テスト用: 画面中央に固定中ボスを配置
+   */
+  private spawnTestMiniBoss(): void {
+    // 非アクティブな敵を探す
+    let enemy: Enemy | null = null;
+    for (const e of this.enemies) {
+      if (!e.getIsActive()) {
+        enemy = e;
+        break;
+      }
+    }
+
+    if (!enemy) {
+      return;
+    }
+
+    // プレイエリアの中央に配置
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const centerX = X + WIDTH / 2;
+    const centerY = Y + HEIGHT / 3; // 上から1/3の位置
+
+    // 弾プールを設定
+    enemy.setBulletPool(this.bulletPool);
+
+    // 中ボスとしてスポーン（移動パターンはstraight、moveSpeed=0なので動かない）
+    enemy.spawn(centerX, centerY, EnemyType.MINI_BOSS, 'straight');
+
+    // UI表示
+    this.uiManager?.showBossInfo(enemy);
+
+    console.log('Test Mini-Boss spawned at center! HP: 5000, DEF: 0');
   }
 
   /**
@@ -358,27 +396,20 @@ export class GameScene extends Phaser.Scene {
     const pattern = Phaser.Utils.Array.GetRandom(patterns);
 
     // ランダムな敵タイプ（重み付き）
+    // テスト用: 中ボス/ボスは通常スポーンしない（テスト用中ボスのみ）
     const rand = Math.random();
     let enemyType: EnemyType;
-    if (rand < 0.6) {
-      enemyType = EnemyType.NORMAL; // 60%
-    } else if (rand < 0.85) {
-      enemyType = EnemyType.ELITE; // 25%
-    } else if (rand < 0.97) {
-      enemyType = EnemyType.MINI_BOSS; // 12%
+    if (rand < 0.7) {
+      enemyType = EnemyType.NORMAL; // 70%
     } else {
-      enemyType = EnemyType.BOSS; // 3%
+      enemyType = EnemyType.ELITE; // 30%
     }
 
     // 弾プールとプレイヤー位置を設定
     enemy.setBulletPool(this.bulletPool);
 
     enemy.spawn(spawnX, spawnY, enemyType, pattern);
-
-    // ボス/中ボスの場合はUI表示
-    if (enemyType === EnemyType.MINI_BOSS || enemyType === EnemyType.BOSS) {
-      this.uiManager.showBossInfo(enemy);
-    }
+    // 注: テスト用中ボスはspawnTestMiniBoss()で個別にスポーンし、UIManagerに登録済み
   }
 
   /**
@@ -399,9 +430,19 @@ export class GameScene extends Phaser.Scene {
         // プレイヤー弾のみ処理（敵弾は無視）
         if (bullet.getBulletType() !== BulletType.PLAYER_NORMAL) return;
 
+        // 防御力を考慮したダメージ計算
+        const rawDamage = bullet.getDamage();
+        const defenseReduction = DamageCalculator.calculateDamageReduction(enemy.getDefense());
+        const finalDamage = Math.max(1, Math.floor(rawDamage * defenseReduction));
+
         // 敵にダメージ（必中：弾が当たった時点でダメージ）
-        const destroyed = enemy.takeDamage(bullet.getDamage());
+        const destroyed = enemy.takeDamage(finalDamage);
         bullet.deactivate();
+
+        // クリティカルヒット表示（デバッグ用）
+        if (bullet.getIsCritical()) {
+          // TODO: クリティカルエフェクト表示
+        }
 
         // 敵を撃破したらスコア加算
         if (destroyed) {
@@ -424,8 +465,13 @@ export class GameScene extends Phaser.Scene {
         // プレイヤー弾は無視（BulletTypeの値で判定）
         if (bullet.getBulletType() === BulletType.PLAYER_NORMAL) return;
 
+        // 防御力を考慮したダメージ計算
+        const rawDamage = bullet.getDamage();
+        const defenseReduction = DamageCalculator.calculateDamageReduction(this.player.getDefense());
+        const finalDamage = Math.max(1, Math.floor(rawDamage * defenseReduction));
+
         // プレイヤーがダメージを受ける
-        this.player.takeDamage(bullet.getDamage());
+        this.player.takeDamage(finalDamage);
 
         // 弾を消す
         bullet.deactivate();

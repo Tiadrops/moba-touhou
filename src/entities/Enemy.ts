@@ -1,20 +1,17 @@
 import Phaser from 'phaser';
-import { EnemyType, BulletType } from '@/types';
+import { EnemyType, BulletType, EnemyStats, StatusEffect, StatusEffectType } from '@/types';
 import { DEPTH, COLORS, GAME_CONFIG } from '@/config/GameConfig';
+import { ENEMY_STATS } from '@/config/CharacterData';
 import { BulletPool } from '@/utils/ObjectPool';
 
 /**
  * 敵クラス
  */
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
-  private enemyType: EnemyType;
-  private maxHp: number;
-  private currentHp: number;
-  private damage: number;
-  private moveSpeed: number;
-  private scoreValue: number;
+  private enemyType: EnemyType = EnemyType.NORMAL;
+  private stats: EnemyStats = ENEMY_STATS[EnemyType.NORMAL];
+  private currentHp: number = 0;
   private isActive: boolean = false;
-  private hitboxRadius: number = 12;
 
   // 移動パターン
   private movePattern: 'straight' | 'wave' | 'zigzag' = 'straight';
@@ -26,16 +23,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private shootInterval: number = 2000; // 2秒ごとに発射
   private playerPosition: { x: number; y: number } | null = null;
 
+  // 状態異常
+  private statusEffects: StatusEffect[] = [];
+
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'enemy');
 
     // デフォルト値
-    this.enemyType = EnemyType.NORMAL;
-    this.maxHp = 30;
-    this.currentHp = this.maxHp;
-    this.damage = 10;
-    this.moveSpeed = 100;
-    this.scoreValue = 100;
+    this.currentHp = this.stats.maxHp;
 
     // 物理エンジンに追加
     scene.add.existing(this);
@@ -50,10 +45,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // 当たり判定
     const body = this.body as Phaser.Physics.Arcade.Body;
     if (body) {
-      body.setCircle(12);
+      body.setCircle(this.stats.hitboxRadius);
       body.setOffset(
-        this.width / 2 - 12,
-        this.height / 2 - 12
+        this.width / 2 - this.stats.hitboxRadius,
+        this.height / 2 - this.stats.hitboxRadius
       );
     }
   }
@@ -72,42 +67,34 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.patternTime = 0;
 
     // 敵タイプに応じてステータスを設定
-    switch (enemyType) {
-      case EnemyType.NORMAL:
-        this.maxHp = 30;
-        this.damage = 10;
-        this.moveSpeed = 100;
-        this.scoreValue = 100;
-        break;
-      case EnemyType.ELITE:
-        this.maxHp = 100;
-        this.damage = 20;
-        this.moveSpeed = 80;
-        this.scoreValue = 300;
-        break;
-      case EnemyType.MINI_BOSS:
-        this.maxHp = 500;
-        this.damage = 30;
-        this.moveSpeed = 50;
-        this.scoreValue = 1000;
-        this.setScale(1.5);
-        break;
-      case EnemyType.BOSS:
-        this.maxHp = 2000;
-        this.damage = 50;
-        this.moveSpeed = 30;
-        this.scoreValue = 5000;
-        this.setScale(2);
-        break;
-    }
-
-    this.currentHp = this.maxHp;
+    this.stats = ENEMY_STATS[enemyType];
+    this.currentHp = this.stats.maxHp;
     this.isActive = true;
+    this.statusEffects = []; // 状態異常をクリア
+
+    // ボス系のスケール調整
+    if (enemyType === EnemyType.MINI_BOSS) {
+      this.setScale(1.5);
+    } else if (enemyType === EnemyType.BOSS) {
+      this.setScale(2);
+    } else {
+      this.setScale(1);
+    }
 
     // 位置を設定
     this.setPosition(x, y);
     this.setActive(true);
     this.setVisible(true);
+
+    // 当たり判定を更新
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    if (body) {
+      body.setCircle(this.stats.hitboxRadius);
+      body.setOffset(
+        this.width / 2 - this.stats.hitboxRadius,
+        this.height / 2 - this.stats.hitboxRadius
+      );
+    }
 
     // 初期速度（下方向に移動）
     this.updateMovement(0);
@@ -121,13 +108,25 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       return;
     }
 
+    // 状態異常を更新
+    this.updateStatusEffects(delta);
+
+    // スタン中は移動・攻撃不可
+    const isStunned = this.hasStatusEffect(StatusEffectType.STUN);
+
     this.patternTime += delta;
 
-    // 移動パターンを更新
-    this.updateMovement(delta);
+    // 移動パターンを更新（スタン中は停止）
+    if (!isStunned) {
+      this.updateMovement(delta);
+    } else {
+      this.setVelocity(0, 0);
+    }
 
-    // 弾幕発射
-    this.updateShooting(time);
+    // 弾幕発射（スタン中は不可）
+    if (!isStunned) {
+      this.updateShooting(time);
+    }
 
     // 画面外に出たら非アクティブ化（プレイエリア外）
     const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
@@ -136,6 +135,57 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.y < Y - margin || this.y > Y + HEIGHT + margin) {
       this.deactivate();
     }
+  }
+
+  /**
+   * 状態異常を更新
+   */
+  private updateStatusEffects(delta: number): void {
+    for (let i = this.statusEffects.length - 1; i >= 0; i--) {
+      this.statusEffects[i].remainingTime -= delta;
+      if (this.statusEffects[i].remainingTime <= 0) {
+        // スタン解除時のエフェクト
+        if (this.statusEffects[i].type === StatusEffectType.STUN) {
+          this.clearTint();
+          this.setTint(COLORS.ENEMY);
+        }
+        this.statusEffects.splice(i, 1);
+      }
+    }
+  }
+
+  /**
+   * 状態異常を付与
+   */
+  applyStatusEffect(effect: StatusEffect): void {
+    // 同じ種類の状態異常がある場合は時間を上書き（延長ではなくリセット）
+    const existingIndex = this.statusEffects.findIndex(e => e.type === effect.type);
+    if (existingIndex >= 0) {
+      this.statusEffects[existingIndex] = effect;
+    } else {
+      this.statusEffects.push(effect);
+    }
+
+    // スタンの視覚エフェクト
+    if (effect.type === StatusEffectType.STUN) {
+      this.setTint(0xffff00); // 黄色でスタン表示
+      this.setVelocity(0, 0);
+    }
+  }
+
+  /**
+   * 特定の状態異常があるか確認
+   */
+  hasStatusEffect(type: StatusEffectType): boolean {
+    return this.statusEffects.some(e => e.type === type);
+  }
+
+  /**
+   * 状態異常をクリア
+   */
+  clearStatusEffects(): void {
+    this.statusEffects = [];
+    this.setTint(COLORS.ENEMY);
   }
 
   /**
@@ -150,7 +200,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const bottomBound = Y + HEIGHT - enemyRadius;
 
     let vx = 0;
-    let vy = this.moveSpeed;
+    let vy = this.stats.moveSpeed;
 
     switch (this.movePattern) {
       case 'straight':
@@ -293,7 +343,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.playerPosition.x,
         this.playerPosition.y,
         BulletType.ENEMY_AIMED,
-        this.damage
+        this.stats.attackPower
       );
     }
   }
@@ -325,7 +375,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
           targetX,
           targetY,
           BulletType.ENEMY_NORMAL,
-          this.damage
+          this.stats.attackPower
         );
       }
     }
@@ -351,7 +401,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
           targetX,
           targetY,
           BulletType.ENEMY_NORMAL,
-          this.damage
+          this.stats.attackPower
         );
       }
     }
@@ -383,12 +433,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   // ゲッター
-  getDamage(): number {
-    return this.damage;
+  getAttackPower(): number {
+    return this.stats.attackPower;
+  }
+
+  getDefense(): number {
+    return this.stats.defense;
   }
 
   getScoreValue(): number {
-    return this.scoreValue;
+    return this.stats.scoreValue;
   }
 
   getIsActive(): boolean {
@@ -400,7 +454,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   getMaxHp(): number {
-    return this.maxHp;
+    return this.stats.maxHp;
   }
 
   getEnemyType(): EnemyType {
@@ -408,6 +462,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   getHitboxRadius(): number {
-    return this.hitboxRadius;
+    return this.stats.hitboxRadius;
+  }
+
+  getStats(): EnemyStats {
+    return this.stats;
+  }
+
+  getCombatStats() {
+    return this.stats;
   }
 }

@@ -361,19 +361,25 @@ export class InputManager {
 
   /**
    * Wスキル処理
-   * 方向指定スキル：マウスカーソルの方向に7way弾を発射
+   * 方向指定スキル：マウスカーソルの方向に正方形弾を発射（スタン付与）
    */
   private handleWSkill(currentTime: number): void {
-    // スタックチェック
-    const stacks = this.player.getWSkillStacks();
-    if (stacks <= 0) {
-      const nextStackTime = this.player.getWSkillNextStackTime(currentTime);
-      console.log(`W skill: No stacks available. Next stack in ${(nextStackTime / 1000).toFixed(1)}s`);
+    // スキル使用可能か確認
+    if (!this.player.canUseSkill(SkillSlot.W, currentTime)) {
+      const remaining = this.player.getSkillCooldownRemaining(SkillSlot.W, currentTime);
+      if (remaining > 0) {
+        console.log(`W skill on cooldown: ${(remaining / 1000).toFixed(1)}s`);
+      }
       return;
     }
 
     // スキル実行中は使用不可
     if (this.player.isSkillLocked()) {
+      return;
+    }
+
+    // モーション硬直中は使用不可
+    if (this.player.isWSkillInMotion()) {
       return;
     }
 

@@ -75,6 +75,10 @@ export enum BuffType {
   ATTACK_SPEED = 'attack_speed',
   MOVE_SPEED = 'move_speed',
   DAMAGE = 'damage',
+  ATTACK_POWER = 'attack_power',
+  AA_MULTIPLIER = 'aa_multiplier',
+  DEFENSE = 'defense',
+  CRIT_CHANCE = 'crit_chance',
 }
 
 // バフ情報
@@ -85,17 +89,46 @@ export interface Buff {
   source: string;              // バフの発生源（スキルIDなど）
 }
 
+// 状態異常の種類
+export enum StatusEffectType {
+  STUN = 'stun',               // スタン（移動不可、スキル使用不可）
+  SLOW = 'slow',               // スロウ（移動速度低下）
+  ROOT = 'root',               // ルート（移動不可、スキル使用可）
+  SILENCE = 'silence',         // サイレンス（スキル使用不可）
+}
+
+// 状態異常情報
+export interface StatusEffect {
+  type: StatusEffectType;
+  remainingTime: number;       // 残り時間（ms）
+  source: string;              // 発生源（スキルIDなど）
+  value?: number;              // 効果値（スロウの場合は移動速度低下率など）
+}
+
 // 前方参照用にEnemyをインポート不要にする
 type Enemy = import('@/entities/Enemy').Enemy;
 
-// キャラクターステータス
-export interface CharacterStats {
+// 戦闘ステータス（共通）
+export interface CombatStats {
   maxHp: number;
-  moveSpeed: number;
-  attackDamage: number;
+  attackPower: number;       // 攻撃力
+  aaMultiplier: number;      // AAダメージ増幅（1.0 = 100%）
+  defense: number;           // 防御力
   attackSpeed: number;       // 1秒あたりの攻撃回数
-  attackRange: number;
+  critChance: number;        // クリティカル確率（0.0 - 1.0）
+  moveSpeed: number;         // 移動速度（ピクセル/秒）
+}
+
+// キャラクターステータス（プレイヤー用）
+export interface CharacterStats extends CombatStats {
+  attackRange: number;       // 攻撃射程
   hitboxRadius: number;      // 当たり判定の半径
+}
+
+// 敵のステータス（敵用）
+export interface EnemyStats extends CombatStats {
+  hitboxRadius: number;      // 当たり判定の半径
+  scoreValue: number;        // 撃破時のスコア
 }
 
 // キャラクター設定
@@ -123,11 +156,22 @@ export enum EnemyType {
 export interface EnemyConfig {
   type: EnemyType;
   name: string;
-  hp: number;
-  damage: number;
-  moveSpeed: number;
-  scoreValue: number;
-  hitboxRadius: number;
+  stats: EnemyStats;
+}
+
+// スキルダメージ設定
+export interface SkillDamageConfig {
+  baseDamage: number;        // 固定ダメージ
+  scalingRatio: number;      // 攻撃力増幅率（0.0 - 2.0など）
+  additionalMultiplier?: number;  // その他補正（デフォルト1.0）
+}
+
+// ダメージ結果
+export interface DamageResult {
+  rawDamage: number;         // 防御適用前ダメージ
+  finalDamage: number;       // 最終ダメージ
+  isCritical: boolean;       // クリティカル発動
+  damageReduction: number;   // 防御による軽減率
 }
 
 // アイテムの種類
