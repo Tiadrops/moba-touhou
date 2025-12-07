@@ -183,11 +183,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.x = rightBound;
     }
 
-    // 位置を強制的にプレイエリア内にクランプ（Y軸）
-    if (this.y < topBound) {
-      this.y = topBound;
-    } else if (this.y > bottomBound) {
-      this.y = bottomBound;
+    // ボス/中ボスのみY軸をクランプ（雑魚は画面下に落ちて消える）
+    const isBoss = this.enemyType === EnemyType.MINI_BOSS || this.enemyType === EnemyType.BOSS;
+    if (isBoss) {
+      if (this.y < topBound) {
+        this.y = topBound;
+      } else if (this.y > bottomBound) {
+        this.y = bottomBound;
+        // ボスは下端に到達したら停止
+        vy = 0;
+      }
     }
 
     this.setVelocity(vx, vy);

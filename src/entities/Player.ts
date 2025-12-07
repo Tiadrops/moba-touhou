@@ -1016,4 +1016,50 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   getAttackMoveTarget(): Position | null {
     return this.attackMoveTarget;
   }
+
+  /**
+   * アクティブなバフ一覧を取得
+   */
+  getBuffs(): Buff[] {
+    return [...this.buffs];
+  }
+
+  /**
+   * バフ込みの実効攻撃速度を取得
+   */
+  getEffectiveAttackSpeed(): number {
+    let multiplier = 1;
+    for (const buff of this.buffs) {
+      if (buff.type === BuffType.ATTACK_SPEED) {
+        multiplier *= buff.multiplier;
+      }
+    }
+    return this.characterConfig.stats.attackSpeed * multiplier;
+  }
+
+  /**
+   * バフ込みの実効移動速度を取得
+   */
+  getEffectiveMoveSpeed(): number {
+    let multiplier = 1;
+    for (const buff of this.buffs) {
+      if (buff.type === BuffType.MOVE_SPEED) {
+        multiplier *= buff.multiplier;
+      }
+    }
+    return this.characterConfig.stats.moveSpeed * multiplier;
+  }
+
+  /**
+   * バフ込みの実効攻撃力を取得
+   */
+  getEffectiveAttackDamage(): number {
+    let multiplier = 1;
+    for (const buff of this.buffs) {
+      if (buff.type === BuffType.DAMAGE) {
+        multiplier *= buff.multiplier;
+      }
+    }
+    return this.characterConfig.stats.attackDamage * multiplier;
+  }
 }

@@ -5,6 +5,7 @@ import { Enemy } from '@/entities/Enemy';
 import { Bullet } from '@/entities/Bullet';
 import { InputManager } from '@/systems/InputManager';
 import { BulletPool } from '@/utils/ObjectPool';
+import { UIManager } from '@/ui/UIManager';
 import { CharacterType, EnemyType, BulletType } from '@/types';
 
 /**
@@ -22,6 +23,7 @@ export class GameScene extends Phaser.Scene {
   private bulletPool!: BulletPool;
   private enemies: Enemy[] = [];
   private bulletTrailGraphics!: Phaser.GameObjects.Graphics; // 弾道補助線用
+  private uiManager!: UIManager;
 
   // 敵の生成管理
   private lastEnemySpawnTime: number = 0;
@@ -97,6 +99,11 @@ export class GameScene extends Phaser.Scene {
     // デバッグ情報の更新
     if (GAME_CONFIG.DEBUG && this.player && this.debugText) {
       this.updateDebugText();
+    }
+
+    // UI更新
+    if (this.uiManager) {
+      this.uiManager.update(time, delta);
     }
   }
 
@@ -306,6 +313,9 @@ export class GameScene extends Phaser.Scene {
       this.createPlayerDebugInfo();
     }
 
+    // UIマネージャーを初期化
+    this.uiManager = new UIManager(this, this.player);
+
     // 操作説明を表示
     this.showControls();
   }
@@ -364,6 +374,11 @@ export class GameScene extends Phaser.Scene {
     enemy.setBulletPool(this.bulletPool);
 
     enemy.spawn(spawnX, spawnY, enemyType, pattern);
+
+    // ボス/中ボスの場合はUI表示
+    if (enemyType === EnemyType.MINI_BOSS || enemyType === EnemyType.BOSS) {
+      this.uiManager.showBossInfo(enemy);
+    }
   }
 
   /**
@@ -395,22 +410,7 @@ export class GameScene extends Phaser.Scene {
       }
     );
 
-    // 敵とプレイヤーの衝突
-    this.physics.add.overlap(
-      this.player,
-      this.enemies,
-      (_playerObj, enemyObj) => {
-        const enemy = enemyObj as Enemy;
-
-        if (!enemy.getIsActive()) return;
-
-        // プレイヤーがダメージを受ける
-        this.player.takeDamage(enemy.getDamage());
-
-        // 敵も消える
-        enemy.deactivate();
-      }
-    );
+    // 敵とプレイヤーの衝突（接触しても何も起きない - 物理的に重なることを許可）
 
     // 敵弾とプレイヤーの衝突
     this.physics.add.overlap(
