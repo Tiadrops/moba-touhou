@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { Player } from '@/entities/Player';
 import { Enemy } from '@/entities/Enemy';
-import { GAME_CONFIG, COLORS, DEPTH } from '@/config/GameConfig';
+import { GAME_CONFIG, COLORS, DEPTH, SKILL_CONFIG } from '@/config/GameConfig';
+import { SkillSlot } from '@/types';
 
 /**
  * 入力管理システム
@@ -335,8 +336,169 @@ export class InputManager {
    * スキルキー処理
    */
   private handleSkillKey(key: string): void {
-    console.log(`Skill ${key} pressed`);
-    // TODO: スキルシステムの実装後に処理を追加
+    const currentTime = this.scene.time.now;
+
+    switch (key) {
+      case 'Q':
+        this.handleQSkill(currentTime);
+        break;
+      case 'W':
+        this.handleWSkill(currentTime);
+        break;
+      case 'E':
+        this.handleESkill(currentTime);
+        break;
+      case 'R':
+        this.handleRSkill(currentTime);
+        break;
+      case 'D':
+      case 'F':
+        // TODO: 他のスキルを実装
+        console.log(`Skill ${key} not implemented yet`);
+        break;
+    }
+  }
+
+  /**
+   * Wスキル処理
+   * 方向指定スキル：マウスカーソルの方向に7way弾を発射
+   */
+  private handleWSkill(currentTime: number): void {
+    // スタックチェック
+    const stacks = this.player.getWSkillStacks();
+    if (stacks <= 0) {
+      const nextStackTime = this.player.getWSkillNextStackTime(currentTime);
+      console.log(`W skill: No stacks available. Next stack in ${(nextStackTime / 1000).toFixed(1)}s`);
+      return;
+    }
+
+    // スキル実行中は使用不可
+    if (this.player.isSkillLocked()) {
+      return;
+    }
+
+    // 現在のマウスカーソル位置を取得
+    const pointer = this.scene.input.activePointer;
+    const cursorX = pointer.x;
+    const cursorY = pointer.y;
+
+    // スキル発動
+    const success = this.player.useWSkill(currentTime, cursorX, cursorY);
+    if (success) {
+      console.log('W skill activated!');
+    }
+  }
+
+  /**
+   * Eスキル処理
+   * 方向指定スキル：マウスカーソルの方向に3mダッシュ
+   */
+  private handleESkill(currentTime: number): void {
+    // スキル使用可能か確認
+    if (!this.player.canUseSkill(SkillSlot.E, currentTime)) {
+      const remaining = this.player.getSkillCooldownRemaining(SkillSlot.E, currentTime);
+      if (remaining > 0) {
+        console.log(`E skill on cooldown: ${(remaining / 1000).toFixed(1)}s`);
+      }
+      return;
+    }
+
+    // スキル実行中は使用不可
+    if (this.player.isSkillLocked()) {
+      return;
+    }
+
+    // 現在のマウスカーソル位置を取得
+    const pointer = this.scene.input.activePointer;
+    const cursorX = pointer.x;
+    const cursorY = pointer.y;
+
+    // スキル発動
+    const success = this.player.useESkill(currentTime, cursorX, cursorY);
+    if (success) {
+      console.log('E skill activated!');
+    }
+  }
+
+  /**
+   * Rスキル処理
+   * 自身中心スキル：即時発動、範囲内弾消し＋無敵＋継続ダメージ
+   */
+  private handleRSkill(currentTime: number): void {
+    // スキル使用可能か確認
+    if (!this.player.canUseSkill(SkillSlot.R, currentTime)) {
+      const remaining = this.player.getSkillCooldownRemaining(SkillSlot.R, currentTime);
+      if (remaining > 0) {
+        console.log(`R skill on cooldown: ${(remaining / 1000).toFixed(1)}s`);
+      }
+      return;
+    }
+
+    // スキル発動
+    const success = this.player.useRSkill(currentTime);
+    if (success) {
+      console.log('R skill activated!');
+    }
+  }
+
+  /**
+   * Qスキル処理
+   * 対象指定スキル：カーソルが敵の当たり判定の0.5m以内にある時に発動
+   */
+  private handleQSkill(currentTime: number): void {
+    // スキル使用可能か確認
+    if (!this.player.canUseSkill(SkillSlot.Q, currentTime)) {
+      const remaining = this.player.getSkillCooldownRemaining(SkillSlot.Q, currentTime);
+      if (remaining > 0) {
+        console.log(`Q skill on cooldown: ${(remaining / 1000).toFixed(1)}s`);
+      }
+      return;
+    }
+
+    // 現在のマウスカーソル位置を取得
+    const pointer = this.scene.input.activePointer;
+    const cursorX = pointer.x;
+    const cursorY = pointer.y;
+
+    // カーソル位置の近くにいる敵を探す
+    const targetEnemy = this.findEnemyNearCursor(cursorX, cursorY, SKILL_CONFIG.REIMU_Q.TARGET_DETECTION_RANGE);
+
+    if (!targetEnemy) {
+      console.log('Q skill: No valid target near cursor');
+      return;
+    }
+
+    // スキル発動
+    const success = this.player.useQSkill(currentTime, targetEnemy);
+    if (success) {
+      console.log('Q skill activated!');
+    }
+  }
+
+  /**
+   * カーソル位置の近くにいる敵を探す
+   */
+  private findEnemyNearCursor(x: number, y: number, radius: number): Enemy | null {
+    let nearestEnemy: Enemy | null = null;
+    let nearestDistance = Infinity;
+
+    for (const enemy of this.enemies) {
+      if (!enemy.getIsActive()) {
+        continue;
+      }
+
+      const distance = Phaser.Math.Distance.Between(x, y, enemy.x, enemy.y);
+
+      // 敵の当たり判定半径も考慮
+      const effectiveDistance = distance - enemy.getHitboxRadius();
+
+      if (effectiveDistance <= radius && effectiveDistance < nearestDistance) {
+        nearestDistance = effectiveDistance;
+        nearestEnemy = enemy;
+      }
+    }
+
+    return nearestEnemy;
   }
 
   /**
@@ -349,7 +511,7 @@ export class InputManager {
   /**
    * 更新処理
    */
-  update(time: number, delta: number): void {
+  update(_time: number, _delta: number): void {
     // 攻撃範囲表示をプレイヤーの位置に追従
     if (this.isShowingAttackRange && this.attackRangeCircle) {
       this.attackRangeCircle.setPosition(this.player.x, this.player.y);

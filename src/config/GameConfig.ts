@@ -112,3 +112,53 @@ export const SCENES = {
   GAME_OVER: 'GameOverScene',
   STAGE_CLEAR: 'StageClearScene',
 } as const;
+
+/**
+ * 単位変換定数
+ * 1m = 55px
+ */
+export const UNIT = {
+  METER_TO_PIXEL: 55,
+} as const;
+
+/**
+ * スキル設定
+ */
+export const SKILL_CONFIG = {
+  // 霊夢のQスキル
+  REIMU_Q: {
+    CAST_TIME: 200,              // キャスト時間（ms）
+    PROJECTILE_COUNT: 3,         // 発射弾数
+    PROJECTILE_INTERVAL: 100,    // 弾の発射間隔（ms）
+    ATTACK_SPEED_BUFF: 1.5,      // AS上昇倍率（50%上昇）
+    BUFF_DURATION: 5000,         // バフ持続時間（ms）
+    COOLDOWN: 7000,              // クールダウン（ms）
+    TARGET_DETECTION_RANGE: 0.5 * 55, // ターゲット検出範囲（0.5m = 27.5px）
+    DAMAGE_MULTIPLIER: 1.0,      // ダメージ倍率
+  },
+  // 霊夢のWスキル
+  REIMU_W: {
+    CAST_TIME: 400,              // キャスト時間（ms）
+    PROJECTILE_COUNT: 7,         // 発射弾数（7way）
+    SPREAD_ANGLE: 90,            // 拡散角度（度）
+    MAX_STACKS: 2,               // 最大スタック数
+    COOLDOWN: 7000,              // クールダウン（ms）- スタック回復時間
+    DAMAGE_MULTIPLIER: 1.0,      // ダメージ倍率
+    PROJECTILE_RANGE: 500,       // 弾の射程（px）
+  },
+  // 霊夢のEスキル
+  REIMU_E: {
+    CAST_TIME: 100,              // キャスト時間（ms）
+    DASH_DISTANCE: 3 * 55,       // ダッシュ距離（3m = 165px）
+    DASH_DURATION: 300,          // ダッシュ所要時間（ms）
+    COOLDOWN: 10000,             // クールダウン（ms）
+  },
+  // 霊夢のRスキル（夢想天生）
+  REIMU_R: {
+    DURATION: 2000,              // 効果時間（ms）
+    AREA_SIZE: 10 * 55,          // 範囲サイズ（10m = 550px、正方形の一辺）
+    DAMAGE_INTERVAL: 200,        // ダメージ間隔（ms）
+    DAMAGE_MULTIPLIER: 0.5,      // ダメージ倍率（AD x 0.5）
+    COOLDOWN: 60000,             // クールダウン（ms）
+  },
+} as const;

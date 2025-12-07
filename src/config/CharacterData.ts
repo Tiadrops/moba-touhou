@@ -7,7 +7,7 @@ const REIMU_STATS: CharacterStats = {
   maxHp: 100,
   moveSpeed: 300,           // ピクセル/秒
   attackDamage: 10,
-  attackSpeed: 10,           // 1秒に10回攻撃（0.1秒クールダウン）
+  attackSpeed: 2.0,          // 1秒に2回攻撃（0.5秒クールダウン）→ バフ後: 3.0 (0.33秒)
   attackRange: 150,         // 攻撃範囲を半分に調整
   hitboxRadius: 8,           // 当たり判定は小さめ（弾幕回避のため）
 };

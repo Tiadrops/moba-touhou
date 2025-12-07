@@ -66,6 +66,11 @@ export class GameScene extends Phaser.Scene {
     if (this.bulletPool) {
       this.bulletPool.update();
 
+      // Rスキル範囲内の敵弾を消滅
+      if (this.player && this.player.getIsRSkillActive()) {
+        this.destroyEnemyBulletsInRSkillArea();
+      }
+
       // 弾道補助線を描画（設定でONの場合のみ）
       if (GAME_CONFIG.SHOW_BULLET_TRAILS) {
         this.drawBulletTrails();
@@ -137,6 +142,28 @@ export class GameScene extends Phaser.Scene {
         clamp(bullet.x, minX, maxX),
         clamp(bullet.y, minY, maxY)
       );
+    }
+  }
+
+  /**
+   * Rスキル範囲内の敵弾を消滅させる
+   */
+  private destroyEnemyBulletsInRSkillArea(): void {
+    const rSkillArea = this.player.getRSkillArea();
+    if (!rSkillArea) return;
+
+    const halfSize = rSkillArea.size / 2;
+    const activeBullets = this.bulletPool.getActiveBullets();
+
+    for (const bullet of activeBullets) {
+      // プレイヤー弾は無視
+      if (bullet.getBulletType() === BulletType.PLAYER_NORMAL) continue;
+
+      // 長方形範囲内かチェック
+      if (Math.abs(bullet.x - rSkillArea.x) <= halfSize &&
+          Math.abs(bullet.y - rSkillArea.y) <= halfSize) {
+        bullet.deactivate();
+      }
     }
   }
 
@@ -372,7 +399,7 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(
       this.player,
       this.enemies,
-      (playerObj, enemyObj) => {
+      (_playerObj, enemyObj) => {
         const enemy = enemyObj as Enemy;
 
         if (!enemy.getIsActive()) return;
@@ -389,7 +416,7 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(
       this.player,
       this.bulletPool.getGroup(),
-      (playerObj, bulletObj) => {
+      (_playerObj, bulletObj) => {
         const bullet = bulletObj as Bullet;
 
         if (!bullet.getIsActive()) return;

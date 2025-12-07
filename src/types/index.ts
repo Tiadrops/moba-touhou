@@ -52,6 +52,42 @@ export interface SkillData {
   manaCost?: number;         // 将来的にMPを追加する場合
 }
 
+// スキルの実行状態
+export enum SkillState {
+  READY = 'ready',           // 使用可能
+  CASTING = 'casting',       // キャスト中
+  EXECUTING = 'executing',   // 実行中（弾発射など）
+  COOLDOWN = 'cooldown',     // クールダウン中
+}
+
+// スキル実行中の情報
+export interface SkillExecution {
+  skillSlot: SkillSlot;
+  state: SkillState;
+  castTimeRemaining: number;   // キャスト残り時間（ms）
+  executionTimeRemaining: number; // 実行残り時間（ms）
+  target?: Enemy;              // ターゲット（対象指定スキルの場合）
+  targetPosition?: Position;   // ターゲット位置（方向指定スキルの場合）
+}
+
+// バフの種類
+export enum BuffType {
+  ATTACK_SPEED = 'attack_speed',
+  MOVE_SPEED = 'move_speed',
+  DAMAGE = 'damage',
+}
+
+// バフ情報
+export interface Buff {
+  type: BuffType;
+  multiplier: number;          // 倍率（1.5 = 50%上昇）
+  remainingTime: number;       // 残り時間（ms）
+  source: string;              // バフの発生源（スキルIDなど）
+}
+
+// 前方参照用にEnemyをインポート不要にする
+type Enemy = import('@/entities/Enemy').Enemy;
+
 // キャラクターステータス
 export interface CharacterStats {
   maxHp: number;

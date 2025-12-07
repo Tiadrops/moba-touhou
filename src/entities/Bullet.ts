@@ -114,7 +114,13 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     }
 
     // 追尾処理（プレイヤーの弾のみ）
-    if (this.bulletType === BulletType.PLAYER_NORMAL && this.target && this.target.getIsActive()) {
+    if (this.bulletType === BulletType.PLAYER_NORMAL && this.target) {
+      // ターゲットが死んでいたら弾も消滅（LoL風必中システム）
+      if (!this.target.getIsActive()) {
+        this.deactivate();
+        return;
+      }
+
       // ターゲットへの角度を計算
       const angle = Phaser.Math.Angle.Between(
         this.x,

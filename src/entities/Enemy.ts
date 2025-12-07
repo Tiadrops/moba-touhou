@@ -14,6 +14,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private moveSpeed: number;
   private scoreValue: number;
   private isActive: boolean = false;
+  private hitboxRadius: number = 12;
 
   // 移動パターン
   private movePattern: 'straight' | 'wave' | 'zigzag' = 'straight';
@@ -140,7 +141,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   /**
    * 移動パターンを更新
    */
-  private updateMovement(delta: number): void {
+  private updateMovement(_delta: number): void {
     const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
     const enemyRadius = 16; // 敵のサイズを考慮
     const leftBound = X + enemyRadius;
@@ -399,5 +400,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   getEnemyType(): EnemyType {
     return this.enemyType;
+  }
+
+  getHitboxRadius(): number {
+    return this.hitboxRadius;
   }
 }
