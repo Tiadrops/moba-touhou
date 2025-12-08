@@ -1,0 +1,292 @@
+/**
+ * 月影の軌跡（Moonlight Trail）
+ *
+ * プレイヤー方向へダッシュしながら黄色い弾幕を残すスキル
+ * 別キャラクター用に保存
+ *
+ * 元の実装場所: Rumia.ts スペルカードフェーズ用Wスキル
+ */
+
+// ========================================
+// GameConfig設定例
+// ========================================
+/*
+// Wスキル「月影の軌跡」- プレイヤー方向へダッシュ＆弾幕残留
+W: {
+  NAME: '月影の軌跡',
+  CAST_TIME: 300,              // キャスト時間0.3秒
+  COOLDOWN: 5000,              // CD5秒
+  DAMAGE: {
+    BASE: 35,
+    RATIO: 0.5,
+  },
+  // ダッシュパラメータ
+  DASH_DISTANCE: 4 * 55,       // 4m = 220px ダッシュ
+  DASH_DURATION: 400,          // ダッシュ所要時間（ms）
+  // 軌跡弾幕パラメータ
+  TRAIL_BULLET_INTERVAL: 50,   // 50msごとに弾を残す
+  BULLET_RADIUS: 12,           // 弾の半径
+  BULLET_COLOR: 0xffff00,      // 黄色
+  LINGER_TIME: 800,            // 残留時間（ms）- この後拡散開始
+  SPREAD_SPEED: 1.5 * 55,      // 拡散速度 1.5m/s
+  BULLETS_PER_DROP: 3,         // 1回のドロップで落とす弾数
+  DROP_SPREAD_ANGLE: 60,       // ドロップ弾の広がり角度（度）
+},
+*/
+
+// ========================================
+// 型定義（PhaseSkillsConfig W部分）
+// ========================================
+/*
+W: {
+  NAME: string;
+  CAST_TIME: number;
+  COOLDOWN: number;
+  DAMAGE: { BASE: number; RATIO: number };
+  // ダッシュスキル用
+  DASH_DISTANCE?: number;
+  DASH_DURATION?: number;
+  TRAIL_BULLET_INTERVAL?: number;
+  BULLET_RADIUS?: number;
+  BULLET_COLOR?: number;
+  LINGER_TIME?: number;
+  SPREAD_SPEED?: number;
+  BULLETS_PER_DROP?: number;
+  DROP_SPREAD_ANGLE?: number;
+};
+*/
+
+// ========================================
+// クラス変数
+// ========================================
+/*
+// スペルカード用Wスキル（月影の軌跡）
+private spellWSkillDashDirection: number = 0;     // ダッシュ方向（ラジアン）
+private spellWSkillDashStartPos: { x: number; y: number } = { x: 0, y: 0 }; // ダッシュ開始位置
+private spellWSkillDashProgress: number = 0;      // ダッシュ進捗（0〜1）
+private spellWSkillTrailTimer: number = 0;        // 軌跡弾発射タイマー
+private spellWSkillTrailBullets: Array<{          // 残留弾の情報
+  bullet: any;
+  spawnTime: number;
+  spreadAngle: number;
+  hasStartedSpreading: boolean;
+}> = [];
+*/
+
+// ========================================
+// メソッド実装
+// ========================================
+
+/**
+ * スペルカード用Wスキルを使用開始
+ */
+/*
+private tryUseSpellCardWSkill(): boolean {
+  if (!this.playerPosition) return false;
+
+  const wConfig = this.currentSkillConfig.W;
+  if (!wConfig.DASH_DISTANCE) return false; // スペルカード用設定がない
+
+  // プレイヤー方向を計算
+  this.spellWSkillDashDirection = Phaser.Math.Angle.Between(
+    this.x,
+    this.y,
+    this.playerPosition.x,
+    this.playerPosition.y
+  );
+
+  // ダッシュ開始位置を保存
+  this.spellWSkillDashStartPos = { x: this.x, y: this.y };
+  this.spellWSkillDashProgress = 0;
+  this.spellWSkillTrailTimer = 0;
+  this.spellWSkillTrailBullets = [];
+
+  // プレイエリア内に収まるように移動方向を調整
+  const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+  const margin = this.stats.hitboxRadius + 20;
+  const targetX = this.x + Math.cos(this.spellWSkillDashDirection) * wConfig.DASH_DISTANCE;
+  const targetY = this.y + Math.sin(this.spellWSkillDashDirection) * wConfig.DASH_DISTANCE;
+
+  // 移動先がエリア外なら方向を反転
+  if (targetX < X + margin || targetX > X + WIDTH - margin ||
+      targetY < Y + margin || targetY > Y + HEIGHT - margin) {
+    this.spellWSkillDashDirection += Math.PI; // 180度反転
+  }
+
+  return this.startSkill(BossSkillSlot.W, wConfig.CAST_TIME, this.spellWSkillDashDirection);
+}
+*/
+
+/**
+ * スペルカード用Wスキル詠唱更新
+ */
+/*
+private updateSpellCardWSkillCasting(delta: number): void {
+  const castComplete = this.updateSkillCasting(BossSkillSlot.W, delta);
+
+  if (castComplete) {
+    const wSkill = this.skills.get(BossSkillSlot.W);
+    const wConfig = this.currentSkillConfig.W;
+    if (wSkill && wConfig.DASH_DURATION) {
+      wSkill.state = BossSkillState.EXECUTING;
+      wSkill.executionTimeRemaining = wConfig.DASH_DURATION;
+      console.log('スペルカードWスキル（月影の軌跡）発動!');
+    }
+  }
+}
+*/
+
+/**
+ * スペルカード用Wスキル実行更新（ダッシュ＋軌跡弾）
+ */
+/*
+private updateSpellCardWSkillExecution(time: number, delta: number): void {
+  const wSkill = this.skills.get(BossSkillSlot.W);
+  const wConfig = this.currentSkillConfig.W;
+  if (!wSkill || !wConfig.DASH_DURATION || !wConfig.DASH_DISTANCE) return;
+
+  // ダッシュ進捗を更新
+  this.spellWSkillDashProgress += delta / wConfig.DASH_DURATION;
+  this.spellWSkillDashProgress = Math.min(this.spellWSkillDashProgress, 1);
+
+  // 位置を更新（イージング付き）
+  const easeProgress = this.easeOutQuad(this.spellWSkillDashProgress);
+  const newX = this.spellWSkillDashStartPos.x +
+    Math.cos(this.spellWSkillDashDirection) * wConfig.DASH_DISTANCE * easeProgress;
+  const newY = this.spellWSkillDashStartPos.y +
+    Math.sin(this.spellWSkillDashDirection) * wConfig.DASH_DISTANCE * easeProgress;
+  this.setPosition(newX, newY);
+
+  // 軌跡弾を残す
+  const trailInterval = wConfig.TRAIL_BULLET_INTERVAL ?? 50;
+  this.spellWSkillTrailTimer += delta;
+  if (this.spellWSkillTrailTimer >= trailInterval) {
+    this.dropSpellCardWSkillTrailBullets(time);
+    this.spellWSkillTrailTimer = 0;
+  }
+
+  // 残留弾の拡散処理
+  this.updateSpellCardWSkillTrailBullets(time, delta);
+
+  // 実行完了判定
+  if (this.spellWSkillDashProgress >= 1) {
+    this.completeSkill(BossSkillSlot.W, wConfig.COOLDOWN);
+    console.log('スペルカードWスキル完了');
+  }
+}
+*/
+
+/**
+ * 軌跡弾を落とす
+ */
+/*
+private dropSpellCardWSkillTrailBullets(time: number): void {
+  if (!this.bulletPool) return;
+  const wConfig = this.currentSkillConfig.W;
+
+  const bulletRadius = wConfig.BULLET_RADIUS ?? 12;
+  const bulletColor = wConfig.BULLET_COLOR ?? 0xffff00;
+  const bulletsPerDrop = wConfig.BULLETS_PER_DROP ?? 3;
+  const dropSpreadAngle = Phaser.Math.DegToRad(wConfig.DROP_SPREAD_ANGLE ?? 60);
+  const damage = wConfig.DAMAGE.BASE + this.stats.attackPower * wConfig.DAMAGE.RATIO;
+
+  // 複数の弾を扇状に配置
+  for (let i = 0; i < bulletsPerDrop; i++) {
+    const bullet = this.bulletPool.acquire();
+    if (!bullet) continue;
+
+    // 進行方向に対して垂直方向に広がる
+    const perpAngle = this.spellWSkillDashDirection + Math.PI / 2;
+    const spreadOffset = (i - (bulletsPerDrop - 1) / 2) * (dropSpreadAngle / (bulletsPerDrop - 1 || 1));
+    const bulletAngle = perpAngle + spreadOffset;
+
+    // 弾を静止状態で発射（速度0）
+    bullet.fire(
+      this.x,
+      this.y,
+      this.x + Math.cos(bulletAngle) * 10, // 最小距離
+      this.y + Math.sin(bulletAngle) * 10,
+      BulletType.ENEMY_NORMAL,
+      damage
+    );
+
+    // 静止させる
+    const body = bullet.body as Phaser.Physics.Arcade.Body;
+    if (body) {
+      body.setVelocity(0, 0);
+    }
+    bullet.setDisplaySize(bulletRadius * 2, bulletRadius * 2);
+    bullet.setTint(bulletColor);
+
+    // 残留弾リストに追加
+    this.spellWSkillTrailBullets.push({
+      bullet,
+      spawnTime: time,
+      spreadAngle: bulletAngle,
+      hasStartedSpreading: false,
+    });
+  }
+}
+*/
+
+/**
+ * 残留弾の拡散更新
+ */
+/*
+private updateSpellCardWSkillTrailBullets(time: number, _delta: number): void {
+  const wConfig = this.currentSkillConfig.W;
+  const lingerTime = wConfig.LINGER_TIME ?? 800;
+  const spreadSpeed = wConfig.SPREAD_SPEED ?? 82.5; // 1.5m/s
+
+  for (let i = this.spellWSkillTrailBullets.length - 1; i >= 0; i--) {
+    const trailBullet = this.spellWSkillTrailBullets[i];
+    const elapsed = time - trailBullet.spawnTime;
+
+    // 残留時間経過後、拡散開始
+    if (elapsed >= lingerTime && !trailBullet.hasStartedSpreading) {
+      trailBullet.hasStartedSpreading = true;
+
+      const body = trailBullet.bullet.body as Phaser.Physics.Arcade.Body;
+      if (body) {
+        // 拡散方向に速度を設定
+        body.setVelocity(
+          Math.cos(trailBullet.spreadAngle) * spreadSpeed,
+          Math.sin(trailBullet.spreadAngle) * spreadSpeed
+        );
+      }
+
+      // リストから削除（これ以上管理不要）
+      this.spellWSkillTrailBullets.splice(i, 1);
+    }
+  }
+}
+*/
+
+// ========================================
+// AI組み込み例
+// ========================================
+/*
+// Wスキルの処理（月影の軌跡）- E実行中以外、R実行中以外で使用
+switch (wSkill.state) {
+  case BossSkillState.READY:
+    if (!isRSkillActive && !isESkillActive && !isQSkillActive) {
+      this.tryUseSpellCardWSkill();
+    }
+    break;
+
+  case BossSkillState.CASTING:
+    this.updateSpellCardWSkillCasting(delta);
+    break;
+
+  case BossSkillState.EXECUTING:
+    this.updateSpellCardWSkillExecution(time, delta);
+    break;
+}
+
+// 移動AI（R/Wスキル実行中以外はプレイヤーに近づく）
+if (!isRSkillActive && !isWSkillActive) {
+  this.updateApproachPlayerMovement();
+}
+*/
+
+export {};

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { Player } from '@/entities/Player';
 import { Enemy } from '@/entities/Enemy';
+import { Boss } from '@/entities/Boss';
 import { EnemyType } from '@/types';
 import { PlayerZone } from './components/PlayerZone';
 import { EnemyZone } from './components/EnemyZone';
@@ -43,13 +44,20 @@ export class UIManager {
   }
 
   /**
-   * ボス/中ボス情報を表示
+   * ボス/中ボス情報を表示（Enemy用）
    */
   showBossInfo(enemy: Enemy): void {
     const enemyType = enemy.getEnemyType();
     if (enemyType === EnemyType.MINI_BOSS || enemyType === EnemyType.BOSS) {
       this.enemyZone.showBossInfo(enemy);
     }
+  }
+
+  /**
+   * ボスクラス用の表示
+   */
+  showBoss(boss: Boss, name: string): void {
+    this.enemyZone.showBoss(boss, name);
   }
 
   /**
@@ -78,8 +86,8 @@ export class UIManager {
   /**
    * ボスフェーズ変更
    */
-  setBossPhase(phase: number): void {
-    this.enemyZone.setPhase(phase);
+  setBossPhase(phaseIndex: number, phaseName?: string, isSpellCard?: boolean): void {
+    this.enemyZone.setPhase(phaseIndex, phaseName, isSpellCard);
   }
 
   /**

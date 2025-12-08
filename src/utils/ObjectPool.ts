@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { Bullet } from '@/entities/Bullet';
+import { BulletType } from '@/types';
 
 /**
  * オブジェクトプール
@@ -97,6 +98,20 @@ export class BulletPool {
   clear(): void {
     for (const bullet of this.pool) {
       bullet.deactivate();
+    }
+  }
+
+  /**
+   * 敵弾のみを非アクティブ化（フェーズ遷移時のボム効果）
+   */
+  deactivateEnemyBullets(): void {
+    for (const bullet of this.pool) {
+      if (bullet.getIsActive()) {
+        const type = bullet.getBulletType();
+        if (type === BulletType.ENEMY_NORMAL || type === BulletType.ENEMY_AIMED) {
+          bullet.deactivate();
+        }
+      }
     }
   }
 

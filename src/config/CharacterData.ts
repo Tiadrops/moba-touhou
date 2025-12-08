@@ -7,7 +7,7 @@ import { CharacterType, CharacterConfig, CharacterStats, EnemyType, EnemyStats }
 const REIMU_STATS: CharacterStats = {
   maxHp: 100,
   attackPower: 100,          // テスト用: 攻撃力100
-  aaMultiplier: 0,           // テスト用: AAダメージ増幅0
+  aaMultiplier: 1.0,         // AAダメージ増幅（100%）
   defense: 5,                // 防御力
   attackSpeed: 2.0,          // 1秒に2回攻撃（0.5秒クールダウン）
   critChance: 0,             // テスト用: クリティカル確率0

@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { Player } from '@/entities/Player';
 import { Enemy } from '@/entities/Enemy';
 import { GAME_CONFIG, COLORS, DEPTH, SKILL_CONFIG } from '@/config/GameConfig';
-import { SkillSlot } from '@/types';
+import { SkillSlot, Attackable } from '@/types';
 
 /**
  * 入力管理システム
@@ -12,6 +12,7 @@ export class InputManager {
   private scene: Phaser.Scene;
   private player: Player;
   private enemies: Enemy[] = [];
+  private boss: Attackable | null = null;
 
   // マウス移動先のマーカー
   private moveMarker: Phaser.GameObjects.Graphics | null = null;
@@ -162,11 +163,12 @@ export class InputManager {
   }
 
   /**
-   * 指定位置の敵を取得
+   * 指定位置の攻撃対象を取得（敵とボス両方を含む）
    */
-  private getEnemyAtPosition(x: number, y: number): Enemy | null {
+  private getEnemyAtPosition(x: number, y: number): Attackable | null {
     const clickRadius = 30; // クリック判定の半径
 
+    // 通常の敵をチェック
     for (const enemy of this.enemies) {
       if (!enemy.getIsActive()) {
         continue;
@@ -175,6 +177,15 @@ export class InputManager {
       const distance = Phaser.Math.Distance.Between(x, y, enemy.x, enemy.y);
       if (distance <= clickRadius) {
         return enemy;
+      }
+    }
+
+    // ボスもチェック（ボスは大きいのでクリック判定を広めに）
+    if (this.boss && this.boss.getIsActive()) {
+      const bossClickRadius = this.boss.getHitboxRadius() * 1.6 + 20; // スケール考慮 + 余裕
+      const distance = Phaser.Math.Distance.Between(x, y, this.boss.x, this.boss.y);
+      if (distance <= bossClickRadius) {
+        return this.boss;
       }
     }
 
@@ -301,17 +312,17 @@ export class InputManager {
   /**
    * 敵に向かって移動して攻撃
    */
-  private moveAndAttackEnemy(enemy: Enemy): void {
+  private moveAndAttackEnemy(target: Attackable): void {
     // 敵の方向の攻撃範囲ギリギリの位置を計算
     const angle = Phaser.Math.Angle.Between(
       this.player.x,
       this.player.y,
-      enemy.x,
-      enemy.y
+      target.x,
+      target.y
     );
     const attackRange = this.player.getAttackRange();
-    const targetX = enemy.x - Math.cos(angle) * (attackRange - 10); // 10px手前に移動
-    const targetY = enemy.y - Math.sin(angle) * (attackRange - 10);
+    const targetX = target.x - Math.cos(angle) * (attackRange - 10); // 10px手前に移動
+    const targetY = target.y - Math.sin(angle) * (attackRange - 10);
 
     // プレイエリア内にクランプ
     const clampedX = Phaser.Math.Clamp(
@@ -482,12 +493,13 @@ export class InputManager {
   }
 
   /**
-   * カーソル位置の近くにいる敵を探す
+   * カーソル位置の近くにいる攻撃対象を探す（敵とボス両方を含む）
    */
-  private findEnemyNearCursor(x: number, y: number, radius: number): Enemy | null {
-    let nearestEnemy: Enemy | null = null;
+  private findEnemyNearCursor(x: number, y: number, radius: number): Attackable | null {
+    let nearestTarget: Attackable | null = null;
     let nearestDistance = Infinity;
 
+    // 通常の敵をチェック
     for (const enemy of this.enemies) {
       if (!enemy.getIsActive()) {
         continue;
@@ -500,11 +512,23 @@ export class InputManager {
 
       if (effectiveDistance <= radius && effectiveDistance < nearestDistance) {
         nearestDistance = effectiveDistance;
-        nearestEnemy = enemy;
+        nearestTarget = enemy;
       }
     }
 
-    return nearestEnemy;
+    // ボスもチェック
+    if (this.boss && this.boss.getIsActive()) {
+      const distance = Phaser.Math.Distance.Between(x, y, this.boss.x, this.boss.y);
+      // ボスの当たり判定半径も考慮（スケール適用）
+      const effectiveDistance = distance - this.boss.getHitboxRadius() * 1.6;
+
+      if (effectiveDistance <= radius && effectiveDistance < nearestDistance) {
+        nearestDistance = effectiveDistance;
+        nearestTarget = this.boss;
+      }
+    }
+
+    return nearestTarget;
   }
 
   /**
@@ -512,6 +536,13 @@ export class InputManager {
    */
   setEnemies(enemies: Enemy[]): void {
     this.enemies = enemies;
+  }
+
+  /**
+   * ボスを設定
+   */
+  setBoss(boss: Attackable | null): void {
+    this.boss = boss;
   }
 
   /**

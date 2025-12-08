@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { CharacterType, CharacterConfig, Position, BulletType, SkillSlot, SkillState, Buff, BuffType, SkillDamageConfig } from '@/types';
+import { CharacterType, CharacterConfig, Position, BulletType, SkillSlot, SkillState, Buff, BuffType, Attackable } from '@/types';
 import { CHARACTER_DATA } from '@/config/CharacterData';
 import { DEPTH, COLORS, SKILL_CONFIG, GAME_CONFIG } from '@/config/GameConfig';
 import { BulletPool } from '@/utils/ObjectPool';
@@ -27,6 +27,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private attackCooldown: number = 0;
   private bulletPool: BulletPool | null = null;
   private enemies: Enemy[] = [];
+  private boss: Attackable | null = null; // 現在のボス（Rumiaなど）
 
   // Attack Move関連
   private isAttackMove: boolean = false;
@@ -44,7 +45,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private currentSkillState: SkillState = SkillState.READY;
   private skillCastTimeRemaining: number = 0;
   private skillExecutionTimeRemaining: number = 0;
-  private skillTarget: Enemy | null = null;
+  private skillTarget: Attackable | null = null;
   private skillProjectilesRemaining: number = 0;
   private skillProjectileTimer: number = 0;
 
@@ -306,7 +307,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   /**
    * Qスキルを使用開始
    */
-  useQSkill(currentTime: number, target: Enemy): boolean {
+  useQSkill(currentTime: number, target: Attackable): boolean {
     if (!this.canUseSkill(SkillSlot.Q, currentTime)) {
       return false;
     }
@@ -389,6 +390,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.wSkillProjectile = new SkillProjectile(this.scene);
     }
 
+    // ターゲット配列を作成（敵 + ボス）
+    const targets: Attackable[] = [...this.enemies];
+    if (this.boss && this.boss.getIsActive()) {
+      targets.push(this.boss);
+    }
+
     // 投射物を発射
     this.wSkillProjectile.fire(
       this.x,
@@ -401,7 +408,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       PROJECTILE_TRAVEL_TIME,
       rawDamage,
       STUN_DURATION,
-      this.enemies
+      targets
     );
 
     console.log(`W skill executed! Projectile fired (${PROJECTILE_WIDTH}x${PROJECTILE_HEIGHT}px, Damage: ${rawDamage}, Stun: ${STUN_DURATION}ms)`);
@@ -541,15 +548,21 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       const rawDamage = DAMAGE.BASE_DAMAGE +
         this.characterConfig.stats.attackPower * DAMAGE.SCALING_RATIO;
 
-      for (const enemy of this.enemies) {
-        if (!enemy.getIsActive()) continue;
+      // ターゲット配列を作成（敵 + ボス）
+      const targets: Attackable[] = [...this.enemies];
+      if (this.boss && this.boss.getIsActive()) {
+        targets.push(this.boss);
+      }
+
+      for (const target of targets) {
+        if (!target.getIsActive()) continue;
 
         // 長方形範囲内かチェック
-        if (Math.abs(enemy.x - this.x) <= halfSize &&
-            Math.abs(enemy.y - this.y) <= halfSize) {
+        if (Math.abs(target.x - this.x) <= halfSize &&
+            Math.abs(target.y - this.y) <= halfSize) {
           // 敵の防御力を考慮したダメージを適用
-          const finalDamage = DamageCalculator.calculateDamageReduction(enemy.getDefense()) * rawDamage;
-          enemy.takeDamage(Math.max(1, Math.floor(finalDamage)));
+          const finalDamage = DamageCalculator.calculateDamageReduction(target.getDefense()) * rawDamage;
+          target.takeDamage(Math.max(1, Math.floor(finalDamage)));
         }
       }
 
@@ -866,12 +879,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * 最も近い敵を探す
+   * 最も近い攻撃対象を探す（敵とボス両方を含む）
    */
-  findNearestEnemy(): Enemy | null {
-    let nearestEnemy: Enemy | null = null;
+  findNearestEnemy(): Attackable | null {
+    let nearestTarget: Attackable | null = null;
     let nearestDistance = Infinity;
 
+    // 通常の敵をチェック
     for (const enemy of this.enemies) {
       if (!enemy.getIsActive()) {
         continue;
@@ -886,20 +900,36 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
       if (distance < nearestDistance) {
         nearestDistance = distance;
-        nearestEnemy = enemy;
+        nearestTarget = enemy;
       }
     }
 
-    return nearestEnemy;
+    // ボスもチェック
+    if (this.boss && this.boss.getIsActive()) {
+      const distance = Phaser.Math.Distance.Between(
+        this.x,
+        this.y,
+        this.boss.x,
+        this.boss.y
+      );
+
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestTarget = this.boss;
+      }
+    }
+
+    return nearestTarget;
   }
 
   /**
-   * 指定位置の最も近い敵を探す
+   * 指定位置の最も近い攻撃対象を探す（敵とボス両方を含む）
    */
-  findNearestEnemyToPosition(x: number, y: number): Enemy | null {
-    let nearestEnemy: Enemy | null = null;
+  findNearestEnemyToPosition(x: number, y: number): Attackable | null {
+    let nearestTarget: Attackable | null = null;
     let nearestDistance = Infinity;
 
+    // 通常の敵をチェック
     for (const enemy of this.enemies) {
       if (!enemy.getIsActive()) {
         continue;
@@ -914,11 +944,26 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
       if (distance < nearestDistance) {
         nearestDistance = distance;
-        nearestEnemy = enemy;
+        nearestTarget = enemy;
       }
     }
 
-    return nearestEnemy;
+    // ボスもチェック
+    if (this.boss && this.boss.getIsActive()) {
+      const distance = Phaser.Math.Distance.Between(
+        x,
+        y,
+        this.boss.x,
+        this.boss.y
+      );
+
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestTarget = this.boss;
+      }
+    }
+
+    return nearestTarget;
   }
 
   /**
@@ -932,7 +977,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
    * 指定した敵に攻撃（手動攻撃用）
    * LoL風の必中システム：弾が当たった時点でダメージ（打ち消し可能）
    */
-  attackTarget(currentTime: number, target: Enemy): void {
+  attackTarget(currentTime: number, target: Attackable): void {
     if (!this.canAttack(currentTime)) {
       return;
     }
@@ -1009,6 +1054,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
    */
   setEnemies(enemies: Enemy[]): void {
     this.enemies = enemies;
+  }
+
+  /**
+   * ボスを設定
+   */
+  setBoss(boss: Attackable | null): void {
+    this.boss = boss;
   }
 
   // ゲッター

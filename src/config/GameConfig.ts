@@ -169,10 +169,182 @@ export const SKILL_CONFIG = {
     AREA_SIZE: 10 * 55,          // 範囲サイズ（10m = 550px、正方形の一辺）
     DAMAGE_INTERVAL: 200,        // ダメージ間隔（ms）
     COOLDOWN: 60000,             // クールダウン（ms）
-    // スキルダメージ設定（テスト用: 固定200 + 攻撃力50% = 250/tick）
+    // スキルダメージ設定（デバッグ用: 10倍に増加）
     DAMAGE: {
-      BASE_DAMAGE: 200,          // 固定ダメージ
-      SCALING_RATIO: 0.5,        // 攻撃力増幅率（50%）
+      BASE_DAMAGE: 2000,         // 固定ダメージ（10倍）
+      SCALING_RATIO: 5.0,        // 攻撃力増幅率（500%）
     },
+  },
+} as const;
+
+/**
+ * ボス設定
+ */
+export const BOSS_CONFIG = {
+  // ルーミア（ステージ1ボス）
+  RUMIA: {
+    // 基本ステータス（全フェーズ共通）
+    ATK: 25,
+    DEF: 50,                     // 約33%ダメージ軽減
+    MOVE_SPEED: 120,
+    HITBOX_RADIUS: 40,
+
+    // フェーズ定義
+    PHASES: [
+      {
+        NAME: 'ノーマル',
+        TYPE: 'normal' as const,
+        HP: 5000,
+        IS_FINAL: false,
+      },
+      {
+        NAME: '闇符「ダークサイドオブザムーン」',
+        TYPE: 'spell' as const,
+        HP: 4000,
+        IS_FINAL: true,
+      },
+    ],
+
+    // ノーマルフェーズのスキル
+    PHASE_0_SKILLS: {
+      // Qスキル「月符・ムーンライトレイ」
+      Q: {
+        NAME: '月符・ムーンライトレイ',
+        CAST_TIME: 350,            // 詠唱時間（ms）- 全予告線表示完了までの時間
+        COOLDOWN: 4000,            // クールダウン（ms）
+        DAMAGE: {
+          BASE: 30,
+          RATIO: 0.5,              // ATK × 0.5
+        },
+        // 弾幕パラメータ
+        WAY_COUNT: 7,              // 7way弾
+        ANGLE_SPREAD: 30,          // ±30度（度数法）
+        BULLETS_PER_WAY: 10,       // 各wayの弾数
+        BULLET_INTERVAL: 50,       // 弾の発射間隔（ms）
+        BULLET_SPEED: 10 * 55,     // 10m/s = 550px/s
+        BULLET_RADIUS: 8,          // 弾の半径
+        WARNING_LINE_LENGTH: 600,  // 予告線の長さ
+        WAY_DELAY: 50,             // 各way間の遅延（ms）- 左から順に表示/発射
+      },
+      // Wスキル「闇符・ダークサイドオブムーン」
+      W: {
+        NAME: '闇符・ダークサイドオブムーン',
+        CAST_TIME: 500,              // 詠唱時間（予告表示）（ms）
+        COOLDOWN: 4000,              // クールダウン（ms）
+        DAMAGE: {
+          BASE: 50,
+          RATIO: 0.8,
+        },
+        // レーザーパラメータ
+        LASER_COUNT: 5,              // レーザー総数（自機狙い1 + ランダム4）
+        LASER_WIDTH: 30,             // レーザーの幅（px）
+        LASER_LENGTH: 800,           // レーザーの長さ（px）
+        LASER_DURATION: 100,         // レーザーの持続時間（ms）- ダメージ判定期間
+      },
+      // Eスキル「闘符・ディマーケイション」
+      E: {
+        NAME: '闘符・ディマーケイション',
+        CAST_TIME: 300,            // 詠唱時間（ms）
+        COOLDOWN: 6000,            // クールダウン（ms）
+        DAMAGE: {
+          BASE: 20,
+          RATIO: 0.3,              // ATK × 0.3
+        },
+        // 弾幕パラメータ
+        BULLETS_PER_RING: 16,      // 1リングあたりの弾数
+        WAVE_COUNT: 3,             // 波の数
+        WAVE_INTERVAL: 400,        // 波の発射間隔（ms）
+        INITIAL_RADIUS: 30,        // 初期半径（px）
+        EXPANSION_SPEED: 200,      // 拡大速度（px/s）
+        ROTATION_SPEED: 0.8,       // 回転速度（rad/s）- 波ごとに交互に正負
+        BULLET_RADIUS: 10,         // 弾の半径
+      },
+    },
+
+    // スペルカードフェーズ1のスキル
+    PHASE_1_SKILLS: {
+      // Qスキル: 12方向弾
+      Q: {
+        NAME: '闇の拡散弾',
+        CAST_TIME: 200,              // キャスト時間0.2秒
+        COOLDOWN: 3000,              // CD3秒
+        DAMAGE: {
+          BASE: 30,
+          RATIO: 0.4,
+        },
+        // 12方向弾パラメータ
+        WAY_COUNT: 12,               // 12方向
+        ANGLE_SPREAD: 180,           // 360度（全方向）
+        BULLETS_PER_WAY: 1,          // 各方向1発
+        BULLET_INTERVAL: 0,          // 同時発射
+        BULLET_SPEED: 4 * 55,        // 4m/s = 220px/s
+        BULLET_RADIUS: 30,           // 特大の球（半径30）
+        BULLET_COLOR: 0xffff00,      // 黄色
+        WARNING_LINE_LENGTH: 0,      // 予告線なし
+        WAY_DELAY: 0,                // 同時発射
+      },
+      // Wスキル「闘符・トリプルバースト」- Qスキルを3回連続発射
+      W: {
+        NAME: '闘符・トリプルバースト',
+        CAST_TIME: 200,              // 詠唱時間（ms）
+        COOLDOWN: 6000,              // クールダウン（ms）
+        DAMAGE: {
+          BASE: 25,
+          RATIO: 0.4,
+        },
+        // 3連射パラメータ
+        BURST_COUNT: 3,              // 発射回数
+        BURST_INTERVAL: 300,         // 発射間隔（ms）
+        BULLET_SPEED: 5 * 55,        // 弾速（Qより少し速い: 5m/s = 275px/s）
+      },
+      // Eスキル「闇の潮汐」- 6方向スパイラル弾幕
+      E: {
+        NAME: '闇の潮汐',
+        CAST_TIME: 300,              // キャスト時間0.3秒
+        COOLDOWN: 6000,              // CD6秒
+        DAMAGE: {
+          BASE: 25,
+          RATIO: 0.3,
+        },
+        // スパイラル弾幕パラメータ
+        SPIRAL_ARMS: 6,              // 6方向（螺旋の腕の数）
+        SPIRAL_DURATION: 2000,       // 発射持続時間（2秒）
+        BULLET_FIRE_INTERVAL: 150,   // 0.15秒ごとに発射
+        BULLET_SPEED: 2.5 * 55,      // 2.5m/s = 137.5px/s
+        BULLET_RADIUS: 15,           // 弾の半径（Rの大と同じ）
+        ROTATION_SPEED: 1.5,         // 回転速度（rad/s）- 螺旋の回転
+        BULLET_COLOR: 0x9900ff,      // 紫色
+      },
+      // Rスキル「闇符・ダークサイドオブザムーン」
+      R: {
+        NAME: '闇符「ダークサイドオブザムーン」',
+        CAST_TIME: 700,              // キャスト時間0.7秒
+        COOLDOWN: 8000,              // CD8秒
+        DAMAGE: {
+          BASE: 40,
+          RATIO: 0.5,
+        },
+        // 移動パラメータ
+        INVINCIBILITY_DURATION: 2000, // 2秒間無敵
+        MOVE_DISTANCE: 5 * 55,       // 5m = 275px移動
+        BULLET_FIRE_INTERVAL: 100,   // 0.1秒ごとに弾発射
+        BULLET_SPEED: 1 * 55,        // 弾速1m/s = 55px/s
+        // 弾サイズ（半径）
+        BULLET_SIZE_SMALL: 6,        // 小さい球
+        BULLET_SIZE_MEDIUM: 10,      // 中くらいの球
+        BULLET_SIZE_LARGE: 15,       // 大きい球
+        // ランダム弾: 小2、中2、大2 = 6発
+        // 自機狙い弾: 小2、中2、大2 = 6発
+        BULLETS_RANDOM: 6,           // ランダム弾6発（小2、中2、大2）
+        BULLETS_AIMED: 6,            // 自機狙い弾6発（小2、中2、大2）
+      },
+    },
+
+    // 互換性のための旧スキル設定（PHASE_0_SKILLSへの参照）
+    get SKILL_Q() { return this.PHASE_0_SKILLS.Q; },
+    get SKILL_W() { return this.PHASE_0_SKILLS.W; },
+    get SKILL_E() { return this.PHASE_0_SKILLS.E; },
+    // 旧HPは最初のフェーズのHPを返す
+    get HP() { return this.PHASES[0].HP; },
   },
 } as const;

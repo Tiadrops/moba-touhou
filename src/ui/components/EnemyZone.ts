@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { Enemy } from '@/entities/Enemy';
+import { Boss } from '@/entities/Boss';
 import { EnemyType } from '@/types';
 import { UI_LAYOUT, UI_DEPTH } from '../constants/UIConstants';
 import { HealthBar } from './HealthBar';
@@ -10,14 +11,19 @@ import { HealthBar } from './HealthBar';
  */
 export class EnemyZone extends Phaser.GameObjects.Container {
   private currentEnemy: Enemy | null = null;
+  private currentBoss: Boss | null = null;
 
   // 表示要素
   private portrait!: Phaser.GameObjects.Rectangle;
   private nameText!: Phaser.GameObjects.Text;
   private healthBar!: HealthBar;
   private phaseText!: Phaser.GameObjects.Text;
+  private phaseStars!: Phaser.GameObjects.Text;
+  private spellCardName!: Phaser.GameObjects.Text;
 
   private isVisible: boolean = false;
+  private totalPhases: number = 1;
+  private currentPhaseIndex: number = 0;
 
   constructor(scene: Phaser.Scene) {
     super(scene, 0, 0);
@@ -90,19 +96,47 @@ export class EnemyZone extends Phaser.GameObjects.Container {
       isBossBar: true,
     });
 
-    // フェーズ表示
+    // フェーズ表示（Phase 1/2のような表示）- HPバーの下に配置
+    const hpBarBottom = hpLayout.Y + hpLayout.HEIGHT;
     this.phaseText = this.scene.add.text(
       layout.X,
-      layout.Y + 150,
+      hpBarBottom + 15,
       '',
       {
         font: 'bold 16px monospace',
-        color: '#ffff00',
+        color: '#ffffff',
         backgroundColor: '#000000aa',
         padding: { x: 8, y: 4 },
       }
     );
     this.add(this.phaseText);
+
+    // フェーズスター表示（★★★のような東方風表示）
+    this.phaseStars = this.scene.add.text(
+      layout.X,
+      hpBarBottom + 45,
+      '',
+      {
+        font: 'bold 24px monospace',
+        color: '#ffff00',
+      }
+    );
+    this.add(this.phaseStars);
+
+    // スペルカード名（スペルカードフェーズ時のみ表示）
+    this.spellCardName = this.scene.add.text(
+      layout.X,
+      hpBarBottom + 80,
+      '',
+      {
+        font: 'bold 18px monospace',
+        color: '#ff6666',
+        backgroundColor: '#000000cc',
+        padding: { x: 12, y: 6 },
+      }
+    );
+    this.spellCardName.setVisible(false);
+    this.add(this.spellCardName);
   }
 
   /**
@@ -140,6 +174,36 @@ export class EnemyZone extends Phaser.GameObjects.Container {
   }
 
   /**
+   * Bossクラス用の表示
+   */
+  showBoss(boss: Boss, name: string): void {
+    this.currentBoss = boss;
+    this.currentEnemy = null;
+    this.isVisible = true;
+
+    this.nameText.setText(name);
+
+    // フェーズ情報を初期化
+    this.totalPhases = boss.getTotalPhases();
+    this.currentPhaseIndex = boss.getCurrentPhaseIndex();
+    this.updatePhaseDisplay();
+
+    // ルーミアの色（暗い紫）
+    this.portrait.setFillStyle(0x660066, 0.4);
+
+    // 表示アニメーション（左から入る）
+    this.setVisible(true);
+    this.x = -200;
+    this.scene.tweens.add({
+      targets: this,
+      alpha: 1,
+      x: 0,
+      duration: 500,
+      ease: 'Power2',
+    });
+  }
+
+  /**
    * ボス情報を非表示
    */
   hideBossInfo(): void {
@@ -152,6 +216,7 @@ export class EnemyZone extends Phaser.GameObjects.Container {
       onComplete: () => {
         this.setVisible(false);
         this.currentEnemy = null;
+        this.currentBoss = null;
         this.isVisible = false;
       },
     });
@@ -161,25 +226,87 @@ export class EnemyZone extends Phaser.GameObjects.Container {
    * 毎フレーム更新
    */
   update(): void {
-    if (!this.isVisible || !this.currentEnemy) return;
+    if (!this.isVisible) return;
 
-    // HPバーを更新
-    this.healthBar.update(
-      this.currentEnemy.getCurrentHp(),
-      this.currentEnemy.getMaxHp()
-    );
+    // Bossクラスの場合
+    if (this.currentBoss) {
+      this.healthBar.update(
+        this.currentBoss.getCurrentHp(),
+        this.currentBoss.getMaxHp()
+      );
 
-    // 敵が倒されたら非表示
-    if (!this.currentEnemy.getIsActive()) {
-      this.hideBossInfo();
+      if (!this.currentBoss.getIsActive()) {
+        this.hideBossInfo();
+      }
+      return;
+    }
+
+    // Enemyクラスの場合
+    if (this.currentEnemy) {
+      this.healthBar.update(
+        this.currentEnemy.getCurrentHp(),
+        this.currentEnemy.getMaxHp()
+      );
+
+      if (!this.currentEnemy.getIsActive()) {
+        this.hideBossInfo();
+      }
     }
   }
 
   /**
    * フェーズ変更時の表示更新
    */
-  setPhase(phase: number): void {
-    this.phaseText.setText(`[PHASE ${phase}]`);
+  setPhase(phaseIndex: number, phaseName?: string, isSpellCard?: boolean): void {
+    this.currentPhaseIndex = phaseIndex;
+    this.updatePhaseDisplay(phaseName, isSpellCard);
+
+    // フェーズ変更時のアニメーション
+    this.scene.tweens.add({
+      targets: this.phaseStars,
+      scale: { from: 1.5, to: 1 },
+      duration: 300,
+      ease: 'Back.easeOut',
+    });
+  }
+
+  /**
+   * フェーズ表示を更新
+   */
+  private updatePhaseDisplay(phaseName?: string, isSpellCard?: boolean): void {
+    // Phase X/Y 表示
+    this.phaseText.setText(`Phase ${this.currentPhaseIndex + 1}/${this.totalPhases}`);
+
+    // 残りフェーズを★で表示（現在以降のフェーズ数）
+    const remainingPhases = this.totalPhases - this.currentPhaseIndex;
+    const stars = '★'.repeat(remainingPhases);
+    const emptyStars = '☆'.repeat(this.currentPhaseIndex);
+    this.phaseStars.setText(emptyStars + stars);
+
+    // スペルカード名の表示
+    if (isSpellCard && phaseName) {
+      this.spellCardName.setText(phaseName);
+      this.spellCardName.setVisible(true);
+      // スペルカード時は星の色を赤に
+      this.phaseStars.setColor('#ff4444');
+    } else {
+      // 通常フェーズではスペルカード名を非表示、星は黄色
+      this.spellCardName.setVisible(false);
+      this.phaseStars.setColor('#ffff00');
+    }
+
+    // ボスから現在のフェーズ情報を取得して表示を更新
+    if (this.currentBoss && !phaseName) {
+      const phase = this.currentBoss.getCurrentPhase();
+      if (phase) {
+        const bossIsSpellCard = this.currentBoss.isInSpellCard();
+        if (bossIsSpellCard) {
+          this.spellCardName.setText(phase.name);
+          this.spellCardName.setVisible(true);
+          this.phaseStars.setColor('#ff4444');
+        }
+      }
+    }
   }
 
   /**

@@ -1,7 +1,6 @@
 import Phaser from 'phaser';
-import { BulletType } from '@/types';
+import { BulletType, Attackable } from '@/types';
 import { DEPTH, COLORS, GAME_CONFIG } from '@/config/GameConfig';
-import { Enemy } from './Enemy';
 
 /**
  * 弾クラス
@@ -11,7 +10,7 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
   private damage: number;
   private speed: number;
   private isActive: boolean = false;
-  private target: Enemy | null = null; // 追尾対象
+  private target: Attackable | null = null; // 追尾対象（Enemy または Boss）
   private startX: number = 0; // 発射開始位置X
   private startY: number = 0; // 発射開始位置Y
   private isCritical: boolean = false; // クリティカルヒットフラグ
@@ -50,7 +49,7 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     targetY: number,
     bulletType: BulletType = BulletType.PLAYER_NORMAL,
     damage: number = 10,
-    target: Enemy | null = null,
+    target: Attackable | null = null,
     isCritical: boolean = false
   ): void {
     this.bulletType = bulletType;
@@ -80,6 +79,7 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     if (bulletType === BulletType.PLAYER_NORMAL) {
       this.setTexture('bullet_player');
       this.setTint(COLORS.BULLET_PLAYER);
+      this.setScale(1); // プレイヤー弾は標準サイズ
       // プレイヤー弾は当たり判定を大きめに
       const body = this.body as Phaser.Physics.Arcade.Body;
       if (body) {
@@ -87,11 +87,12 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
       }
     } else if (bulletType === BulletType.ENEMY_NORMAL || bulletType === BulletType.ENEMY_AIMED) {
       this.setTexture('bullet_enemy');
-      this.setTint(COLORS.BULLET_ENEMY);
-      // 敵弾は当たり判定を小さめに
+      this.clearTint(); // テクスチャ自体に色があるのでTintなし
+      // 敵弾のサイズ（視覚・当たり判定）
+      this.setScale(0.8); // 視覚的に0.8倍
       const body = this.body as Phaser.Physics.Arcade.Body;
       if (body) {
-        body.setCircle(4);
+        body.setCircle(10); // 当たり判定
       }
     }
 

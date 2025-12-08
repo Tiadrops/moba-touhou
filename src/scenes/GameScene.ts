@@ -3,11 +3,14 @@ import { SCENES, GAME_CONFIG, COLORS, DEPTH } from '@/config/GameConfig';
 import { Player } from '@/entities/Player';
 import { Enemy } from '@/entities/Enemy';
 import { Bullet } from '@/entities/Bullet';
+import { Rumia } from '@/entities/bosses/Rumia';
+import { Boss } from '@/entities/Boss';
 import { InputManager } from '@/systems/InputManager';
 import { BulletPool } from '@/utils/ObjectPool';
 import { DamageCalculator } from '@/utils/DamageCalculator';
 import { UIManager } from '@/ui/UIManager';
-import { CharacterType, EnemyType, BulletType } from '@/types';
+import { SpellCardCutIn } from '@/ui/components/SpellCardCutIn';
+import { CharacterType, EnemyType, BulletType, BossPhaseType } from '@/types';
 
 /**
  * GameScene - メインゲームプレイシーン
@@ -23,8 +26,10 @@ export class GameScene extends Phaser.Scene {
   private inputManager!: InputManager;
   private bulletPool!: BulletPool;
   private enemies: Enemy[] = [];
+  private rumia: Rumia | null = null; // ルーミア（ボス）
   private bulletTrailGraphics!: Phaser.GameObjects.Graphics; // 弾道補助線用
   private uiManager!: UIManager;
+  private spellCardCutIn!: SpellCardCutIn; // スペルカードカットイン演出
 
   // 敵の生成管理
   private lastEnemySpawnTime: number = 0;
@@ -91,8 +96,20 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // 敵の生成
-    if (this.player && time - this.lastEnemySpawnTime > this.enemySpawnInterval) {
+    // ルーミア（中ボス）の更新
+    if (this.rumia && this.rumia.getIsActive()) {
+      if (this.player) {
+        this.rumia.setPlayerPosition(this.player.x, this.player.y);
+      }
+      this.rumia.update(time, delta);
+
+      // ルーミアとの衝突判定（手動チェック）
+      this.checkRumiaCollision();
+    }
+
+    // 敵の生成（ボス戦中は雑魚敵をスポーンしない）
+    const isBossBattle = this.rumia && this.rumia.getIsActive();
+    if (this.player && !isBossBattle && time - this.lastEnemySpawnTime > this.enemySpawnInterval) {
       this.spawnEnemy();
       this.lastEnemySpawnTime = time;
     }
@@ -317,8 +334,8 @@ export class GameScene extends Phaser.Scene {
     // UIマネージャーを初期化
     this.uiManager = new UIManager(this, this.player);
 
-    // テスト用: 画面中央に固定中ボスを配置
-    this.spawnTestMiniBoss();
+    // テスト用: ルーミア（中ボス）を配置
+    this.spawnRumia();
 
     // 操作説明を表示
     this.showControls();
@@ -336,37 +353,156 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * テスト用: 画面中央に固定中ボスを配置
+   * ルーミア（ボス）を生成
    */
-  private spawnTestMiniBoss(): void {
-    // 非アクティブな敵を探す
-    let enemy: Enemy | null = null;
-    for (const e of this.enemies) {
-      if (!e.getIsActive()) {
-        enemy = e;
-        break;
-      }
+  private spawnRumia(): void {
+    // プレイエリアの中央上部に配置
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const centerX = X + WIDTH / 2;
+    const centerY = Y + HEIGHT / 4; // 上から1/4の位置
+
+    // スペルカードカットインを初期化
+    if (!this.spellCardCutIn) {
+      this.spellCardCutIn = new SpellCardCutIn(this);
     }
 
-    if (!enemy) {
+    // ルーミアを生成
+    this.rumia = new Rumia(this, centerX, centerY);
+    this.rumia.setBulletPool(this.bulletPool);
+    this.rumia.spawn(centerX, centerY);
+
+    // プレイヤーとInputManagerにボスを設定（攻撃対象として認識させる）
+    this.player.setBoss(this.rumia);
+    this.inputManager.setBoss(this.rumia);
+
+    // UIにルーミアを表示（フェーズ名付き）
+    const currentPhase = this.rumia.getCurrentPhase();
+    const phaseName = currentPhase?.name || 'ノーマル';
+    this.uiManager?.showBoss(this.rumia, `ルーミア - ${phaseName}`);
+
+    // レーザーダメージイベントをリスニング
+    this.events.on('playerHitByLaser', (damage: number) => {
+      if (this.player && this.player.active) {
+        this.player.takeDamage(damage);
+        console.log(`Player hit by laser! Damage: ${damage}`);
+      }
+    });
+
+    // フェーズ完了イベントをリスニング（カットイン表示）
+    this.events.on('boss-phase-complete', (data: {
+      boss: Boss;
+      completedPhaseIndex: number;
+      nextPhaseIndex: number;
+    }) => {
+      this.onBossPhaseComplete(data);
+    });
+
+    // フェーズ開始イベントをリスニング（UI更新）
+    this.events.on('boss-phase-start', (data: {
+      boss: Boss;
+      phaseIndex: number;
+      phaseName: string;
+      isSpellCard: boolean;
+    }) => {
+      this.onBossPhaseStart(data);
+    });
+
+    console.log(`Rumia spawned! Phase: ${phaseName}, HP: ${currentPhase?.hp}`);
+  }
+
+  /**
+   * ボスフェーズ完了時の処理
+   */
+  private onBossPhaseComplete(data: {
+    boss: Boss;
+    completedPhaseIndex: number;
+    nextPhaseIndex: number;
+  }): void {
+    console.log(`Phase ${data.completedPhaseIndex} complete! Showing cut-in...`);
+
+    // 次のフェーズの情報を取得
+    const nextPhase = data.boss.getNextPhase();
+    if (!nextPhase) {
+      console.log('No next phase, boss defeated!');
       return;
     }
 
-    // プレイエリアの中央に配置
-    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
-    const centerX = X + WIDTH / 2;
-    const centerY = Y + HEIGHT / 3; // 上から1/3の位置
+    // スペルカードフェーズならカットイン演出
+    if (nextPhase.type === BossPhaseType.SPELL_CARD) {
+      // 敵弾を全消去
+      this.bulletPool.deactivateEnemyBullets();
 
-    // 弾プールを設定
-    enemy.setBulletPool(this.bulletPool);
+      // カットイン演出を表示
+      this.spellCardCutIn.show(nextPhase.name, 'ルーミア', () => {
+        // カットイン終了後に次フェーズを開始
+        data.boss.startNextPhase();
+      });
+    } else {
+      // 通常フェーズなら即座に次へ
+      data.boss.startNextPhase();
+    }
+  }
 
-    // 中ボスとしてスポーン（移動パターンはstraight、moveSpeed=0なので動かない）
-    enemy.spawn(centerX, centerY, EnemyType.MINI_BOSS, 'straight');
+  /**
+   * ボスフェーズ開始時の処理
+   */
+  private onBossPhaseStart(data: {
+    boss: Boss;
+    phaseIndex: number;
+    phaseName: string;
+    isSpellCard: boolean;
+  }): void {
+    console.log(`Phase ${data.phaseIndex} started: ${data.phaseName}`);
 
-    // UI表示
-    this.uiManager?.showBossInfo(enemy);
+    // UIのボス名を更新
+    this.uiManager?.showBoss(
+      this.rumia!,
+      `ルーミア - ${data.phaseName}`
+    );
 
-    console.log('Test Mini-Boss spawned at center! HP: 5000, DEF: 0');
+    // UIのフェーズ表示を更新
+    this.uiManager?.setBossPhase(data.phaseIndex, data.phaseName, data.isSpellCard);
+  }
+
+  /**
+   * ルーミアとの衝突判定（毎フレーム手動チェック）
+   */
+  private checkRumiaCollision(): void {
+    if (!this.rumia || !this.rumia.getIsActive()) return;
+
+    const activeBullets = this.bulletPool.getActiveBullets();
+    const bossX = this.rumia.x;
+    const bossY = this.rumia.y;
+    const bossRadius = this.rumia.getStats().hitboxRadius * 1.6; // スケール適用
+
+    for (const bullet of activeBullets) {
+      if (!bullet.getIsActive()) continue;
+
+      // プレイヤー弾のみ処理
+      if (bullet.getBulletType() !== BulletType.PLAYER_NORMAL) continue;
+
+      // 円と円の衝突判定
+      const dx = bullet.x - bossX;
+      const dy = bullet.y - bossY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const bulletRadius = 8; // プレイヤー弾の当たり判定
+
+      if (distance < bossRadius + bulletRadius) {
+        // 衝突！
+        const rawDamage = bullet.getDamage();
+        const defenseReduction = DamageCalculator.calculateDamageReduction(this.rumia.getDefense());
+        const finalDamage = Math.max(1, Math.floor(rawDamage * defenseReduction));
+
+        // ダメージを与える
+        const destroyed = this.rumia.takeDamage(finalDamage);
+        bullet.deactivate();
+
+        if (destroyed) {
+          this.score += 5000; // ボス撃破スコア
+          console.log('Rumia defeated! Score: +5000');
+        }
+      }
+    }
   }
 
   /**

@@ -77,12 +77,12 @@ export const UI_LAYOUT = {
     },
     INFO_PANEL: {
       X: 40,
-      Y: 700,                   // 立ち絵の下部に配置
+      Y: 620,                   // 立ち絵の下部に配置（上に移動）
       WIDTH: 480,
     },
     HP_BAR: {
       X: 40,
-      Y: 800,
+      Y: 660,                   // HPバーを上に移動
       WIDTH: 480,
       HEIGHT: 24,
     },

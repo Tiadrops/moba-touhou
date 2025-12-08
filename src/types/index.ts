@@ -241,3 +241,104 @@ export interface BulletConfig {
   radius: number;            // 当たり判定の半径
   color?: number;            // 色（16進数）
 }
+
+// ボススキルのステート
+export enum BossSkillState {
+  READY = 'ready',           // 使用可能
+  CASTING = 'casting',       // 詠唱中（予告表示）
+  EXECUTING = 'executing',   // モーション中（弾発射中）
+  COOLDOWN = 'cooldown',     // クールダウン中
+}
+
+// ボススキルスロット
+export enum BossSkillSlot {
+  Q = 'Q',
+  W = 'W',
+  E = 'E',
+  R = 'R',
+}
+
+// ボススキル定義
+export interface BossSkillConfig {
+  slot: BossSkillSlot;
+  name: string;
+  castTime: number;          // 詠唱時間（ms）
+  executionTime: number;     // モーション時間（ms）
+  cooldown: number;          // クールダウン（ms）
+  damage: {
+    base: number;
+    ratio: number;           // 攻撃力増幅率
+  };
+}
+
+// ボススキル実行状態
+export interface BossSkillExecution {
+  slot: BossSkillSlot;
+  state: BossSkillState;
+  castTimeRemaining: number;
+  executionTimeRemaining: number;
+  cooldownRemaining: number;
+  targetAngle?: number;      // 発射方向（ラジアン）
+}
+
+// ボスタイプ
+export enum BossType {
+  RUMIA = 'rumia',
+  // 今後追加
+}
+
+// ボスステータス
+export interface BossStats {
+  maxHp: number;
+  attackPower: number;
+  defense: number;
+  moveSpeed: number;
+  hitboxRadius: number;
+}
+
+/**
+ * 攻撃可能なエンティティの共通インターフェース
+ * Enemy と Boss の両方が実装する
+ */
+export interface Attackable {
+  x: number;
+  y: number;
+  getIsActive(): boolean;
+  getDefense(): number;
+  getHitboxRadius(): number;
+  takeDamage(damage: number): boolean;
+}
+
+/**
+ * ボスフェーズシステム関連の型定義
+ */
+
+// フェーズの種類
+export enum BossPhaseType {
+  NORMAL = 'normal',       // 通常フェーズ
+  SPELL_CARD = 'spell',    // スペルカードフェーズ
+}
+
+// フェーズ定義
+export interface BossPhaseConfig {
+  name: string;            // フェーズ名（スペルカード名）
+  type: BossPhaseType;     // フェーズの種類
+  hp: number;              // このフェーズのHP
+  isFinal: boolean;        // 最終フェーズかどうか
+}
+
+// フェーズ実行状態
+export interface BossPhaseExecution {
+  phaseIndex: number;      // 現在のフェーズインデックス
+  currentHp: number;       // 現在のHP
+  maxHp: number;           // このフェーズの最大HP
+  isTransitioning: boolean; // フェーズ遷移中かどうか
+}
+
+// カットイン演出の状態
+export enum CutInState {
+  IDLE = 'idle',           // 非表示
+  ENTERING = 'entering',   // 登場アニメーション中
+  DISPLAYING = 'displaying', // 表示中
+  EXITING = 'exiting',     // 退場アニメーション中
+}

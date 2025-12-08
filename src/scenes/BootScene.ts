@@ -85,11 +85,18 @@ export class BootScene extends Phaser.Scene {
     playerBulletGraphics.generateTexture('bullet_player', 16, 16);
     playerBulletGraphics.destroy();
 
-    // 敵の弾（白色の小さい円 - setTint()で色を変更するため）
+    // 敵の弾（東方風 - 赤い縁 + 白い内側）
     const enemyBulletGraphics = this.add.graphics();
-    enemyBulletGraphics.fillStyle(0xffffff, 1); // 白色
-    enemyBulletGraphics.fillCircle(4, 4, 4);
-    enemyBulletGraphics.generateTexture('bullet_enemy', 8, 8);
+    const bulletRadius = 12; // 大きめのサイズ
+    const textureSize = bulletRadius * 2 + 4; // 余白を含む
+    const center = textureSize / 2;
+    // 外側の赤い縁
+    enemyBulletGraphics.fillStyle(0xff3333, 1);
+    enemyBulletGraphics.fillCircle(center, center, bulletRadius);
+    // 内側の白い部分
+    enemyBulletGraphics.fillStyle(0xffffff, 1);
+    enemyBulletGraphics.fillCircle(center, center, bulletRadius * 0.6);
+    enemyBulletGraphics.generateTexture('bullet_enemy', textureSize, textureSize);
     enemyBulletGraphics.destroy();
   }
 }
