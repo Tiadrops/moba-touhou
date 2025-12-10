@@ -70,32 +70,41 @@ export const UI_LAYOUT = {
     HEIGHT: 1080 - HUD_HEIGHT, // HUDより上の領域
     PORTRAIT: {
       X: 280,                   // ゾーン中央
-      Y: (1080 - HUD_HEIGHT) / 2, // ゾーン中央
-      WIDTH: 500,               // ゾーン幅に近いサイズ
-      HEIGHT: 800,              // 縦長の立ち絵
-      ALPHA: 0.3,
+      Y: (1080 - HUD_HEIGHT) / 2, // プレイヤーと同じY座標（中央）
+      WIDTH: 500,               // プレイヤーと同じサイズ
+      HEIGHT: 800,              // プレイヤーと同じサイズ
+      ALPHA: 0.4,
     },
     INFO_PANEL: {
-      X: 40,
-      Y: 620,                   // 立ち絵の下部に配置（上に移動）
+      X: 280,                   // ゾーン中央
+      Y: 560,                   // 名前を上に移動（HPバーより上）
       WIDTH: 480,
     },
     HP_BAR: {
       X: 40,
-      Y: 660,                   // HPバーを上に移動
+      Y: 595,                   // 名前の下
       WIDTH: 480,
-      HEIGHT: 24,
+      HEIGHT: 28,
     },
-    // スキルバー（エネミーゾーン下部）
-    SKILL_BAR: {
+    // フェーズ情報（HPバーの下）
+    PHASE_INFO: {
+      Y: 640,                   // HPバーの下
+    },
+    // ボススキルバー（左下の余白に配置）
+    BOSS_SKILL_BAR: {
       X: 280,                   // ゾーン中央
-      Y: 1080 - HUD_HEIGHT + 60, // HUDエリア内
-      SLOT_SIZE: 48,            // 少し小さめ
-      SLOT_GAP: 6,
+      Y: 820,                   // 左下エリア
+      SLOT_SIZE: 56,
+      SLOT_GAP: 8,
+    },
+    // バフ/デバフ表示エリア（スキルバーの下）
+    STATUS_EFFECTS: {
+      X: 280,                   // ゾーン中央
+      Y: 960,                   // スキルバーの下、十分な余裕を持たせる
     },
   },
 
-  // プレイヤーゾーン（右側全体、HUDより上）
+  // プレイヤーゾーン（右側全体、HUDより上）- エネミーゾーンと左右対称
   PLAYER_ZONE: {
     X: 1360,
     Y: 0,
@@ -104,26 +113,36 @@ export const UI_LAYOUT = {
     PORTRAIT: {
       X: 1640,                  // ゾーン中央
       Y: (1080 - HUD_HEIGHT) / 2, // ゾーン中央
-      WIDTH: 500,               // ゾーン幅に近いサイズ
-      HEIGHT: 800,              // 縦長の立ち絵
+      WIDTH: 500,               // エネミーと同じサイズ
+      HEIGHT: 800,              // エネミーと同じサイズ
       ALPHA: 0.3,
     },
     INFO_PANEL: {
-      X: 1400,
-      Y: 700,                   // 立ち絵の下部に配置
+      X: 1640,                  // ゾーン中央（エネミーと対称）
+      Y: 560,                   // エネミーと同じ位置
       WIDTH: 480,
     },
-    // スキルバー（プレイヤーゾーン下部）
+    HP_BAR: {
+      X: 1400,                  // 右寄せ開始位置
+      Y: 595,                   // エネミーと同じY位置
+      WIDTH: 480,
+      HEIGHT: 28,
+    },
+    // 残機情報（エネミーのフェーズ情報と対称位置）
+    LIVES_INFO: {
+      Y: 640,                   // HPバーの下（エネミーのPHASE_INFOと同じY）
+    },
+    // スキルバー（エネミーのボススキルバーと対称位置）
     SKILL_BAR: {
       X: 1640,                  // ゾーン中央
-      Y: 1080 - HUD_HEIGHT + 60, // HUDエリア内
-      SLOT_SIZE: 64,
+      Y: 820,                   // エネミーのBOSS_SKILL_BARと同じY
+      SLOT_SIZE: 56,            // エネミーと同じサイズ
       SLOT_GAP: 8,
-      HP_BAR: {
-        WIDTH: 400,
-        HEIGHT: 24,
-        OFFSET_Y: 45,
-      },
+    },
+    // バフ/デバフ表示エリア（エネミーと対称位置）
+    STATUS_EFFECTS: {
+      X: 1640,                  // ゾーン中央
+      Y: 960,                   // エネミーと同じY
     },
   },
 } as const;

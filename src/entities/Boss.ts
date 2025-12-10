@@ -320,6 +320,13 @@ export abstract class Boss extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
+   * 全ての状態異常を取得
+   */
+  getStatusEffects(): StatusEffect[] {
+    return this.statusEffects;
+  }
+
+  /**
    * 無敵状態かどうか（サブクラスでオーバーライド可能）
    */
   isInvincible(): boolean {

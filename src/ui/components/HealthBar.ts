@@ -58,11 +58,11 @@ export class HealthBar extends Phaser.GameObjects.Container {
     this.border.strokeRect(-width / 2, -height / 2, width, height);
     this.add(this.border);
 
-    // テキスト
+    // テキスト（黒文字で緑バーの上でも見やすく）
     if (showText) {
       this.healthText = this.scene.add.text(0, 0, '', {
-        font: '14px monospace',
-        color: '#ffffff',
+        font: 'bold 14px monospace',
+        color: '#000000',
       });
       this.healthText.setOrigin(0.5, 0.5);
       this.add(this.healthText);

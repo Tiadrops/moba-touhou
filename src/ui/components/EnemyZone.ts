@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import { Enemy } from '@/entities/Enemy';
 import { Boss } from '@/entities/Boss';
-import { EnemyType } from '@/types';
+import { EnemyType, StatusEffectType, BossSkillSlot, BossSkillState } from '@/types';
 import { UI_LAYOUT, UI_DEPTH } from '../constants/UIConstants';
 import { HealthBar } from './HealthBar';
+import { CombinedStatusEffectBar } from './StatusEffectSlotUI';
 
 /**
  * エネミーゾーン（左側全体）
@@ -14,7 +15,7 @@ export class EnemyZone extends Phaser.GameObjects.Container {
   private currentBoss: Boss | null = null;
 
   // 表示要素
-  private portrait!: Phaser.GameObjects.Rectangle;
+  private portrait!: Phaser.GameObjects.Image;
   private nameText!: Phaser.GameObjects.Text;
   private healthBar!: HealthBar;
   private phaseText!: Phaser.GameObjects.Text;
@@ -24,12 +25,25 @@ export class EnemyZone extends Phaser.GameObjects.Container {
   private isVisible: boolean = false;
   private totalPhases: number = 1;
   private currentPhaseIndex: number = 0;
+  private isCCed: boolean = false;  // CC状態を追跡
+
+  // ボススキルバー
+  private skillSlotContainers: Phaser.GameObjects.Container[] = [];
+  private skillSlotBgs: Phaser.GameObjects.Rectangle[] = [];
+  private skillSlotOverlays: Phaser.GameObjects.Rectangle[] = [];
+  private skillSlotLabels: Phaser.GameObjects.Text[] = [];
+  private skillSlotCdTexts: Phaser.GameObjects.Text[] = [];
+
+  // バフ/デバフ表示
+  private statusEffectBar!: CombinedStatusEffectBar;
 
   constructor(scene: Phaser.Scene) {
     super(scene, 0, 0);
 
     this.createPortrait();
     this.createInfoPanel();
+    this.createBossSkillBar();
+    this.createStatusEffectDisplay();
 
     scene.add.existing(this);
     this.setDepth(UI_DEPTH.ZONE_BG);
@@ -42,51 +56,32 @@ export class EnemyZone extends Phaser.GameObjects.Container {
   private createPortrait(): void {
     const layout = UI_LAYOUT.ENEMY_ZONE.PORTRAIT;
 
-    // 仮の立ち絵（左側全体を覆う半透明の四角形）
-    this.portrait = this.scene.add.rectangle(
-      layout.X,
-      layout.Y,
-      layout.WIDTH,
-      layout.HEIGHT,
-      0xff4444,
-      layout.ALPHA
-    );
+    // ルーミアの立ち絵画像（初期状態は通常立ち絵）
+    this.portrait = this.scene.add.image(layout.X, layout.Y, 'portrait_rumia_1');
+    this.portrait.setAlpha(layout.ALPHA);
+    this.portrait.setDisplaySize(layout.WIDTH, layout.HEIGHT);
     this.add(this.portrait);
-
-    // ボス名テキスト（立ち絵の上部）
-    const portraitNameText = this.scene.add.text(
-      layout.X,
-      layout.Y - layout.HEIGHT / 2 + 50,
-      '',
-      {
-        font: 'bold 32px monospace',
-        color: '#ffffff',
-      }
-    );
-    portraitNameText.setOrigin(0.5, 0.5);
-    portraitNameText.setAlpha(0.6);
-    this.add(portraitNameText);
   }
 
   private createInfoPanel(): void {
     const layout = UI_LAYOUT.ENEMY_ZONE.INFO_PANEL;
+    const hpLayout = UI_LAYOUT.ENEMY_ZONE.HP_BAR;
+    const phaseY = UI_LAYOUT.ENEMY_ZONE.PHASE_INFO.Y;
 
-    // エネミー名
+    // ボス名（中央揃え、HPバーの上）
     this.nameText = this.scene.add.text(
       layout.X,
       layout.Y,
       '',
       {
-        font: 'bold 20px monospace',
+        font: 'bold 24px monospace',
         color: '#ff6666',
-        backgroundColor: '#000000aa',
-        padding: { x: 8, y: 4 },
       }
     );
+    this.nameText.setOrigin(0.5, 0.5);
     this.add(this.nameText);
 
-    // HPバー
-    const hpLayout = UI_LAYOUT.ENEMY_ZONE.HP_BAR;
+    // HPバー（名前の下）
     this.healthBar = new HealthBar(this.scene, {
       x: hpLayout.X + hpLayout.WIDTH / 2,
       y: hpLayout.Y,
@@ -96,47 +91,116 @@ export class EnemyZone extends Phaser.GameObjects.Container {
       isBossBar: true,
     });
 
-    // フェーズ表示（Phase 1/2のような表示）- HPバーの下に配置
-    const hpBarBottom = hpLayout.Y + hpLayout.HEIGHT;
-    this.phaseText = this.scene.add.text(
-      layout.X,
-      hpBarBottom + 15,
-      '',
-      {
-        font: 'bold 16px monospace',
-        color: '#ffffff',
-        backgroundColor: '#000000aa',
-        padding: { x: 8, y: 4 },
-      }
-    );
-    this.add(this.phaseText);
-
-    // フェーズスター表示（★★★のような東方風表示）
+    // フェーズスター表示（★★★のような東方風表示）- 中央揃え
     this.phaseStars = this.scene.add.text(
       layout.X,
-      hpBarBottom + 45,
+      phaseY,
       '',
       {
-        font: 'bold 24px monospace',
+        font: 'bold 28px monospace',
         color: '#ffff00',
       }
     );
+    this.phaseStars.setOrigin(0.5, 0);
     this.add(this.phaseStars);
 
-    // スペルカード名（スペルカードフェーズ時のみ表示）
+    // フェーズ表示（Phase 1/2のような表示）- 中央揃え
+    this.phaseText = this.scene.add.text(
+      layout.X,
+      phaseY + 35,
+      '',
+      {
+        font: '16px monospace',
+        color: '#aaaaaa',
+      }
+    );
+    this.phaseText.setOrigin(0.5, 0);
+    this.add(this.phaseText);
+
+    // スペルカード名（スペルカードフェーズ時のみ表示）- 中央揃え
     this.spellCardName = this.scene.add.text(
       layout.X,
-      hpBarBottom + 80,
+      phaseY + 65,
       '',
       {
         font: 'bold 18px monospace',
-        color: '#ff6666',
+        color: '#ff4444',
         backgroundColor: '#000000cc',
         padding: { x: 12, y: 6 },
       }
     );
+    this.spellCardName.setOrigin(0.5, 0);
     this.spellCardName.setVisible(false);
     this.add(this.spellCardName);
+  }
+
+  /**
+   * ボススキルバーを作成（左下に配置）
+   */
+  private createBossSkillBar(): void {
+    const skillBarLayout = UI_LAYOUT.ENEMY_ZONE.BOSS_SKILL_BAR;
+    const { SLOT_SIZE, SLOT_GAP } = skillBarLayout;
+    const slots = [BossSkillSlot.Q, BossSkillSlot.W, BossSkillSlot.E, BossSkillSlot.R];
+    const totalWidth = (SLOT_SIZE + SLOT_GAP) * slots.length - SLOT_GAP;
+    const startX = skillBarLayout.X - totalWidth / 2 + SLOT_SIZE / 2;
+
+    slots.forEach((slot, index) => {
+      const x = startX + index * (SLOT_SIZE + SLOT_GAP);
+      const y = skillBarLayout.Y;
+
+      // スロットコンテナ
+      const container = this.scene.add.container(x, y);
+      this.add(container);
+      this.skillSlotContainers.push(container);
+
+      // 背景
+      const bg = this.scene.add.rectangle(0, 0, SLOT_SIZE, SLOT_SIZE, 0x2a2a4e);
+      bg.setStrokeStyle(2, 0x4a4a6a);
+      container.add(bg);
+      this.skillSlotBgs.push(bg);
+
+      // クールダウンオーバーレイ
+      const overlay = this.scene.add.rectangle(0, 0, SLOT_SIZE, SLOT_SIZE, 0x000000, 0.7);
+      overlay.setVisible(false);
+      container.add(overlay);
+      this.skillSlotOverlays.push(overlay);
+
+      // スキルラベル（Q/W/E/R）
+      const label = this.scene.add.text(0, 0, slot, {
+        font: 'bold 20px monospace',
+        color: '#ff6666',
+      });
+      label.setOrigin(0.5, 0.5);
+      container.add(label);
+      this.skillSlotLabels.push(label);
+
+      // クールダウンテキスト
+      const cdText = this.scene.add.text(0, SLOT_SIZE / 2 + 12, '', {
+        font: '12px monospace',
+        color: '#aaaaaa',
+      });
+      cdText.setOrigin(0.5, 0);
+      container.add(cdText);
+      this.skillSlotCdTexts.push(cdText);
+    });
+  }
+
+  /**
+   * バフ/デバフ表示を作成
+   */
+  private createStatusEffectDisplay(): void {
+    const layout = UI_LAYOUT.ENEMY_ZONE.STATUS_EFFECTS;
+
+    // CombinedStatusEffectBarはscene.add.existingで追加されるため、
+    // this.add()せずに絶対座標で直接配置
+    this.statusEffectBar = new CombinedStatusEffectBar(this.scene, {
+      x: layout.X,
+      y: layout.Y,
+      slotSize: 40,
+      slotGap: 8,
+      slotsPerRow: 10,   // 1行10個（横幅を広く）
+    });
+    // Containerに追加しない（絶対座標で配置済み）
   }
 
   /**
@@ -188,8 +252,8 @@ export class EnemyZone extends Phaser.GameObjects.Container {
     this.currentPhaseIndex = boss.getCurrentPhaseIndex();
     this.updatePhaseDisplay();
 
-    // ルーミアの色（暗い紫）
-    this.portrait.setFillStyle(0x660066, 0.4);
+    // 立ち絵を通常状態にリセット
+    this.portrait.setTexture('portrait_rumia_1');
 
     // 表示アニメーション（左から入る）
     this.setVisible(true);
@@ -235,6 +299,15 @@ export class EnemyZone extends Phaser.GameObjects.Container {
         this.currentBoss.getMaxHp()
       );
 
+      // CC状態に応じて立ち絵を切り替え
+      this.updatePortraitByCC(this.currentBoss.hasStatusEffect(StatusEffectType.STUN));
+
+      // ボススキルバーを更新
+      this.updateBossSkillBar();
+
+      // バフ/デバフ表示を更新
+      this.updateStatusEffects();
+
       if (!this.currentBoss.getIsActive()) {
         this.hideBossInfo();
       }
@@ -248,10 +321,108 @@ export class EnemyZone extends Phaser.GameObjects.Container {
         this.currentEnemy.getMaxHp()
       );
 
+      // CC状態に応じて立ち絵を切り替え
+      this.updatePortraitByCC(this.currentEnemy.hasStatusEffect(StatusEffectType.STUN));
+
       if (!this.currentEnemy.getIsActive()) {
         this.hideBossInfo();
       }
     }
+  }
+
+  /**
+   * CC状態に応じて立ち絵を切り替え
+   */
+  private updatePortraitByCC(isStunned: boolean): void {
+    // 状態が変わった時のみテクスチャを切り替え
+    if (isStunned && !this.isCCed) {
+      this.isCCed = true;
+      this.portrait.setTexture('portrait_rumia_2');
+    } else if (!isStunned && this.isCCed) {
+      this.isCCed = false;
+      this.portrait.setTexture('portrait_rumia_1');
+    }
+  }
+
+  /**
+   * ボススキルバーを更新
+   */
+  private updateBossSkillBar(): void {
+    if (!this.currentBoss) return;
+
+    const skillStates = this.currentBoss.getAllSkillStates();
+    const slots = [BossSkillSlot.Q, BossSkillSlot.W, BossSkillSlot.E, BossSkillSlot.R];
+
+    slots.forEach((slot, index) => {
+      const skillState = skillStates.get(slot);
+      const overlay = this.skillSlotOverlays[index];
+      const cdText = this.skillSlotCdTexts[index];
+      const label = this.skillSlotLabels[index];
+      const bg = this.skillSlotBgs[index];
+
+      if (!skillState) {
+        // スキルが存在しない場合は非表示
+        overlay.setVisible(false);
+        cdText.setText('');
+        return;
+      }
+
+      const { state, cooldownRemaining } = skillState;
+
+      if (state === BossSkillState.CASTING) {
+        // キャスト中 - 黄色枠
+        bg.setStrokeStyle(3, 0xffff00);
+        overlay.setVisible(false);
+        cdText.setText('');
+        label.setColor('#ffff00');
+      } else if (state === BossSkillState.EXECUTING) {
+        // 実行中 - 緑枠
+        bg.setStrokeStyle(3, 0x00ff00);
+        overlay.setVisible(false);
+        cdText.setText('');
+        label.setColor('#00ff00');
+      } else if (cooldownRemaining > 0) {
+        // クールダウン中
+        bg.setStrokeStyle(2, 0x4a4a6a);
+        overlay.setVisible(true);
+        const cdSeconds = (cooldownRemaining / 1000).toFixed(1);
+        cdText.setText(`${cdSeconds}s`);
+        label.setColor('#666666');
+      } else {
+        // 準備完了
+        bg.setStrokeStyle(2, 0xff6666);
+        overlay.setVisible(false);
+        cdText.setText('');
+        label.setColor('#ff6666');
+      }
+    });
+  }
+
+  /**
+   * バフ/デバフ表示を更新
+   */
+  private updateStatusEffects(): void {
+    if (!this.currentBoss) {
+      this.statusEffectBar.updateEffects([], []);
+      return;
+    }
+
+    const statusEffects = this.currentBoss.getStatusEffects();
+    const debuffEffects: { type: string; remainingTime: number; totalDuration?: number }[] = [];
+
+    // 状態異常を追加（デバフ）
+    statusEffects.forEach(effect => {
+      debuffEffects.push({
+        type: effect.type,
+        remainingTime: effect.remainingTime,
+        totalDuration: 3000, // デバフのデフォルト持続時間
+      });
+    });
+
+    // バフ（現在ボスにはバフなし）
+    const buffEffects: { type: string; remainingTime: number; totalDuration?: number }[] = [];
+
+    this.statusEffectBar.updateEffects(buffEffects, debuffEffects);
   }
 
   /**
@@ -313,10 +484,15 @@ export class EnemyZone extends Phaser.GameObjects.Container {
    * ダメージ時のフラッシュアニメーション
    */
   playDamageAnimation(): void {
+    // 立ち絵を白くフラッシュ
     this.scene.tweens.add({
       targets: this.portrait,
-      fillColor: { from: 0xffffff, to: 0xff4444 },
+      tint: { from: 0xffffff, to: 0xffffff },
+      alpha: { from: 0.8, to: UI_LAYOUT.ENEMY_ZONE.PORTRAIT.ALPHA },
       duration: 100,
+      onComplete: () => {
+        this.portrait.clearTint();
+      },
     });
   }
 
@@ -332,6 +508,7 @@ export class EnemyZone extends Phaser.GameObjects.Container {
    */
   destroy(fromScene?: boolean): void {
     this.healthBar.destroy();
+    this.statusEffectBar.destroy();
     super.destroy(fromScene);
   }
 }

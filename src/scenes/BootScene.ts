@@ -13,8 +13,12 @@ export class BootScene extends Phaser.Scene {
     // ローディングバーの表示
     this.createLoadingBar();
 
-    // TODO: 将来的にここで画像・音声アセットを読み込む
-    // this.load.image('player', 'assets/sprites/player.png');
+    // キャラクター立ち絵の読み込み
+    this.load.image('portrait_reimu', 'img/reimu/reimu_1.png');
+    this.load.image('portrait_rumia_1', 'img/Rumia/rumia_1.png');
+    this.load.image('portrait_rumia_2', 'img/Rumia/rumia_2.png');
+
+    // TODO: 将来的にここで音声アセットを読み込む
     // this.load.audio('bgm', 'assets/audio/bgm.mp3');
   }
 

@@ -2,27 +2,31 @@ import Phaser from 'phaser';
 import { Player } from '@/entities/Player';
 import { SkillSlot, SkillState } from '@/types';
 import { SKILL_CONFIG } from '@/config/GameConfig';
-import { UI_LAYOUT, UI_DEPTH, BUFF_DISPLAY_NAMES, SKILL_KEY_LABELS } from '../constants/UIConstants';
+import { UI_LAYOUT, UI_DEPTH, SKILL_KEY_LABELS } from '../constants/UIConstants';
 import { SkillSlotUI } from './SkillSlotUI';
 import { HealthBar } from './HealthBar';
+import { CombinedStatusEffectBar } from './StatusEffectSlotUI';
 
 /**
  * プレイヤーゾーン（右側全体）
- * 立ち絵 + ステータス表示 + スキルバー + HPバー
+ * エネミーゾーンと左右対称のレイアウト
+ * 立ち絵 + HPバー + 残機 + スキルバー + バフ表示
  */
 export class PlayerZone extends Phaser.GameObjects.Container {
   private player: Player;
 
   // 表示要素
-  private portrait!: Phaser.GameObjects.Rectangle;
+  private portrait!: Phaser.GameObjects.Image;
   private nameText!: Phaser.GameObjects.Text;
-  private statsText!: Phaser.GameObjects.Text;
-  private buffContainer!: Phaser.GameObjects.Container;
-  private buffTexts: Phaser.GameObjects.Text[] = [];
+  private healthBar!: HealthBar;
+  private livesStars!: Phaser.GameObjects.Text;
+  private livesText!: Phaser.GameObjects.Text;
 
   // スキルバー
   private skillSlots: SkillSlotUI[] = [];
-  private healthBar!: HealthBar;
+
+  // バフ/デバフ表示
+  private statusEffectBar!: CombinedStatusEffectBar;
 
   // スキルスロット順序
   private readonly slotOrder: SkillSlot[] = [
@@ -44,14 +48,18 @@ export class PlayerZone extends Phaser.GameObjects.Container {
     [SkillSlot.F]: 180000,
   };
 
+  // 残機
+  private lives: number = 3;
+  private maxLives: number = 3;
+
   constructor(scene: Phaser.Scene, player: Player) {
     super(scene, 0, 0);
     this.player = player;
 
     this.createPortrait();
     this.createInfoPanel();
-    this.createBuffDisplay();
     this.createSkillBar();
+    this.createStatusEffectDisplay();
 
     scene.add.existing(this);
     this.setDepth(UI_DEPTH.ZONE_BG);
@@ -60,72 +68,69 @@ export class PlayerZone extends Phaser.GameObjects.Container {
   private createPortrait(): void {
     const layout = UI_LAYOUT.PLAYER_ZONE.PORTRAIT;
 
-    // 仮の立ち絵（右側全体を覆う半透明の四角形）
-    this.portrait = this.scene.add.rectangle(
-      layout.X,
-      layout.Y,
-      layout.WIDTH,
-      layout.HEIGHT,
-      0x00ff88,
-      layout.ALPHA
-    );
+    // 霊夢の立ち絵画像
+    this.portrait = this.scene.add.image(layout.X, layout.Y, 'portrait_reimu');
+    this.portrait.setAlpha(layout.ALPHA);
+    // 画像サイズをレイアウトに合わせてスケール
+    this.portrait.setDisplaySize(layout.WIDTH, layout.HEIGHT);
     this.add(this.portrait);
-
-    // キャラクター名テキスト（立ち絵の上部）
-    const charConfig = this.player.getCharacterConfig();
-    const portraitNameText = this.scene.add.text(
-      layout.X,
-      layout.Y - layout.HEIGHT / 2 + 50,
-      charConfig.name,
-      {
-        font: 'bold 32px monospace',
-        color: '#ffffff',
-      }
-    );
-    portraitNameText.setOrigin(0.5, 0.5);
-    portraitNameText.setAlpha(0.6);
-    this.add(portraitNameText);
   }
 
   private createInfoPanel(): void {
     const layout = UI_LAYOUT.PLAYER_ZONE.INFO_PANEL;
+    const hpLayout = UI_LAYOUT.PLAYER_ZONE.HP_BAR;
+    const livesY = UI_LAYOUT.PLAYER_ZONE.LIVES_INFO.Y;
 
-    // キャラクター名
-    const charConfig = this.player.getCharacterConfig();
+    // プレイヤー名（中央揃え、HPバーの上）
     this.nameText = this.scene.add.text(
       layout.X,
       layout.Y,
-      charConfig.name,
+      '博麗 霊夢',
       {
-        font: 'bold 20px monospace',
+        font: 'bold 24px monospace',
         color: '#00ff88',
-        backgroundColor: '#000000aa',
-        padding: { x: 8, y: 4 },
       }
     );
+    this.nameText.setOrigin(0.5, 0.5);
     this.add(this.nameText);
 
-    // ステータステキスト
-    this.statsText = this.scene.add.text(
+    // HPバー（エネミーと同じ位置）
+    this.healthBar = new HealthBar(this.scene, {
+      x: hpLayout.X + hpLayout.WIDTH / 2,
+      y: hpLayout.Y,
+      width: hpLayout.WIDTH,
+      height: hpLayout.HEIGHT,
+      showText: true,
+    });
+
+    // 残機スター表示（★★★のような東方風表示）- 中央揃え
+    this.livesStars = this.scene.add.text(
       layout.X,
-      layout.Y + 35,
+      livesY,
+      '',
+      {
+        font: 'bold 28px monospace',
+        color: '#00ff88',
+      }
+    );
+    this.livesStars.setOrigin(0.5, 0);
+    this.add(this.livesStars);
+
+    // 残機テキスト表示（残機 3/3のような表示）- 中央揃え
+    this.livesText = this.scene.add.text(
+      layout.X,
+      livesY + 35,
       '',
       {
         font: '16px monospace',
-        color: '#ffffff',
-        backgroundColor: '#000000aa',
-        padding: { x: 8, y: 4 },
-        lineSpacing: 6,
+        color: '#aaaaaa',
       }
     );
-    this.add(this.statsText);
-  }
+    this.livesText.setOrigin(0.5, 0);
+    this.add(this.livesText);
 
-  private createBuffDisplay(): void {
-    const layout = UI_LAYOUT.PLAYER_ZONE.INFO_PANEL;
-
-    this.buffContainer = this.scene.add.container(layout.X, layout.Y + 150);
-    this.add(this.buffContainer);
+    // 初期表示更新
+    this.updateLivesDisplay();
   }
 
   private createSkillBar(): void {
@@ -144,96 +149,77 @@ export class PlayerZone extends Phaser.GameObjects.Container {
       });
       this.skillSlots.push(slotUI);
     });
+  }
 
-    // HPバー
-    const hpBarLayout = skillBarLayout.HP_BAR;
-    this.healthBar = new HealthBar(this.scene, {
-      x: skillBarLayout.X,
-      y: skillBarLayout.Y + hpBarLayout.OFFSET_Y,
-      width: hpBarLayout.WIDTH,
-      height: hpBarLayout.HEIGHT,
-      showText: true,
+  /**
+   * バフ/デバフ表示を作成
+   */
+  private createStatusEffectDisplay(): void {
+    const layout = UI_LAYOUT.PLAYER_ZONE.STATUS_EFFECTS;
+
+    // CombinedStatusEffectBarはscene.add.existingで追加されるため、
+    // this.add()せずに絶対座標で直接配置
+    this.statusEffectBar = new CombinedStatusEffectBar(this.scene, {
+      x: layout.X,
+      y: layout.Y,
+      slotSize: 40,
+      slotGap: 8,
+      slotsPerRow: 10,   // 1行10個（横幅を広く）
     });
+    // Containerに追加しない（絶対座標で配置済み）
   }
 
   /**
    * 毎フレーム更新
    */
   update(time: number): void {
-    this.updateStats();
-    this.updateBuffs();
     this.updateSkillSlots(time);
     this.updateHealthBar();
+    this.updateStatusEffects();
   }
 
-  private updateStats(): void {
-    const charConfig = this.player.getCharacterConfig();
-    const stats = charConfig.stats;
+  /**
+   * 残機表示を更新
+   */
+  private updateLivesDisplay(): void {
+    // 残り残機を★で表示
+    const stars = '★'.repeat(this.lives);
+    const emptyStars = '☆'.repeat(this.maxLives - this.lives);
+    this.livesStars.setText(stars + emptyStars);
 
-    const effectiveAS = this.player.getEffectiveAttackSpeed();
-    const effectiveSPD = this.player.getEffectiveMoveSpeed();
-    const effectiveATK = this.player.getEffectiveAttackPower();
-
-    const hasASBuff = effectiveAS !== stats.attackSpeed;
-    const hasSPDBuff = effectiveSPD !== stats.moveSpeed;
-    const hasATKBuff = effectiveATK !== stats.attackPower;
-
-    const lines = [
-      `HP: ${Math.ceil(this.player.getCurrentHp())} / ${stats.maxHp}`,
-      `ATK: ${stats.attackPower}${hasATKBuff ? ` (${effectiveATK.toFixed(1)})` : ''}`,
-      `AS: ${stats.attackSpeed.toFixed(1)}${hasASBuff ? ` (${effectiveAS.toFixed(1)})` : ''}`,
-      `SPD: ${stats.moveSpeed}${hasSPDBuff ? ` (${effectiveSPD.toFixed(0)})` : ''}`,
-      `DEF: ${stats.defense}`,
-      `CRIT: ${(stats.critChance * 100).toFixed(0)}%`,
-    ];
-
-    this.statsText.setText(lines.join('\n'));
+    // 残機テキスト
+    this.livesText.setText(`残機 ${this.lives}/${this.maxLives}`);
   }
 
-  private updateBuffs(): void {
+  /**
+   * バフ/デバフ表示を更新
+   */
+  private updateStatusEffects(): void {
     const buffs = this.player.getBuffs();
+    const buffEffects: { type: string; remainingTime: number; totalDuration?: number }[] = [];
 
-    this.buffTexts.forEach(text => text.destroy());
-    this.buffTexts = [];
-
-    if (buffs.length > 0) {
-      const separatorText = this.scene.add.text(0, 0, '─────────────', {
-        font: '12px monospace',
-        color: '#4a4a6a',
+    // バフを追加
+    buffs.forEach(buff => {
+      buffEffects.push({
+        type: buff.type,
+        remainingTime: buff.remainingTime,
+        totalDuration: 5000, // バフのデフォルト持続時間（適切な値に調整）
       });
-      this.buffContainer.add(separatorText);
-      this.buffTexts.push(separatorText);
-    }
-
-    buffs.forEach((buff, index) => {
-      const displayName = BUFF_DISPLAY_NAMES[buff.type] || buff.type;
-      const seconds = (buff.remainingTime / 1000).toFixed(1);
-      const text = this.scene.add.text(
-        0,
-        20 + index * 24,
-        `[${displayName}↑ ${seconds}s]`,
-        {
-          font: '14px monospace',
-          color: '#88ff88',
-        }
-      );
-      this.buffContainer.add(text);
-      this.buffTexts.push(text);
     });
 
+    // 無敵状態
     if (this.player.getIsRSkillActive()) {
-      const invincibleText = this.scene.add.text(
-        0,
-        20 + buffs.length * 24,
-        '[無敵]',
-        {
-          font: 'bold 14px monospace',
-          color: '#ffff00',
-        }
-      );
-      this.buffContainer.add(invincibleText);
-      this.buffTexts.push(invincibleText);
+      buffEffects.push({
+        type: 'invincible',
+        remainingTime: 2000, // 無敵の残り時間（適切な値に調整）
+        totalDuration: 2000,
+      });
     }
+
+    // デバフ（現在プレイヤーにはデバフなし）
+    const debuffEffects: { type: string; remainingTime: number; totalDuration?: number }[] = [];
+
+    this.statusEffectBar.updateEffects(buffEffects, debuffEffects);
   }
 
   private updateSkillSlots(time: number): void {
@@ -266,13 +252,53 @@ export class PlayerZone extends Phaser.GameObjects.Container {
   }
 
   /**
+   * 残機を設定
+   */
+  setLives(lives: number, maxLives?: number): void {
+    this.lives = lives;
+    if (maxLives !== undefined) {
+      this.maxLives = maxLives;
+    }
+    this.updateLivesDisplay();
+  }
+
+  /**
+   * 残機を1減らす
+   */
+  loseLife(): void {
+    if (this.lives > 0) {
+      this.lives--;
+      this.updateLivesDisplay();
+
+      // 残機減少アニメーション
+      this.scene.tweens.add({
+        targets: this.livesStars,
+        scale: { from: 1.5, to: 1 },
+        duration: 300,
+        ease: 'Back.easeOut',
+      });
+    }
+  }
+
+  /**
+   * 現在の残機を取得
+   */
+  getLives(): number {
+    return this.lives;
+  }
+
+  /**
    * ダメージ時のフラッシュアニメーション
    */
   playDamageAnimation(): void {
+    // 立ち絵を赤くフラッシュ
     this.scene.tweens.add({
       targets: this.portrait,
-      fillColor: { from: 0xff0000, to: 0x00ff88 },
+      tint: { from: 0xff0000, to: 0xffffff },
       duration: 200,
+      onComplete: () => {
+        this.portrait.clearTint();
+      },
     });
     this.healthBar.playDamageAnimation();
   }
@@ -281,9 +307,9 @@ export class PlayerZone extends Phaser.GameObjects.Container {
    * 破棄
    */
   destroy(fromScene?: boolean): void {
-    this.buffTexts.forEach(text => text.destroy());
     this.skillSlots.forEach(slot => slot.destroy());
     this.healthBar.destroy();
+    this.statusEffectBar.destroy();
     super.destroy(fromScene);
   }
 }
