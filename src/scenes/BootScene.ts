@@ -22,8 +22,8 @@ export class BootScene extends Phaser.Scene {
     // 仮のスプライトをプログラムで生成（テスト用）
     this.createTemporarySprites();
 
-    // ゲームシーンへ遷移
-    this.scene.start(SCENES.GAME);
+    // タイトル画面へ遷移
+    this.scene.start(SCENES.TITLE);
   }
 
   /**

@@ -105,12 +105,17 @@ export const DEPTH = {
  */
 export const SCENES = {
   BOOT: 'BootScene',
-  MENU: 'MenuScene',
-  CHARACTER_SELECT: 'CharacterSelectScene',
+  TITLE: 'TitleScene',
+  MODE_SELECT: 'ModeSelectScene',
+  ARCADE_SETUP: 'ArcadeSetupScene',
+  PRACTICE_SETUP: 'PracticeSetupScene',
+  STAGE_INTRO: 'StageIntroScene',
   GAME: 'GameScene',
   PAUSE: 'PauseScene',
+  RESULT: 'ResultScene',
   GAME_OVER: 'GameOverScene',
-  STAGE_CLEAR: 'StageClearScene',
+  OPTION: 'OptionScene',
+  CREDIT: 'CreditScene',
 } as const;
 
 /**
@@ -346,5 +351,101 @@ export const BOSS_CONFIG = {
     get SKILL_E() { return this.PHASE_0_SKILLS.E; },
     // 旧HPは最初のフェーズのHPを返す
     get HP() { return this.PHASES[0].HP; },
+  },
+} as const;
+
+/**
+ * ステージ情報
+ */
+export const STAGE_INFO = [
+  {
+    number: 1,
+    name: 'Stage 1',
+    bossName: 'ルーミア',
+    bossTitle: '宵闇の妖怪',
+    hint: 'ルーミアは闇の弾幕を多用します。回避スキルがあると安心です。',
+    isUnlocked: true,
+  },
+  {
+    number: 2,
+    name: 'Stage 2',
+    bossName: '???',
+    bossTitle: '???',
+    hint: '未実装',
+    isUnlocked: false,
+  },
+  {
+    number: 3,
+    name: 'Stage 3',
+    bossName: '???',
+    bossTitle: '???',
+    hint: '未実装',
+    isUnlocked: false,
+  },
+  {
+    number: 4,
+    name: 'Stage 4',
+    bossName: '???',
+    bossTitle: '???',
+    hint: '未実装',
+    isUnlocked: false,
+  },
+  {
+    number: 5,
+    name: 'Stage 5',
+    bossName: '???',
+    bossTitle: '???',
+    hint: '未実装',
+    isUnlocked: false,
+  },
+  {
+    number: 6,
+    name: 'Stage 6',
+    bossName: '???',
+    bossTitle: '???',
+    hint: '未実装',
+    isUnlocked: false,
+  },
+] as const;
+
+/**
+ * サモナースキル情報
+ */
+export const SUMMONER_SKILLS = {
+  flash: {
+    id: 'flash',
+    name: 'フラッシュ',
+    description: '短距離瞬間移動。緊急回避に最適。',
+    cooldown: 180000,
+  },
+  heal: {
+    id: 'heal',
+    name: 'ヒール',
+    description: 'HPを30%回復。持久戦に有効。',
+    cooldown: 180000,
+  },
+  shield: {
+    id: 'shield',
+    name: 'バリア',
+    description: '3秒間ダメージを無効化。',
+    cooldown: 210000,
+  },
+  bomb: {
+    id: 'bomb',
+    name: 'ボム',
+    description: '画面上の敵弾を消去。',
+    cooldown: 120000,
+  },
+  timestop: {
+    id: 'timestop',
+    name: '時間停止',
+    description: '2秒間敵の動きを止める。',
+    cooldown: 240000,
+  },
+  boost: {
+    id: 'boost',
+    name: 'ブースト',
+    description: '10秒間攻撃力50%上昇。',
+    cooldown: 150000,
   },
 } as const;

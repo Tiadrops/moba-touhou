@@ -49,8 +49,8 @@ export class GameScene extends Phaser.Scene {
       this.createDebugInfo();
     }
 
-    // ウェルカムメッセージ
-    this.createWelcomeMessage();
+    // 即座にゲームプレイを開始
+    this.startGameplay();
   }
 
   update(time: number, delta: number): void {
@@ -241,57 +241,6 @@ export class GameScene extends Phaser.Scene {
       padding: { x: 5, y: 5 },
     });
     this.infoText.setDepth(DEPTH.UI);
-  }
-
-  /**
-   * ウェルカムメッセージを表示
-   */
-  private createWelcomeMessage(): void {
-    const centerX = GAME_CONFIG.WIDTH / 2;
-    const centerY = GAME_CONFIG.HEIGHT / 2;
-
-    const title = this.add.text(centerX, centerY - 100, 'MOBA × TOUHOU', {
-      font: 'bold 64px monospace',
-      color: '#00ff88',
-    });
-    title.setOrigin(0.5);
-    title.setDepth(DEPTH.UI);
-
-    const subtitle = this.add.text(centerX, centerY, 'Danmaku Shooting Game', {
-      font: '32px monospace',
-      color: '#ffffff',
-    });
-    subtitle.setOrigin(0.5);
-    subtitle.setDepth(DEPTH.UI);
-
-    const message = this.add.text(centerX, centerY + 100, [
-      'Project Setup Complete!',
-      '',
-      'Press any key to continue...',
-    ], {
-      font: '20px monospace',
-      color: '#aaaaaa',
-      align: 'center',
-    });
-    message.setOrigin(0.5);
-    message.setDepth(DEPTH.UI);
-
-    // 点滅アニメーション
-    this.tweens.add({
-      targets: message,
-      alpha: 0.3,
-      duration: 1000,
-      yoyo: true,
-      repeat: -1,
-    });
-
-    // キー入力待ち
-    this.input.keyboard?.once('keydown', () => {
-      title.destroy();
-      subtitle.destroy();
-      message.destroy();
-      this.startGameplay();
-    });
   }
 
   /**

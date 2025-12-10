@@ -1,6 +1,16 @@
 import Phaser from 'phaser';
 import { BootScene } from '@/scenes/BootScene';
+import { TitleScene } from '@/scenes/TitleScene';
+import { ModeSelectScene } from '@/scenes/ModeSelectScene';
+import { ArcadeSetupScene } from '@/scenes/ArcadeSetupScene';
+import { PracticeSetupScene } from '@/scenes/PracticeSetupScene';
+import { StageIntroScene } from '@/scenes/StageIntroScene';
 import { GameScene } from '@/scenes/GameScene';
+import { PauseScene } from '@/scenes/PauseScene';
+import { ResultScene } from '@/scenes/ResultScene';
+import { GameOverScene } from '@/scenes/GameOverScene';
+import { OptionScene } from '@/scenes/OptionScene';
+import { CreditScene } from '@/scenes/CreditScene';
 import { GAME_CONFIG, PHYSICS_CONFIG, COLORS } from '@/config/GameConfig';
 
 /**
@@ -16,7 +26,20 @@ const config: Phaser.Types.Core.GameConfig = {
     default: 'arcade',
     arcade: PHYSICS_CONFIG,
   },
-  scene: [BootScene, GameScene],
+  scene: [
+    BootScene,
+    TitleScene,
+    ModeSelectScene,
+    ArcadeSetupScene,
+    PracticeSetupScene,
+    StageIntroScene,
+    GameScene,
+    PauseScene,
+    ResultScene,
+    GameOverScene,
+    OptionScene,
+    CreditScene,
+  ],
   fps: {
     target: GAME_CONFIG.TARGET_FPS,
     forceSetTimeOut: false,

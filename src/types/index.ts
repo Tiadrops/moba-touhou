@@ -342,3 +342,99 @@ export enum CutInState {
   DISPLAYING = 'displaying', // 表示中
   EXITING = 'exiting',     // 退場アニメーション中
 }
+
+// ========================================
+// シーン遷移システム関連の型定義
+// ========================================
+
+// ゲームモード
+export enum GameMode {
+  ARCADE = 'arcade',
+  PRACTICE = 'practice',
+}
+
+// 練習モードの練習対象
+export enum PracticeTarget {
+  FULL = 'full',           // ステージ全体（道中 + ボス）
+  BOSS = 'boss',           // ボスのみ
+  ROUTE = 'route',         // 道中のみ
+}
+
+// 練習モードオプション
+export interface PracticeOptions {
+  infiniteLives: boolean;     // 残機無限
+  invincible: boolean;        // 無敵モード
+  slowMode: boolean;          // スローモーション
+  showHitbox: boolean;        // 当たり判定表示
+  startFromPhase?: number;    // 特定フェーズから開始（ボス練習時）
+}
+
+// 練習モード設定
+export interface PracticeModeConfig {
+  stageNumber: number;
+  practiceTarget: PracticeTarget;
+  options: PracticeOptions;
+}
+
+// サモナースキル設定
+export interface SummonerSkillConfig {
+  D: PlayerSkillType;
+  F: PlayerSkillType;
+}
+
+// SetupScene → StageIntroScene へのデータ
+export interface StageIntroData {
+  mode: GameMode;
+  character: CharacterType;
+  difficulty: Difficulty;
+  stageNumber: number;
+  // アーケードモード継続時
+  continueData?: {
+    score: number;
+    lives: number;
+  };
+  // 練習モード専用
+  practiceConfig?: PracticeModeConfig;
+}
+
+// StageIntroScene → GameScene へのデータ
+export interface GameStartData {
+  mode: GameMode;
+  character: CharacterType;
+  difficulty: Difficulty;
+  stageNumber: number;
+  summonerSkills: SummonerSkillConfig;
+  // アーケードモード継続時
+  continueData?: {
+    score: number;
+    lives: number;
+  };
+  // 練習モード専用
+  practiceConfig?: PracticeModeConfig;
+}
+
+// GameScene → ResultScene へのデータ
+export interface ResultData {
+  mode: GameMode;
+  stageNumber: number;
+  score: number;
+  time: number;
+  kills: number;
+  damageTaken: number;
+  lives: number;
+  maxCombo: number;
+  rank: ScoreRank;
+  isHighScore: boolean;
+  // 次ステージ用（ResultScene → StageIntroScene）
+  nextStageData?: StageIntroData;
+}
+
+// ステージ情報
+export interface StageInfo {
+  number: number;
+  name: string;
+  bossName: string;
+  bossTitle: string;
+  hint: string;
+  isUnlocked: boolean;
+}
