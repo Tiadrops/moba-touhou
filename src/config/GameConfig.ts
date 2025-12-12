@@ -239,36 +239,51 @@ export const BOSS_CONFIG = {
         // CC中断可能フラグ
         INTERRUPTIBLE: true,
       },
-      // Wスキル「闇符・ダークサイドオブムーン」（デバッグ用に無効化）
+      // Wスキル「通常弾幕2」- 3つのリング弾幕
       W: {
-        NAME: '闇符・ダークサイドオブムーン',
+        NAME: '通常弾幕2',
         CAST_TIME: 500,
-        COOLDOWN: 999999,            // 実質無効化
+        COOLDOWN: 6000,
         DAMAGE: {
-          BASE: 50,
-          RATIO: 0.8,
+          BASE: 30,
+          RATIO: 0.5,
         },
-        LASER_COUNT: 5,
-        LASER_WIDTH: 30,
-        LASER_LENGTH: 800,
-        LASER_DURATION: 100,
+        // リング弾幕パラメータ
+        RING_COUNT: 3,               // リングの数
+        BULLETS_PER_RING: 20,        // 1リングあたりの弾数
+        BULLET_RADIUS: 0.25 * 55,    // 当たり判定半径 0.25m = 13.75px
+        BULLET_DISPLAY_SCALE: 0.06,  // 黒縁中玉（512px）の表示スケール
+        BULLET_COLOR: 5,             // 水色（KSHOT.MEDIUM_BALL.CYAN）
+        // 各リングの弾速（外側ほど速い）
+        RING_SPEEDS: [5 * 55, 10 * 55, 15 * 55], // 5m/s, 10m/s, 15m/s
       },
-      // Eスキル「闘符・ディマーケイション」（デバッグ用に無効化）
+      // Eスキル「通常弾幕3」- 移動しながら直線弾幕を配置
       E: {
-        NAME: '闘符・ディマーケイション',
-        CAST_TIME: 300,
-        COOLDOWN: 999999,            // 実質無効化
+        NAME: '通常弾幕3',
+        CAST_TIME: 0,                // 詠唱なし（即座に移動開始）
+        COOLDOWN: 6000,              // クールダウン（ms）
         DAMAGE: {
           BASE: 20,
           RATIO: 0.3,
         },
-        BULLETS_PER_RING: 16,
-        WAVE_COUNT: 3,
-        WAVE_INTERVAL: 400,
-        INITIAL_RADIUS: 30,
-        EXPANSION_SPEED: 200,
-        ROTATION_SPEED: 0.8,
-        BULLET_RADIUS: 10,
+        // 移動パラメータ
+        MOVE_DURATION: 1000,         // 移動時間（1秒）
+        MOVE_DISTANCE: 5 * 55,       // 移動距離（5m = 275px）
+        // 弾幕パラメータ
+        BULLET_LINES: 2,             // 弾列数（2列 - 前方に配置）
+        BULLETS_PER_LINE: 20,        // 1列あたりの弾数（横に並べる）
+        BULLET_SPAWN_INTERVAL: 50,   // 弾配置間隔（0.05秒 = 50ms）
+        LINE_SPACING: 1 * 55,        // 列の間隔（1m = 55px）- 前方2列の距離
+        LINE_WIDTH: 10 * 55,         // 1列の横幅（10m = 550px）
+        BULLET_RADIUS: 0.25 * 55,    // 弾の半径（0.25m = 13.75px）
+        BULLET_DISPLAY_SCALE: 0.1,   // 輪弾（278px）の表示スケール
+        BULLET_COLOR: 12,            // 輪弾の緑（KSHOT.RINDAN.GREEN）
+        // 弾速パラメータ（山型: 3m/s → 8m/s → 3m/s）
+        BULLET_SPEED_BASE: 3 * 55,   // 基本弾速（3m/s = 165px/s）
+        BULLET_SPEED_INCREMENT: 0.5 * 55, // 弾速増加量（0.5m/s = 27.5px/s）
+        BULLET_SPEED_PEAK_INDEX: 10, // 最速になるインデックス（11発目、0始まりなので10）
+        // CC中断可能フラグ（ブレイク）
+        INTERRUPTIBLE: true,
       },
     },
 

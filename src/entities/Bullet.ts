@@ -51,6 +51,7 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
   private startY: number = 0; // 発射開始位置Y
   private isCritical: boolean = false; // クリティカルヒットフラグ
   private kshotFrameId: number | null = null; // kShotフレームID（使用時）
+  private hasEnteredPlayArea: boolean = false; // プレイエリアに入ったことがあるか
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'bullet_player');
@@ -97,6 +98,7 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     this.target = target;
     this.isCritical = isCritical;
     this.kshotFrameId = kshotFrameId;
+    this.hasEnteredPlayArea = false; // プレイエリア入場フラグをリセット
 
     // 発射開始位置を記録
     this.startX = x;
@@ -209,10 +211,19 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
       this.setRotation(angle);
     }
 
-    // 画面外に出たら非アクティブ化（プレイエリア外）
+    // プレイエリア判定
     const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
-    if (this.x < X || this.x > X + WIDTH ||
-        this.y < Y || this.y > Y + HEIGHT) {
+    const isInsidePlayArea = this.x >= X && this.x <= X + WIDTH &&
+                             this.y >= Y && this.y <= Y + HEIGHT;
+
+    // プレイエリアに入ったらフラグを立てる
+    if (isInsidePlayArea) {
+      this.hasEnteredPlayArea = true;
+    }
+
+    // プレイエリアに一度入った後に出たら非アクティブ化
+    // （まだ入っていない弾は消さない）
+    if (this.hasEnteredPlayArea && !isInsidePlayArea) {
       this.deactivate();
     }
   }

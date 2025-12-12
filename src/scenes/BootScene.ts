@@ -44,6 +44,11 @@ export class BootScene extends Phaser.Scene {
       frameWidth: 704,   // 1408 / 2
       frameHeight: 800,
     });
+    // ルーミアコマ4（移動詠唱用）: 1408x800px, 横2フレーム
+    this.load.spritesheet('coma_rumia_move_cast', 'img/Rumia/rumia_koma4.png', {
+      frameWidth: 704,   // 1408 / 2
+      frameHeight: 800,
+    });
 
     // 弾幕スプライトシートの読み込み
     // 黒縁中玉: 4096x512px (512x512 × 8色)
@@ -241,6 +246,16 @@ export class BootScene extends Phaser.Scene {
       repeat: -1,
     });
 
-    console.log('Character animations created: reimu_idle, reimu_move, rumia_idle, rumia_cast, rumia_move');
+    // ルーミア移動詠唱アニメーション（2フレーム）- Eスキル用
+    this.anims.create({
+      key: 'rumia_move_cast',
+      frames: this.anims.generateFrameNumbers('coma_rumia_move_cast', {
+        frames: [0, 1],
+      }),
+      frameRate: 4, // 移動時と同じ速度
+      repeat: -1,
+    });
+
+    console.log('Character animations created: reimu_idle, reimu_move, rumia_idle, rumia_cast, rumia_move, rumia_move_cast');
   }
 }

@@ -8,7 +8,7 @@ import {
   StatusEffectType,
   StatusEffect,
 } from '@/types';
-import { BOSS_CONFIG, GAME_CONFIG } from '@/config/GameConfig';
+import { BOSS_CONFIG, GAME_CONFIG, DEPTH } from '@/config/GameConfig';
 import { KSHOT } from '../Bullet';
 import { AudioManager } from '@/systems/AudioManager';
 
@@ -47,11 +47,13 @@ type PhaseSkillsConfig = {
     CAST_TIME: number;
     COOLDOWN: number;
     DAMAGE: { BASE: number; RATIO: number };
-    // ノーマルフェーズ用（レーザー）
-    LASER_COUNT?: number;
-    LASER_WIDTH?: number;
-    LASER_LENGTH?: number;
-    LASER_DURATION?: number;
+    // ノーマルフェーズ用（リング弾幕）
+    RING_COUNT?: number;
+    BULLETS_PER_RING?: number;
+    BULLET_RADIUS?: number;
+    BULLET_DISPLAY_SCALE?: number;
+    BULLET_COLOR?: number;
+    RING_SPEEDS?: readonly number[];
     // スペルカード用（トリプルバースト - Q3連射）
     BURST_COUNT?: number;
     BURST_INTERVAL?: number;
@@ -62,20 +64,27 @@ type PhaseSkillsConfig = {
     CAST_TIME: number;
     COOLDOWN: number;
     DAMAGE: { BASE: number; RATIO: number };
-    // ノーマルフェーズ用（ディマーケイション）
-    BULLETS_PER_RING?: number;
-    WAVE_COUNT?: number;
-    WAVE_INTERVAL?: number;
-    INITIAL_RADIUS?: number;
-    EXPANSION_SPEED?: number;
-    ROTATION_SPEED?: number;
+    // ノーマルフェーズ用（通常弾幕3 - 移動弾幕）
+    MOVE_DURATION?: number;
+    MOVE_DISTANCE?: number;
+    BULLET_LINES?: number;
+    BULLETS_PER_LINE?: number;
+    BULLET_SPAWN_INTERVAL?: number;
+    LINE_SPACING?: number;
+    LINE_WIDTH?: number;
     BULLET_RADIUS?: number;
+    BULLET_DISPLAY_SCALE?: number;
+    BULLET_COLOR?: number;
+    BULLET_SPEED_BASE?: number;
+    BULLET_SPEED_INCREMENT?: number;
+    BULLET_SPEED_PEAK_INDEX?: number;
+    INTERRUPTIBLE?: boolean;
     // スペルカード用（闇の潮汐）
     SPIRAL_ARMS?: number;
     SPIRAL_DURATION?: number;
     BULLET_FIRE_INTERVAL?: number;
     BULLET_SPEED?: number;
-    BULLET_COLOR?: number;
+    ROTATION_SPEED?: number;
   };
   R?: {
     NAME: string;
@@ -118,23 +127,36 @@ export class Rumia extends Boss {
     return this._qSkillInterrupted;
   }
 
+  /** Eスキルが中断されたかどうか（Breakシステム用） */
+  get eSkillWasInterrupted(): boolean {
+    return this._eSkillInterrupted;
+  }
+
   // アニメーション状態
-  private currentAnimState: 'idle' | 'cast' | 'move' = 'idle';
+  private currentAnimState: 'idle' | 'cast' | 'move' | 'move_cast' = 'idle';
 
-  // Wスキル用
-  private wSkillLaserAngles: number[] = [];
-  private wSkillDamageApplied: boolean = false;
-  private wSkillLaserGraphics: Phaser.GameObjects.Graphics | null = null;
+  // 当たり判定表示用（デバッグ）
+  private static DEBUG_SHOW_HITBOX = false; // trueで当たり判定を表示
+  private hitboxGraphics: Phaser.GameObjects.Graphics | null = null;
 
-  // Eスキル用（ディマーケイション）
-  private eSkillWavesFired: number = 0;       // 発射済み波数
-  private eSkillWaveTimer: number = 0;        // 波発射タイマー
-  private eSkillRingBullets: Array<{          // 各弾の情報
-    bullet: any;
-    angle: number;
-    waveIndex: number;
-    spawnTime: number;
-  }> = [];
+  // Wスキル用（リング弾幕）
+  private wSkillWarningGraphics: Phaser.GameObjects.Graphics | null = null;
+  private wSkillWarningShown: boolean = false;
+
+  // Eスキル用（通常弾幕3 - 移動弾幕）
+  private eSkillMoveDirection: number = 0;      // 移動方向（ラジアン）
+  private eSkillMoveStartPos: { x: number; y: number } = { x: 0, y: 0 };
+  private eSkillMoveEndPos: { x: number; y: number } = { x: 0, y: 0 }; // 移動終了位置
+  private eSkillMoveProgress: number = 0;       // 移動進捗（0〜1）
+  private eSkillBulletsSpawned: number = 0;     // 配置済み弾数（各列）
+  private eSkillBulletSpawnTimer: number = 0;   // 弾配置タイマー
+  private _eSkillInterrupted: boolean = false;  // CCで中断されたか
+  private eSkillBulletPositions: Array<{ x: number; y: number }[]> = []; // 事前計算した弾位置（列ごと）
+  private eSkillBulletAngle: number = 0;        // 事前計算した弾の発射角度（固定）
+  private eSkillPhase: 'before_move' | 'moving' | 'after_move' = 'before_move'; // フェーズ
+  private eSkillAngleToPlayer: number = 0;      // プレイヤー方向（列の角度計算用）
+  private eSkillCurrentLines: number = 1;       // 現在のフェーズの列数
+  private eSkillCurrentSpeedBase: number = 2 * 55; // 現在のフェーズの基本弾速
 
   // Rスキル用（ダークサイドオブザムーン）
   private rSkillMoveDirection: number = 0;          // 移動方向（ラジアン）
@@ -171,9 +193,9 @@ export class Rumia extends Boss {
     this.play('rumia_idle');
     this.clearTint();
 
-    // Wスキル用レーザーグラフィックス
-    this.wSkillLaserGraphics = scene.add.graphics();
-    this.wSkillLaserGraphics.setDepth(60); // EFFECTS
+    // 当たり判定表示を作成
+    this.hitboxGraphics = this.scene.add.graphics();
+    this.hitboxGraphics.setDepth(DEPTH.ENEMIES + 1);
   }
 
   /**
@@ -287,11 +309,35 @@ export class Rumia extends Boss {
 
     // アニメーション状態を更新
     this.updateAnimation();
+
+    // 当たり判定を描画
+    this.drawHitbox();
+  }
+
+  /**
+   * 当たり判定を描画（デバッグ用）
+   */
+  private drawHitbox(): void {
+    if (!this.hitboxGraphics) return;
+
+    this.hitboxGraphics.clear();
+
+    // デバッグフラグがfalseの場合は描画しない
+    if (!Rumia.DEBUG_SHOW_HITBOX) return;
+
+    const radius = this.stats.hitboxRadius;
+
+    // 赤い円で当たり判定を表示
+    this.hitboxGraphics.lineStyle(2, 0xff0000, 0.8);
+    this.hitboxGraphics.fillStyle(0xff0000, 0.3);
+    this.hitboxGraphics.fillCircle(this.x, this.y, radius);
+    this.hitboxGraphics.strokeCircle(this.x, this.y, radius);
   }
 
   /**
    * アニメーション状態を更新
-   * 詠唱中は詠唱アニメーション、移動中は移動アニメーション、それ以外は待機アニメーション
+   * Eスキル移動フェーズは移動詠唱アニメーション、詠唱中は詠唱アニメーション、
+   * 移動中は移動アニメーション、それ以外は待機アニメーション
    */
   private updateAnimation(): void {
     const qSkill = this.skills.get(BossSkillSlot.Q);
@@ -299,25 +345,50 @@ export class Rumia extends Boss {
     const eSkill = this.skills.get(BossSkillSlot.E);
     const rSkill = this.skills.get(BossSkillSlot.R);
 
+    // Eスキル移動フェーズかどうか
+    const isESkillMoving = eSkill?.state === BossSkillState.EXECUTING && this.eSkillPhase === 'moving';
+
+    // Eスキル配置フェーズ（移動前・移動後）かどうか
+    const isESkillPlacing = eSkill?.state === BossSkillState.EXECUTING &&
+      (this.eSkillPhase === 'before_move' || this.eSkillPhase === 'after_move');
+
     // いずれかのスキルが詠唱中かどうか
     const isCasting =
       qSkill?.state === BossSkillState.CASTING ||
       wSkill?.state === BossSkillState.CASTING ||
       eSkill?.state === BossSkillState.CASTING ||
-      rSkill?.state === BossSkillState.CASTING;
+      rSkill?.state === BossSkillState.CASTING ||
+      isESkillPlacing; // Eスキル配置フェーズも詠唱扱い
 
     // 移動中かどうか（速度がある程度あるか）
     const body = this.body as Phaser.Physics.Arcade.Body;
     const isMoving = body && (Math.abs(body.velocity.x) > 10 || Math.abs(body.velocity.y) > 10);
 
-    if (isCasting && this.currentAnimState !== 'cast') {
-      // 詠唱アニメーションに切り替え（最優先）
+    if (isESkillMoving && this.currentAnimState !== 'move_cast') {
+      // Eスキル移動フェーズは移動詠唱アニメーション（最優先）
+      this.play('rumia_move_cast');
+      this.currentAnimState = 'move_cast';
+      // 一度リセットしてから移動方向に合わせて反転
+      this.setFlipX(false);
+      this.setRotation(0);
+      this.updateMoveDirectionByAngle(this.eSkillMoveDirection);
+    } else if (isESkillMoving && this.currentAnimState === 'move_cast') {
+      // Eスキル移動フェーズは移動方向を強制的に設定（毎フレーム）
+      let angleDeg = Phaser.Math.RadToDeg(this.eSkillMoveDirection);
+      // 0〜360度を-180〜180度に正規化
+      if (angleDeg > 180) angleDeg -= 360;
+      // 左向き（90度より大きい or -90度より小さい）の場合のみFlipX=true
+      const shouldFlipX = angleDeg > 90 || angleDeg < -90;
+      // 強制的に正しい値に設定
+      this.setFlipX(shouldFlipX);
+    } else if (isCasting && this.currentAnimState !== 'cast') {
+      // 詠唱アニメーションに切り替え
       this.play('rumia_cast');
       this.currentAnimState = 'cast';
       // 詠唱中は回転・反転をリセット
       this.setRotation(0);
       this.setFlipX(false);
-    } else if (!isCasting && isMoving) {
+    } else if (!isCasting && !isESkillMoving && isMoving) {
       // 移動アニメーションに切り替え
       if (this.currentAnimState !== 'move') {
         this.play('rumia_move');
@@ -325,7 +396,7 @@ export class Rumia extends Boss {
       }
       // 移動方向に合わせて回転・反転
       this.updateMoveDirection(body.velocity.x, body.velocity.y);
-    } else if (!isCasting && !isMoving && this.currentAnimState !== 'idle') {
+    } else if (!isCasting && !isESkillMoving && !isMoving && this.currentAnimState !== 'idle') {
       // 待機アニメーションに切り替え
       this.play('rumia_idle');
       this.currentAnimState = 'idle';
@@ -340,17 +411,27 @@ export class Rumia extends Boss {
    */
   private updateMoveDirection(vx: number, vy: number): void {
     const angle = Math.atan2(vy, vx); // ラジアン
-    const angleDeg = Phaser.Math.RadToDeg(angle);
+    this.updateMoveDirectionByAngle(angle);
+  }
 
-    // 左向き（90度〜270度、つまり|角度| > 90度）の場合は反転
-    if (Math.abs(angleDeg) > 90) {
+  /**
+   * 角度に合わせてスプライトを回転・反転
+   * 全てのスプライトは右向きがデフォルト
+   * 左方向（90度より大きい or -90度より小さい）に移動する場合は反転
+   */
+  private updateMoveDirectionByAngle(angle: number): void {
+    let angleDeg = Phaser.Math.RadToDeg(angle);
+    // 0〜360度を-180〜180度に正規化
+    if (angleDeg > 180) angleDeg -= 360;
+
+    // 左向き（90度より大きい or -90度より小さい）の場合は反転
+    if (angleDeg > 90 || angleDeg < -90) {
       this.setFlipX(true);
-      // 反転時は角度を反転（上下が逆にならないように）
-      this.setRotation(angle + Math.PI);
     } else {
       this.setFlipX(false);
-      this.setRotation(angle);
     }
+    // 回転は使用しない（0にリセット）
+    this.setRotation(0);
   }
 
   /**
@@ -901,43 +982,14 @@ export class Rumia extends Boss {
   }
 
   /**
-   * Wスキル使用を試みる
+   * Wスキル使用を試みる（通常弾幕2 - リング弾幕）
    */
   private tryUseWSkill(): void {
-    if (!this.playerPosition) return;
-
-    // プレイヤー方向を計算
-    const angleToPlayer = Phaser.Math.Angle.Between(
-      this.x,
-      this.y,
-      this.playerPosition.x,
-      this.playerPosition.y
-    );
-
     // スキル使用開始
-    if (this.startSkill(BossSkillSlot.W, this.currentSkillConfig.W.CAST_TIME, angleToPlayer)) {
-      // レーザー角度を計算（自機狙い1本 + ランダム4本）
-      this.calculateWSkillAngles(angleToPlayer);
-      this.wSkillDamageApplied = false;
-      console.log(`Rumia: Wスキル詠唱開始 - レーザー${this.currentSkillConfig.W.LASER_COUNT}本`);
-    }
-  }
-
-  /**
-   * Wスキルのレーザー角度を計算
-   */
-  private calculateWSkillAngles(playerAngle: number): void {
-    this.wSkillLaserAngles = [];
-
-    // 1本目: 自機狙い
-    this.wSkillLaserAngles.push(playerAngle);
-
-    // 残り4本: プレイヤー方向を中心に±60度（120度範囲）のランダム
-    const spreadRange = Phaser.Math.DegToRad(60); // ±60度
-    const laserCount = this.currentSkillConfig.W.LASER_COUNT ?? 5;
-    for (let i = 1; i < laserCount; i++) {
-      const randomOffset = (Math.random() * 2 - 1) * spreadRange; // -60° ~ +60°
-      this.wSkillLaserAngles.push(playerAngle + randomOffset);
+    if (this.startSkill(BossSkillSlot.W, this.currentSkillConfig.W.CAST_TIME, 0)) {
+      const ringCount = this.currentSkillConfig.W.RING_COUNT ?? 3;
+      this.wSkillWarningShown = false; // 予告線フラグをリセット
+      console.log(`Rumia: Wスキル詠唱開始 - ${this.currentSkillConfig.W.NAME}（リング${ringCount}つ）`);
     }
   }
 
@@ -945,21 +997,97 @@ export class Rumia extends Boss {
    * Wスキル詠唱更新
    */
   private updateWSkillCasting(delta: number): void {
+    const wSkill = this.skills.get(BossSkillSlot.W);
+    if (!wSkill) return;
+
+    // 詠唱残り200ms以下で予告線を表示
+    if (wSkill.castTimeRemaining <= 200 && !this.wSkillWarningShown) {
+      this.showWSkillWarning();
+      this.wSkillWarningShown = true;
+    }
+
     const castComplete = this.updateSkillCasting(BossSkillSlot.W, delta);
 
     if (castComplete) {
-      // 詠唱完了 → 実行開始（レーザー発射）
-      const wSkill = this.skills.get(BossSkillSlot.W);
-      if (wSkill) {
-        wSkill.state = BossSkillState.EXECUTING;
-        wSkill.executionTimeRemaining = this.currentSkillConfig.W.LASER_DURATION ?? 100;
-        console.log('Rumia: Wスキル発射!');
-      }
+      // 予告線を消去
+      this.hideWSkillWarning();
+      // 詠唱完了 → リング弾幕を発射
+      this.fireWSkillRings();
+      // 発射後すぐに完了
+      this.completeSkill(BossSkillSlot.W, this.currentSkillConfig.W.COOLDOWN);
+      console.log('Rumia: Wスキル発射完了!');
     }
   }
 
   /**
-   * Wスキル実行更新（レーザーダメージ判定）
+   * Wスキルの予告線を表示（プレイエリア内に制限）
+   */
+  private showWSkillWarning(): void {
+    if (!this.wSkillWarningGraphics) {
+      this.wSkillWarningGraphics = this.scene.add.graphics();
+      this.wSkillWarningGraphics.setDepth(DEPTH.EFFECTS);
+    }
+
+    const wConfig = this.currentSkillConfig.W;
+    const bulletsPerRing = wConfig.BULLETS_PER_RING ?? 20;
+
+    // プレイエリアの境界
+    const areaLeft = GAME_CONFIG.PLAY_AREA.X;
+    const areaRight = GAME_CONFIG.PLAY_AREA.X + GAME_CONFIG.PLAY_AREA.WIDTH;
+    const areaTop = GAME_CONFIG.PLAY_AREA.Y;
+    const areaBottom = GAME_CONFIG.PLAY_AREA.Y + GAME_CONFIG.PLAY_AREA.HEIGHT;
+
+    this.wSkillWarningGraphics.clear();
+    this.wSkillWarningGraphics.lineStyle(2, 0x00ffff, 0.6); // 水色、半透明
+
+    // 各弾の方向に予告線を描画（プレイエリア境界でクリップ）
+    for (let i = 0; i < bulletsPerRing; i++) {
+      const angle = (i / bulletsPerRing) * Math.PI * 2;
+      const dx = Math.cos(angle);
+      const dy = Math.sin(angle);
+
+      // プレイエリア境界との交点を計算
+      let t = Infinity;
+
+      // 右境界との交点
+      if (dx > 0) {
+        t = Math.min(t, (areaRight - this.x) / dx);
+      }
+      // 左境界との交点
+      if (dx < 0) {
+        t = Math.min(t, (areaLeft - this.x) / dx);
+      }
+      // 下境界との交点
+      if (dy > 0) {
+        t = Math.min(t, (areaBottom - this.y) / dy);
+      }
+      // 上境界との交点
+      if (dy < 0) {
+        t = Math.min(t, (areaTop - this.y) / dy);
+      }
+
+      const endX = this.x + dx * t;
+      const endY = this.y + dy * t;
+
+      this.wSkillWarningGraphics.beginPath();
+      this.wSkillWarningGraphics.moveTo(this.x, this.y);
+      this.wSkillWarningGraphics.lineTo(endX, endY);
+      this.wSkillWarningGraphics.strokePath();
+    }
+  }
+
+  /**
+   * Wスキルの予告線を消去
+   */
+  private hideWSkillWarning(): void {
+    if (this.wSkillWarningGraphics) {
+      this.wSkillWarningGraphics.clear();
+    }
+    this.wSkillWarningShown = false;
+  }
+
+  /**
+   * Wスキル実行更新（リング弾幕は発射後すぐ完了するので実質使用しない）
    */
   private updateWSkillExecution(delta: number): void {
     const wSkill = this.skills.get(BossSkillSlot.W);
@@ -967,92 +1095,203 @@ export class Rumia extends Boss {
 
     wSkill.executionTimeRemaining -= delta;
 
-    // ダメージ判定（1回のみ）
-    if (!this.wSkillDamageApplied && this.playerPosition) {
-      this.applyWSkillDamage();
-      this.wSkillDamageApplied = true;
-    }
-
-    // レーザー表示
-    this.drawWSkillLasers();
-
     // 実行完了
     if (wSkill.executionTimeRemaining <= 0) {
-      this.wSkillLaserGraphics?.clear();
       this.completeSkill(BossSkillSlot.W, this.currentSkillConfig.W.COOLDOWN);
       console.log('Rumia: Wスキル完了');
     }
   }
 
   /**
-   * Wスキルのダメージを適用
+   * Wスキルのリング弾幕を発射
+   * 3つのリングを異なる速度で発射
    */
-  private applyWSkillDamage(): void {
-    if (!this.playerPosition) return;
+  private fireWSkillRings(): void {
+    if (!this.bulletPool) return;
 
-    const laserWidth = this.currentSkillConfig.W.LASER_WIDTH ?? 30;
-    const laserLength = this.currentSkillConfig.W.LASER_LENGTH ?? 800;
-    const damage = this.currentSkillConfig.W.DAMAGE.BASE + this.stats.attackPower * this.currentSkillConfig.W.DAMAGE.RATIO;
+    const wConfig = this.currentSkillConfig.W;
+    const ringCount = wConfig.RING_COUNT ?? 3;
+    const bulletsPerRing = wConfig.BULLETS_PER_RING ?? 20;
+    const displayScale = wConfig.BULLET_DISPLAY_SCALE ?? 0.06;
+    const bulletColor = wConfig.BULLET_COLOR ?? 5; // 水色
+    const ringSpeeds = wConfig.RING_SPEEDS ?? [5 * 55, 10 * 55, 15 * 55];
+    const damage = wConfig.DAMAGE.BASE + this.stats.attackPower * wConfig.DAMAGE.RATIO;
 
-    // 各レーザーとプレイヤーの当たり判定
-    for (const angle of this.wSkillLaserAngles) {
-      if (this.checkLaserHit(angle, laserWidth, laserLength)) {
-        // プレイヤーにダメージを与える（GameSceneで処理される）
-        // ここではイベントを発火
-        this.scene.events.emit('playerHitByLaser', damage);
-        console.log(`Rumia W: レーザーヒット! ダメージ: ${damage}`);
-        break; // 1回のスキルで1回だけダメージ
+    // SE再生
+    AudioManager.getInstance().playSe('se_shot1');
+
+    // 各リングを発射
+    for (let ringIndex = 0; ringIndex < ringCount; ringIndex++) {
+      const speed = ringSpeeds[ringIndex] ?? ringSpeeds[0];
+
+      for (let i = 0; i < bulletsPerRing; i++) {
+        const bullet = this.bulletPool.acquire();
+        if (!bullet) continue;
+
+        // 360度を均等に分割
+        const angle = (i / bulletsPerRing) * Math.PI * 2;
+        const targetX = this.x + Math.cos(angle) * 1000;
+        const targetY = this.y + Math.sin(angle) * 1000;
+
+        // 黒縁中玉（水色）を使用
+        const kshotFrame = this.getKshotFrameByColor(bulletColor);
+        bullet.fire(
+          this.x,
+          this.y,
+          targetX,
+          targetY,
+          BulletType.ENEMY_NORMAL,
+          damage,
+          null,
+          false,
+          kshotFrame
+        );
+
+        // 表示スケール設定
+        bullet.setScale(displayScale);
+
+        // 弾速を設定
+        const body = bullet.body as Phaser.Physics.Arcade.Body;
+        if (body) {
+          body.setVelocity(
+            Math.cos(angle) * speed,
+            Math.sin(angle) * speed
+          );
+        }
       }
     }
+
+    console.log(`Rumia W: リング弾幕発射 (${ringCount}リング × ${bulletsPerRing}発)`);
   }
 
   /**
-   * レーザーとプレイヤーの当たり判定
-   */
-  private checkLaserHit(angle: number, width: number, length: number): boolean {
-    if (!this.playerPosition) return false;
-
-    // プレイヤーの相対座標
-    const relX = this.playerPosition.x - this.x;
-    const relY = this.playerPosition.y - this.y;
-
-    // レーザー方向に回転して座標変換
-    const cos = Math.cos(-angle);
-    const sin = Math.sin(-angle);
-    const localX = relX * cos - relY * sin;
-    const localY = relX * sin + relY * cos;
-
-    // ローカル座標系でのレーザー矩形との判定
-    // レーザーは原点から+X方向に伸びる
-    const halfWidth = width / 2;
-    const playerRadius = 10; // プレイヤーのヒットボックス半径
-
-    // プレイヤーがレーザー範囲内か
-    if (localX >= -playerRadius && localX <= length + playerRadius) {
-      if (Math.abs(localY) <= halfWidth + playerRadius) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  /**
-   * Eスキル使用を試みる
+   * Eスキル使用を試みる（通常弾幕3 - 移動弾幕）
+   * 移動前（1列、弾速2m/s開始）と移動後（3列、弾速3m/s開始）に弾を出現させる
    */
   private tryUseESkill(): void {
-    // スキル使用開始
+    if (!this.playerPosition) return;
+
+    // スキル使用開始（詠唱時間0）
     if (this.startSkill(BossSkillSlot.E, this.currentSkillConfig.E.CAST_TIME, 0)) {
-      // 初期化
-      this.eSkillWavesFired = 0;
-      this.eSkillWaveTimer = 0;
-      this.eSkillRingBullets = [];
-      console.log(`Rumia: Eスキル詠唱開始 - ディマーケイション`);
+      const eConfig = this.currentSkillConfig.E;
+      const moveDistance = eConfig.MOVE_DISTANCE ?? 275;
+
+      // ランダムな移動方向を決定（プレイエリア内に収まるように調整）
+      this.eSkillMoveDirection = this.calculateSafeESkillDirection();
+      this.eSkillMoveStartPos = { x: this.x, y: this.y };
+      this.eSkillMoveEndPos = {
+        x: this.x + Math.cos(this.eSkillMoveDirection) * moveDistance,
+        y: this.y + Math.sin(this.eSkillMoveDirection) * moveDistance,
+      };
+      this.eSkillMoveProgress = 0;
+      this.eSkillBulletsSpawned = 0;
+      this.eSkillBulletSpawnTimer = 0;
+      this._eSkillInterrupted = false;
+      this.eSkillPhase = 'before_move';
+
+      // 移動前フェーズの設定（1列、弾速2m/s開始）
+      this.eSkillCurrentLines = 1;
+      this.eSkillCurrentSpeedBase = 2 * 55; // 2m/s = 110px/s
+
+      // プレイヤー方向を保存（列の角度計算用）
+      this.eSkillAngleToPlayer = Phaser.Math.Angle.Between(
+        this.x, this.y,
+        this.playerPosition.x, this.playerPosition.y
+      );
+
+      // 移動前の弾位置を事前計算（ルーミアの現在位置を中心に、1列）
+      this.calculateESkillBulletPositions(this.eSkillMoveStartPos);
+
+      // 詠唱時間0なので即座に実行開始
+      const eSkill = this.skills.get(BossSkillSlot.E);
+      if (eSkill) {
+        eSkill.state = BossSkillState.EXECUTING;
+        const moveDuration = eConfig.MOVE_DURATION ?? 1000;
+        // 移動前配置 + 移動 + 移動後配置の時間
+        eSkill.executionTimeRemaining = moveDuration + 1000; // 移動後の配置時間も考慮
+      }
+
+      console.log(`Rumia: Eスキル発動 - ${this.currentSkillConfig.E.NAME}（移動方向: ${Phaser.Math.RadToDeg(this.eSkillMoveDirection).toFixed(0)}度）`);
     }
   }
 
   /**
-   * Eスキル詠唱更新
+   * Eスキルの弾発生位置を事前計算
+   * 指定位置を中心に、プレイヤー方向に垂直な方向で列を配置
+   * 列数はeSkillCurrentLinesで指定（移動前1列、移動後3列）
+   * 発射角度も事前に固定（全弾同じ方向に飛ぶ）
+   */
+  private calculateESkillBulletPositions(centerPos: { x: number; y: number }): void {
+    const eConfig = this.currentSkillConfig.E;
+    const bulletLines = this.eSkillCurrentLines; // 現在のフェーズの列数を使用
+    const bulletsPerLine = eConfig.BULLETS_PER_LINE ?? 20;
+    const lineSpacing = eConfig.LINE_SPACING ?? 55; // 列の間隔
+    const lineWidth = eConfig.LINE_WIDTH ?? 550; // 1列の横幅（10m = 550px）
+
+    // プレイヤー方向に垂直な方向（列の傾き）
+    const perpToPlayer = this.eSkillAngleToPlayer + Math.PI / 2;
+    // プレイヤー方向（列の配置方向）
+    const toPlayer = this.eSkillAngleToPlayer;
+
+    // 弾の発射角度を固定（この時点のプレイヤー方向）
+    this.eSkillBulletAngle = this.eSkillAngleToPlayer;
+
+    // 弾と弾の間隔（列方向、プレイヤー垂直方向に沿った間隔）
+    const bulletSpacing = lineWidth / (bulletsPerLine - 1);
+
+    // 列ごとの位置配列を初期化
+    this.eSkillBulletPositions = [];
+
+    for (let line = 0; line < bulletLines; line++) {
+      const linePositions: { x: number; y: number }[] = [];
+
+      // 列のオフセット（プレイヤー方向に配置、中央揃え）
+      const toPlayerOffset = (line - (bulletLines - 1) / 2) * lineSpacing;
+
+      for (let i = 0; i < bulletsPerLine; i++) {
+        // プレイヤー垂直方向に沿った位置（中心位置が中心）
+        const perpOffset = (i - (bulletsPerLine - 1) / 2) * bulletSpacing;
+
+        // 弾の配置位置を計算
+        const posX = centerPos.x + Math.cos(perpToPlayer) * perpOffset + Math.cos(toPlayer) * toPlayerOffset;
+        const posY = centerPos.y + Math.sin(perpToPlayer) * perpOffset + Math.sin(toPlayer) * toPlayerOffset;
+
+        linePositions.push({ x: posX, y: posY });
+      }
+
+      this.eSkillBulletPositions.push(linePositions);
+    }
+  }
+
+  /**
+   * プレイエリア内に収まる安全な移動方向を計算
+   */
+  private calculateSafeESkillDirection(): number {
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const moveDistance = this.currentSkillConfig.E.MOVE_DISTANCE ?? 137.5;
+    const margin = this.stats.hitboxRadius + 20;
+
+    // 最大10回試行
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const angle = Math.random() * Math.PI * 2;
+      const targetX = this.x + Math.cos(angle) * moveDistance;
+      const targetY = this.y + Math.sin(angle) * moveDistance;
+
+      // プレイエリア内に収まるか確認
+      if (targetX >= X + margin && targetX <= X + WIDTH - margin &&
+          targetY >= Y + margin && targetY <= Y + HEIGHT - margin) {
+        return angle;
+      }
+    }
+
+    // 安全な方向が見つからない場合、中央方向に移動
+    const centerX = X + WIDTH / 2;
+    const centerY = Y + HEIGHT / 3;
+    return Math.atan2(centerY - this.y, centerX - this.x);
+  }
+
+  /**
+   * Eスキル詠唱更新（詠唱時間0のため通常は呼ばれない）
    */
   private updateESkillCasting(delta: number): void {
     const castComplete = this.updateSkillCasting(BossSkillSlot.E, delta);
@@ -1062,139 +1301,195 @@ export class Rumia extends Boss {
       const eSkill = this.skills.get(BossSkillSlot.E);
       if (eSkill) {
         eSkill.state = BossSkillState.EXECUTING;
-        // 実行時間 = 波の数 × 波の間隔 + 弾が画面外に出るまでの時間
-        const waveCount = this.currentSkillConfig.E.WAVE_COUNT ?? 3;
-        const waveInterval = this.currentSkillConfig.E.WAVE_INTERVAL ?? 400;
-        eSkill.executionTimeRemaining = waveCount * waveInterval + 3000;
-        this.eSkillWaveTimer = waveInterval; // すぐに最初の波を発射
-        console.log('Rumia: Eスキル発射開始!');
+        const moveDuration = this.currentSkillConfig.E.MOVE_DURATION ?? 1000;
+        eSkill.executionTimeRemaining = moveDuration;
+        console.log('Rumia: Eスキル実行開始!');
       }
     }
   }
 
   /**
-   * Eスキル実行更新（拡大するリング弾幕）
+   * Eスキル実行更新（移動前配置 → 移動 → 移動後配置）
    */
-  private updateESkillExecution(time: number, delta: number): void {
+  private updateESkillExecution(_time: number, delta: number): void {
     const eSkill = this.skills.get(BossSkillSlot.E);
     if (!eSkill) return;
 
-    const waveCount = this.currentSkillConfig.E.WAVE_COUNT ?? 3;
-    const waveInterval = this.currentSkillConfig.E.WAVE_INTERVAL ?? 400;
+    const eConfig = this.currentSkillConfig.E;
+    const moveDuration = eConfig.MOVE_DURATION ?? 1000;
+    const bulletSpawnInterval = eConfig.BULLET_SPAWN_INTERVAL ?? 50;
+    const bulletsPerLine = eConfig.BULLETS_PER_LINE ?? 20;
 
-    // 波タイマー更新
-    this.eSkillWaveTimer += delta;
-
-    // 新しい波を発射
-    if (this.eSkillWavesFired < waveCount &&
-        this.eSkillWaveTimer >= waveInterval) {
-      this.fireESkillWave(time);
-      this.eSkillWavesFired++;
-      this.eSkillWaveTimer = 0;
+    // CC中断チェック（ブレイク）
+    if (eConfig.INTERRUPTIBLE && this.hasStatusEffect(StatusEffectType.STUN)) {
+      this._eSkillInterrupted = true;
+      this.completeSkill(BossSkillSlot.E, eConfig.COOLDOWN);
+      console.log('Rumia: Eスキル中断（CC - ブレイク）');
+      return;
     }
-
-    // リング弾の位置を更新（拡大）
-    this.updateESkillBullets(time);
 
     // 実行時間更新
     eSkill.executionTimeRemaining -= delta;
 
-    // 全波発射完了かつ実行時間終了
-    if (eSkill.executionTimeRemaining <= 0) {
-      this.completeSkill(BossSkillSlot.E, this.currentSkillConfig.E.COOLDOWN);
-      this.eSkillRingBullets = [];
-      console.log('Rumia: Eスキル完了');
+    // フェーズごとの処理
+    switch (this.eSkillPhase) {
+      case 'before_move':
+        // 移動前の弾配置
+        this.eSkillBulletSpawnTimer += delta;
+        while (this.eSkillBulletSpawnTimer >= bulletSpawnInterval &&
+               this.eSkillBulletsSpawned < bulletsPerLine) {
+          this.spawnESkillBullets(this.eSkillBulletsSpawned);
+          this.eSkillBulletsSpawned++;
+          this.eSkillBulletSpawnTimer -= bulletSpawnInterval;
+        }
+
+        // 全弾配置完了 → 移動フェーズへ
+        if (this.eSkillBulletsSpawned >= bulletsPerLine) {
+          this.eSkillPhase = 'moving';
+          this.eSkillMoveProgress = 0;
+          // 移動開始時にアニメーションを即座に切り替え
+          this.play('rumia_move_cast');
+          this.currentAnimState = 'move_cast';
+          // FlipXを正しい方向に設定（0〜360度対応）
+          let angleDeg = Phaser.Math.RadToDeg(this.eSkillMoveDirection);
+          // 0〜360度を-180〜180度に正規化
+          if (angleDeg > 180) angleDeg -= 360;
+          const shouldFlipX = angleDeg > 90 || angleDeg < -90;
+          this.setFlipX(shouldFlipX);
+          this.setRotation(0);
+          console.log(`Rumia: Eスキル - 移動開始 (角度: ${angleDeg.toFixed(1)}度, FlipX: ${shouldFlipX})`);
+        }
+        break;
+
+      case 'moving':
+        // 移動処理
+        this.eSkillMoveProgress += delta / moveDuration;
+        this.eSkillMoveProgress = Math.min(this.eSkillMoveProgress, 1);
+
+        // 位置を更新（線形補間）
+        const newX = this.eSkillMoveStartPos.x + (this.eSkillMoveEndPos.x - this.eSkillMoveStartPos.x) * this.eSkillMoveProgress;
+        const newY = this.eSkillMoveStartPos.y + (this.eSkillMoveEndPos.y - this.eSkillMoveStartPos.y) * this.eSkillMoveProgress;
+        this.setPosition(newX, newY);
+
+        // 移動完了 → 移動後配置フェーズへ
+        if (this.eSkillMoveProgress >= 1) {
+          this.eSkillPhase = 'after_move';
+          this.eSkillBulletsSpawned = 0;
+          this.eSkillBulletSpawnTimer = 0;
+
+          // 移動後フェーズの設定（3列、弾速3m/s開始）
+          this.eSkillCurrentLines = 3;
+          this.eSkillCurrentSpeedBase = 3 * 55; // 3m/s = 165px/s
+
+          // 移動後のプレイヤー方向を再計算（現在のプレイヤー位置に向ける）
+          if (this.playerPosition) {
+            this.eSkillAngleToPlayer = Phaser.Math.Angle.Between(
+              this.eSkillMoveEndPos.x, this.eSkillMoveEndPos.y,
+              this.playerPosition.x, this.playerPosition.y
+            );
+          }
+          // 移動後の弾位置を計算（移動終了位置を中心に、3列で）
+          this.calculateESkillBulletPositions(this.eSkillMoveEndPos);
+          console.log('Rumia: Eスキル - 移動後配置開始（3列）');
+        }
+        break;
+
+      case 'after_move':
+        // 移動後の弾配置
+        this.eSkillBulletSpawnTimer += delta;
+        while (this.eSkillBulletSpawnTimer >= bulletSpawnInterval &&
+               this.eSkillBulletsSpawned < bulletsPerLine) {
+          this.spawnESkillBullets(this.eSkillBulletsSpawned);
+          this.eSkillBulletsSpawned++;
+          this.eSkillBulletSpawnTimer -= bulletSpawnInterval;
+        }
+
+        // 全弾配置完了 → スキル終了
+        if (this.eSkillBulletsSpawned >= bulletsPerLine) {
+          this.completeSkill(BossSkillSlot.E, eConfig.COOLDOWN);
+          console.log('Rumia: Eスキル完了');
+        }
+        break;
     }
   }
 
   /**
-   * Eスキルの波を発射
-   * kShotのPURPLE大丸弾を使用
+   * Eスキルの弾を配置（事前計算した位置から発射）
+   * 弾は事前計算した角度に向けて発射（全弾同じ方向）
+   * 弾速: サイン曲線で滑らかな山型（移動前2m/s→8m/s→2m/s、移動後3m/s→8m/s→3m/s）
    */
-  private fireESkillWave(time: number): void {
+  private spawnESkillBullets(bulletIndex: number): void {
     if (!this.bulletPool) return;
+    if (this.eSkillBulletPositions.length === 0) return;
 
-    const bulletsPerRing = this.currentSkillConfig.E.BULLETS_PER_RING ?? 16;
-    const initialRadius = this.currentSkillConfig.E.INITIAL_RADIUS ?? 30;
-    const damage = this.currentSkillConfig.E.DAMAGE.BASE + this.stats.attackPower * this.currentSkillConfig.E.DAMAGE.RATIO;
+    const eConfig = this.currentSkillConfig.E;
+    const bulletColor = eConfig.BULLET_COLOR ?? 12; // 輪弾の緑
+    const displayScale = eConfig.BULLET_DISPLAY_SCALE ?? 0.1;
+    const speedBase = this.eSkillCurrentSpeedBase; // フェーズごとの基本弾速を使用
+    const bulletsPerLine = eConfig.BULLETS_PER_LINE ?? 20;
+    const speedMax = 8 * 55; // 最大弾速 8m/s = 440px/s
+    const damage = eConfig.DAMAGE.BASE + this.stats.attackPower * eConfig.DAMAGE.RATIO;
 
-    for (let i = 0; i < bulletsPerRing; i++) {
-      const angle = (i / bulletsPerRing) * Math.PI * 2;
+    // 弾速計算（サイン曲線で滑らかな弧）
+    // 0〜19のインデックスを0〜πにマッピングし、sin()で滑らかな山型を作る
+    const t = bulletIndex / (bulletsPerLine - 1); // 0〜1に正規化
+    const sinValue = Math.sin(t * Math.PI); // 0→1→0の滑らかな曲線
+    const bulletSpeed = speedBase + (speedMax - speedBase) * sinValue;
+
+    // プレイエリアの境界
+    const { X: areaX, Y: areaY, WIDTH: areaW, HEIGHT: areaH } = GAME_CONFIG.PLAY_AREA;
+    const margin = 10; // 境界からのマージン
+
+    // 各列に1発ずつ配置（事前計算した位置を使用）
+    for (let line = 0; line < this.eSkillBulletPositions.length; line++) {
+      const linePositions = this.eSkillBulletPositions[line];
+      if (bulletIndex >= linePositions.length) continue;
+
+      // 事前計算した位置を使用
+      const spawnPos = linePositions[bulletIndex];
+
+      // プレイエリア外の弾はスキップ
+      if (spawnPos.x < areaX + margin || spawnPos.x > areaX + areaW - margin ||
+          spawnPos.y < areaY + margin || spawnPos.y > areaY + areaH - margin) {
+        continue;
+      }
 
       const bullet = this.bulletPool.acquire();
       if (!bullet) continue;
 
-      // 初期位置（ルーミアの周囲、初期半径の位置）
-      const initialX = this.x + Math.cos(angle) * initialRadius;
-      const initialY = this.y + Math.sin(angle) * initialRadius;
+      // 事前計算した角度を使用（全弾同じ方向に飛ぶ）
+      const targetX = spawnPos.x + Math.cos(this.eSkillBulletAngle) * 1000;
+      const targetY = spawnPos.y + Math.sin(this.eSkillBulletAngle) * 1000;
 
-      // kShotのPURPLE大丸弾を使用
+      // 輪弾（緑）を使用
       bullet.fire(
-        initialX,
-        initialY,
-        initialX,
-        initialY,
+        spawnPos.x,
+        spawnPos.y,
+        targetX,
+        targetY,
         BulletType.ENEMY_NORMAL,
         damage,
         null,
         false,
-        KSHOT.MEDIUM_BALL.MAGENTA
+        bulletColor // KSHOT.RINDAN.GREEN = 12
       );
 
-      // 弾情報を保存
-      this.eSkillRingBullets.push({
-        bullet,
-        angle,
-        waveIndex: this.eSkillWavesFired,
-        spawnTime: time,
-      });
+      // 表示スケール設定
+      bullet.setScale(displayScale);
+
+      // 弾速を設定（事前計算した角度を使用）
+      const body = bullet.body as Phaser.Physics.Arcade.Body;
+      if (body) {
+        body.setVelocity(
+          Math.cos(this.eSkillBulletAngle) * bulletSpeed,
+          Math.sin(this.eSkillBulletAngle) * bulletSpeed
+        );
+      }
     }
 
-    console.log(`Rumia E: 波${this.eSkillWavesFired + 1}発射 (${bulletsPerRing}発)`);
-  }
-
-  /**
-   * Eスキルのリング弾を更新（拡大 + 回転）
-   */
-  private updateESkillBullets(time: number): void {
-    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
-    const initialRadius = this.currentSkillConfig.E.INITIAL_RADIUS ?? 30;
-    const expansionSpeed = this.currentSkillConfig.E.EXPANSION_SPEED ?? 200;
-    const rotationSpeed = this.currentSkillConfig.E.ROTATION_SPEED ?? 0.8;
-
-    for (let i = this.eSkillRingBullets.length - 1; i >= 0; i--) {
-      const info = this.eSkillRingBullets[i];
-      const bullet = info.bullet;
-
-      if (!bullet || !bullet.active) {
-        this.eSkillRingBullets.splice(i, 1);
-        continue;
-      }
-
-      // 経過時間から現在の半径を計算
-      const elapsed = time - info.spawnTime;
-      const elapsedSec = elapsed / 1000;
-      const currentRadius = initialRadius + (expansionSpeed * elapsedSec);
-
-      // 回転角度を計算（波ごとに交互に時計回り/反時計回り）
-      // 偶数波: 時計回り（正）、奇数波: 反時計回り（負）
-      const rotationDirection = info.waveIndex % 2 === 0 ? 1 : -1;
-      const rotationAngle = rotationSpeed * elapsedSec * rotationDirection;
-      const currentAngle = info.angle + rotationAngle;
-
-      // 新しい位置を計算（ルーミアの位置を中心に拡大 + 回転）
-      const newX = this.x + Math.cos(currentAngle) * currentRadius;
-      const newY = this.y + Math.sin(currentAngle) * currentRadius;
-
-      // 弾の位置を更新
-      bullet.setPosition(newX, newY);
-
-      // プレイエリア外に出たら削除
-      if (newX < X - 50 || newX > X + WIDTH + 50 ||
-          newY < Y - 50 || newY > Y + HEIGHT + 50) {
-        bullet.deactivate();
-        this.eSkillRingBullets.splice(i, 1);
-      }
+    if (bulletIndex === 0) {
+      // SE再生（最初の弾配置時のみ）
+      AudioManager.getInstance().playSe('se_shot1');
     }
   }
 
@@ -1769,31 +2064,6 @@ export class Rumia extends Boss {
   }
 
   /**
-   * Wスキルのレーザーを描画
-   */
-  private drawWSkillLasers(): void {
-    if (!this.wSkillLaserGraphics) return;
-
-    this.wSkillLaserGraphics.clear();
-
-    const laserWidth = this.currentSkillConfig.W.LASER_WIDTH ?? 30;
-    const laserLength = this.currentSkillConfig.W.LASER_LENGTH ?? 800;
-
-    // レーザー本体（赤）
-    this.wSkillLaserGraphics.fillStyle(0xff0000, 0.8);
-
-    for (const angle of this.wSkillLaserAngles) {
-      this.drawLaserRect(angle, laserWidth, laserLength, true);
-    }
-
-    // レーザー輪郭（白）
-    this.wSkillLaserGraphics.lineStyle(2, 0xffffff, 1);
-    for (const angle of this.wSkillLaserAngles) {
-      this.drawLaserRect(angle, laserWidth, laserLength, false);
-    }
-  }
-
-  /**
    * 線をプレイエリア内にクリップ（Cohen-Sutherland風）
    */
   private clipLineToPlayArea(
@@ -1844,48 +2114,6 @@ export class Rumia extends Boss {
   }
 
   /**
-   * レーザー矩形を描画（プレイエリア内にクリップ）
-   */
-  private drawLaserRect(angle: number, width: number, length: number, fill: boolean): void {
-    if (!this.wSkillLaserGraphics) return;
-
-    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
-    const cos = Math.cos(angle);
-    const sin = Math.sin(angle);
-    const halfWidth = width / 2;
-
-    // 矩形の4頂点を計算（レーザーは進行方向に伸びる）
-    const perpX = -sin * halfWidth;
-    const perpY = cos * halfWidth;
-
-    const corners = [
-      { x: this.x + perpX, y: this.y + perpY },
-      { x: this.x - perpX, y: this.y - perpY },
-      { x: this.x + cos * length - perpX, y: this.y + sin * length - perpY },
-      { x: this.x + cos * length + perpX, y: this.y + sin * length + perpY },
-    ];
-
-    // プレイエリア内にクリップ
-    const clippedCorners = corners.map(c => ({
-      x: Phaser.Math.Clamp(c.x, X, X + WIDTH),
-      y: Phaser.Math.Clamp(c.y, Y, Y + HEIGHT),
-    }));
-
-    this.wSkillLaserGraphics.beginPath();
-    this.wSkillLaserGraphics.moveTo(clippedCorners[0].x, clippedCorners[0].y);
-    this.wSkillLaserGraphics.lineTo(clippedCorners[1].x, clippedCorners[1].y);
-    this.wSkillLaserGraphics.lineTo(clippedCorners[2].x, clippedCorners[2].y);
-    this.wSkillLaserGraphics.lineTo(clippedCorners[3].x, clippedCorners[3].y);
-    this.wSkillLaserGraphics.closePath();
-
-    if (fill) {
-      this.wSkillLaserGraphics.fillPath();
-    } else {
-      this.wSkillLaserGraphics.strokePath();
-    }
-  }
-
-  /**
    * 予告線を描画
    */
   protected drawWarningLines(): void {
@@ -1894,7 +2122,6 @@ export class Rumia extends Boss {
     this.warningGraphics.clear();
 
     const qSkill = this.skills.get(BossSkillSlot.Q);
-    const wSkill = this.skills.get(BossSkillSlot.W);
 
     // Qスキル詠唱中/実行中の予告線（通常弾幕1）
     const isCastingOrExecuting = qSkill && (
@@ -1921,23 +2148,6 @@ export class Rumia extends Boss {
 
         const endX = this.x + Math.cos(line.angle) * warningLineLength;
         const endY = this.y + Math.sin(line.angle) * warningLineLength;
-
-        // プレイエリア内にクリップ
-        const clipped = this.clipLineToPlayArea(this.x, this.y, endX, endY);
-        if (clipped) {
-          this.warningGraphics.lineBetween(clipped.x1, clipped.y1, clipped.x2, clipped.y2);
-        }
-      }
-    }
-
-    // Wスキル詠唱中の予告線（レーザー位置）- ノーマルフェーズのみ
-    const laserLength = this.currentSkillConfig.W.LASER_LENGTH;
-    if (wSkill && wSkill.state === BossSkillState.CASTING && laserLength) {
-      this.warningGraphics.lineStyle(3, 0xff6600, 0.5);
-
-      for (const angle of this.wSkillLaserAngles) {
-        const endX = this.x + Math.cos(angle) * laserLength;
-        const endY = this.y + Math.sin(angle) * laserLength;
 
         // プレイエリア内にクリップ
         const clipped = this.clipLineToPlayArea(this.x, this.y, endX, endY);
@@ -2006,7 +2216,7 @@ export class Rumia extends Boss {
     this.play('rumia_idle');
     this.clearTint();
     // スケール調整（704x800は大きいので縮小）
-    this.setScale(0.2);
+    this.setScale(0.16);
 
     // 最初のスキル発動までの遅延
     const qSkill = this.skills.get(BossSkillSlot.Q);
@@ -2038,15 +2248,13 @@ export class Rumia extends Boss {
     this.rSkillBulletFireTimer = 0;
     this.rSkillInvincibilityRemaining = 0;
 
-    // レーザーグラフィックスをクリア
-    this.wSkillLaserGraphics?.clear();
-    this.wSkillLaserAngles = [];
-    this.wSkillDamageApplied = false;
-
-    // Eスキルの弾をクリア
-    this.eSkillRingBullets = [];
-    this.eSkillWavesFired = 0;
-    this.eSkillWaveTimer = 0;
+    // Eスキル状態をクリア
+    this.eSkillMoveDirection = 0;
+    this.eSkillMoveStartPos = { x: 0, y: 0 };
+    this.eSkillMoveProgress = 0;
+    this.eSkillBulletsSpawned = 0;
+    this.eSkillBulletSpawnTimer = 0;
+    this._eSkillInterrupted = false;
   }
 
   /**
@@ -2103,14 +2311,5 @@ export class Rumia extends Boss {
    */
   deactivate(): void {
     super.deactivate();
-    this.wSkillLaserGraphics?.clear();
-  }
-
-  /**
-   * 破棄
-   */
-  destroy(fromScene?: boolean): void {
-    this.wSkillLaserGraphics?.destroy();
-    super.destroy(fromScene);
   }
 }
