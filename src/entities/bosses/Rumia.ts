@@ -6,6 +6,7 @@ import {
   BulletType,
   BossPhaseType,
   StatusEffectType,
+  StatusEffect,
 } from '@/types';
 import { BOSS_CONFIG, GAME_CONFIG } from '@/config/GameConfig';
 import { KSHOT } from '../Bullet';
@@ -19,14 +20,25 @@ type PhaseSkillsConfig = {
     CAST_TIME: number;
     COOLDOWN: number;
     DAMAGE: { BASE: number; RATIO: number };
-    WAY_COUNT: number;
-    ANGLE_SPREAD: number;
-    BULLETS_PER_WAY: number;
-    BULLET_INTERVAL: number;
+    // ノーマルフェーズ用（通常弾幕1）
+    WARNING_LINE_COUNT?: number;       // 予告線の本数
+    WARNING_LINE_INTERVAL?: number;    // 予告線出現間隔（ms）
+    WARNING_TO_FIRE_DELAY?: number;    // 予告線から弾発射までの遅延（ms）
+    BULLET_ROWS?: number;              // 縦方向の弾数
+    BULLET_ROW_SPACING?: number;       // 縦方向の弾間隔（px）
+    BULLET_COL_SPACING?: number;       // 横方向の弾間隔（px）
+    BULLET_DISPLAY_SCALE?: number;     // 弾の表示スケール
+    INTERRUPTIBLE?: boolean;           // CC中断可能フラグ
+    // スペルカード用（12方向弾）
+    WAY_COUNT?: number;
+    ANGLE_SPREAD?: number;
+    BULLETS_PER_WAY?: number;
+    BULLET_INTERVAL?: number;
+    WARNING_LINE_LENGTH?: number;
+    WAY_DELAY?: number;
+    // 共通
     BULLET_SPEED: number;
-    BULLET_RADIUS: number;
-    WARNING_LINE_LENGTH: number;
-    WAY_DELAY: number;
+    BULLET_RADIUS?: number;
     BULLET_COLOR?: number;  // 弾の色（オプション）
   };
   W: {
@@ -89,13 +101,24 @@ export class Rumia extends Boss {
   // 現在のフェーズのスキル設定
   private currentSkillConfig: PhaseSkillsConfig = CONFIG.PHASE_0_SKILLS as PhaseSkillsConfig;
 
-  // Qスキル用
-  private qSkillLastBulletTime: number = 0;
-  private qSkillWayAngles: number[] = [];
-  private qSkillActiveWays: number = 0;        // 現在アクティブなway数（順次増加）
-  private qSkillWayTimer: number = 0;          // way追加タイマー
-  private qSkillFiringWayIndex: number = 0;    // 現在発射中のwayインデックス
-  private qSkillBulletsPerWay: number[] = [];  // 各wayの発射済み弾数
+  // Qスキル用（通常弾幕1）
+  private qSkillWarningLines: Array<{
+    angle: number;           // 予告線の角度（ラジアン）
+    createdTime: number;     // 予告線作成時間
+    fired: boolean;          // 弾幕発射済みか
+    lineIndex: number;       // 何本目の予告線か（0-indexed）
+  }> = [];
+  private qSkillNextWarningTime: number = 0;   // 次の予告線出現時間
+  private qSkillWarningLineCount: number = 0;  // 現在の予告線数
+  private _qSkillInterrupted: boolean = false;  // CCで中断されたか（Breakシステム用）
+
+  /** Qスキルが中断されたかどうか（Breakシステム用） */
+  get qSkillWasInterrupted(): boolean {
+    return this._qSkillInterrupted;
+  }
+
+  // アニメーション状態
+  private currentAnimState: 'idle' | 'cast' | 'move' = 'idle';
 
   // Wスキル用
   private wSkillLaserAngles: number[] = [];
@@ -142,8 +165,10 @@ export class Rumia extends Boss {
     // 初期スキル設定
     this.currentSkillConfig = CONFIG.PHASE_0_SKILLS;
 
-    // ルーミアの色（暗い紫）
-    this.setTint(0x660066);
+    // ルーミアのコマアニメーションを設定
+    this.setTexture('coma_rumia_idle');
+    this.play('rumia_idle');
+    this.clearTint();
 
     // Wスキル用レーザーグラフィックス
     this.wSkillLaserGraphics = scene.add.graphics();
@@ -257,6 +282,73 @@ export class Rumia extends Boss {
       this.updateSpellCardAI(time, delta);
     } else {
       this.updateNormalPhaseAI(time, delta);
+    }
+
+    // アニメーション状態を更新
+    this.updateAnimation();
+  }
+
+  /**
+   * アニメーション状態を更新
+   * 詠唱中は詠唱アニメーション、移動中は移動アニメーション、それ以外は待機アニメーション
+   */
+  private updateAnimation(): void {
+    const qSkill = this.skills.get(BossSkillSlot.Q);
+    const wSkill = this.skills.get(BossSkillSlot.W);
+    const eSkill = this.skills.get(BossSkillSlot.E);
+    const rSkill = this.skills.get(BossSkillSlot.R);
+
+    // いずれかのスキルが詠唱中かどうか
+    const isCasting =
+      qSkill?.state === BossSkillState.CASTING ||
+      wSkill?.state === BossSkillState.CASTING ||
+      eSkill?.state === BossSkillState.CASTING ||
+      rSkill?.state === BossSkillState.CASTING;
+
+    // 移動中かどうか（速度がある程度あるか）
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    const isMoving = body && (Math.abs(body.velocity.x) > 10 || Math.abs(body.velocity.y) > 10);
+
+    if (isCasting && this.currentAnimState !== 'cast') {
+      // 詠唱アニメーションに切り替え（最優先）
+      this.play('rumia_cast');
+      this.currentAnimState = 'cast';
+      // 詠唱中は回転・反転をリセット
+      this.setRotation(0);
+      this.setFlipX(false);
+    } else if (!isCasting && isMoving) {
+      // 移動アニメーションに切り替え
+      if (this.currentAnimState !== 'move') {
+        this.play('rumia_move');
+        this.currentAnimState = 'move';
+      }
+      // 移動方向に合わせて回転・反転
+      this.updateMoveDirection(body.velocity.x, body.velocity.y);
+    } else if (!isCasting && !isMoving && this.currentAnimState !== 'idle') {
+      // 待機アニメーションに切り替え
+      this.play('rumia_idle');
+      this.currentAnimState = 'idle';
+      // 待機中は回転・反転をリセット
+      this.setRotation(0);
+      this.setFlipX(false);
+    }
+  }
+
+  /**
+   * 移動方向に合わせてスプライトを回転・反転
+   */
+  private updateMoveDirection(vx: number, vy: number): void {
+    const angle = Math.atan2(vy, vx); // ラジアン
+    const angleDeg = Phaser.Math.RadToDeg(angle);
+
+    // 左向き（90度〜270度、つまり|角度| > 90度）の場合は反転
+    if (Math.abs(angleDeg) > 90) {
+      this.setFlipX(true);
+      // 反転時は角度を反転（上下が逆にならないように）
+      this.setRotation(angle + Math.PI);
+    } else {
+      this.setFlipX(false);
+      this.setRotation(angle);
     }
   }
 
@@ -568,7 +660,8 @@ export class Rumia extends Boss {
   }
 
   /**
-   * Qスキル使用を試みる
+   * Qスキル使用を試みる（通常弾幕1）
+   * 7本の予告線が0.1秒間隔で出現し、各予告線から0.5秒後に弾幕発射
    */
   private tryUseQSkill(): void {
     if (!this.playerPosition) return;
@@ -581,149 +674,227 @@ export class Rumia extends Boss {
       this.playerPosition.y
     );
 
-    // スキル使用開始（詠唱時間 = way数 × way遅延）
-    const totalCastTime = this.currentSkillConfig.Q.WAY_COUNT * this.currentSkillConfig.Q.WAY_DELAY;
-    if (this.startSkill(BossSkillSlot.Q, totalCastTime, angleToPlayer)) {
-      // 7way弾の角度を計算
-      this.calculateQSkillAngles(angleToPlayer);
-      // 順次表示用の初期化
-      this.qSkillActiveWays = 0;
-      this.qSkillWayTimer = 0;
-      this.qSkillBulletsPerWay = new Array(this.currentSkillConfig.Q.WAY_COUNT).fill(0);
-      console.log(`Rumia: Qスキル詠唱開始 - 目標角度: ${Phaser.Math.RadToDeg(angleToPlayer).toFixed(1)}°`);
+    // スキル使用開始
+    const castTime = this.currentSkillConfig.Q.CAST_TIME;
+    if (this.startSkill(BossSkillSlot.Q, castTime, angleToPlayer)) {
+      // 予告線システム初期化
+      this.qSkillWarningLines = [];
+      this.qSkillNextWarningTime = 0;
+      this.qSkillWarningLineCount = 0;
+      this._qSkillInterrupted = false;
+      console.log(`Rumia: Qスキル詠唱開始 - ${this.currentSkillConfig.Q.NAME}`);
     }
   }
 
   /**
-   * 7way弾の角度を計算
+   * 予告線番号に応じた横方向の弾数を返す
+   * 1本目=1列, 2-3本目=2列, 4-6本目=3列, 7本目=4列
    */
-  private calculateQSkillAngles(centerAngle: number): void {
-    this.qSkillWayAngles = [];
-
-    const spreadRad = Phaser.Math.DegToRad(this.currentSkillConfig.Q.ANGLE_SPREAD);
-    const wayCount = this.currentSkillConfig.Q.WAY_COUNT;
-    const halfWays = Math.floor(wayCount / 2);
-
-    for (let i = 0; i < wayCount; i++) {
-      // -halfWays から +halfWays までの角度オフセット
-      const offset = (i - halfWays) * (spreadRad * 2 / (wayCount - 1));
-      this.qSkillWayAngles.push(centerAngle + offset);
-    }
+  private getQSkillBulletColumns(lineIndex: number): number {
+    if (lineIndex === 0) return 1;           // 1本目: 1列
+    if (lineIndex <= 2) return 2;            // 2-3本目: 2列
+    if (lineIndex <= 5) return 3;            // 4-6本目: 3列
+    return 4;                                 // 7本目: 4列
   }
 
   /**
-   * Qスキル詠唱更新（予告線を順次表示）
+   * Qスキル詠唱更新（予告線を順次生成）
    */
   private updateQSkillCasting(delta: number): void {
     const qSkill = this.skills.get(BossSkillSlot.Q);
     if (!qSkill) return;
 
-    // wayタイマー更新
-    this.qSkillWayTimer += delta;
+    // CC中断チェック
+    if (this.currentSkillConfig.Q.INTERRUPTIBLE && this.hasStatusEffect(StatusEffectType.STUN)) {
+      this._qSkillInterrupted = true;
+      this.completeSkill(BossSkillSlot.Q, this.currentSkillConfig.Q.COOLDOWN);
+      console.log('Rumia: Qスキル中断（CC）');
+      return;
+    }
 
-    // 新しいwayをアクティブにする
-    const wayDelay = this.currentSkillConfig.Q.WAY_DELAY;
-    while (this.qSkillActiveWays < this.currentSkillConfig.Q.WAY_COUNT &&
-           this.qSkillWayTimer >= wayDelay) {
-      this.qSkillActiveWays++;
-      this.qSkillWayTimer -= wayDelay;
+    const warningLineCount = this.currentSkillConfig.Q.WARNING_LINE_COUNT ?? 7;
+    const warningLineInterval = this.currentSkillConfig.Q.WARNING_LINE_INTERVAL ?? 100;
+
+    // 予告線生成タイマー更新
+    this.qSkillNextWarningTime += delta;
+
+    // 新しい予告線を生成
+    while (this.qSkillWarningLineCount < warningLineCount &&
+           this.qSkillNextWarningTime >= warningLineInterval) {
+      // プレイヤー方向に予告線を追加
+      if (this.playerPosition) {
+        const angleToPlayer = Phaser.Math.Angle.Between(
+          this.x, this.y,
+          this.playerPosition.x, this.playerPosition.y
+        );
+
+        this.qSkillWarningLines.push({
+          angle: angleToPlayer,
+          createdTime: this.scene.time.now,
+          fired: false,
+          lineIndex: this.qSkillWarningLineCount,
+        });
+      }
+
+      this.qSkillWarningLineCount++;
+      this.qSkillNextWarningTime -= warningLineInterval;
     }
 
     // 詠唱時間更新
     qSkill.castTimeRemaining -= delta;
     if (qSkill.castTimeRemaining <= 0) {
-      // 詠唱完了 → 発射開始
+      // 詠唱完了 → 実行開始
       qSkill.state = BossSkillState.EXECUTING;
-      this.qSkillFiringWayIndex = 0;
-      this.qSkillWayTimer = 0;
-      this.qSkillLastBulletTime = 0;
-      console.log('Rumia: Qスキル発射開始!');
+      // 実行時間 = 最後の予告線から弾発射までの遅延 + 弾が飛ぶ時間
+      const fireDelay = this.currentSkillConfig.Q.WARNING_TO_FIRE_DELAY ?? 500;
+      qSkill.executionTimeRemaining = fireDelay + 2000;
+      console.log('Rumia: Qスキル実行開始!');
     }
   }
 
   /**
-   * Qスキル実行更新（弾幕を順次発射）
+   * Qスキル実行更新（予告線から弾幕を発射）
    */
-  private updateQSkillExecution(time: number, delta: number): void {
+  private updateQSkillExecution(_time: number, delta: number): void {
     if (!this.bulletPool) return;
 
-    const wayCount = this.currentSkillConfig.Q.WAY_COUNT;
-    const bulletsPerWay = this.currentSkillConfig.Q.BULLETS_PER_WAY;
-    const bulletInterval = this.currentSkillConfig.Q.BULLET_INTERVAL;
-    const wayDelay = this.currentSkillConfig.Q.WAY_DELAY;
+    const qSkill = this.skills.get(BossSkillSlot.Q);
+    if (!qSkill) return;
 
-    // wayタイマー更新
-    this.qSkillWayTimer += delta;
-
-    // 新しいwayの発射を開始
-    while (this.qSkillFiringWayIndex < wayCount &&
-           this.qSkillWayTimer >= wayDelay) {
-      this.qSkillFiringWayIndex++;
-      this.qSkillWayTimer -= wayDelay;
-    }
-
-    // 発射間隔チェック
-    if (time - this.qSkillLastBulletTime < bulletInterval) {
+    // CC中断チェック
+    if (this.currentSkillConfig.Q.INTERRUPTIBLE && this.hasStatusEffect(StatusEffectType.STUN)) {
+      this._qSkillInterrupted = true;
+      this.completeSkill(BossSkillSlot.Q, this.currentSkillConfig.Q.COOLDOWN);
+      console.log('Rumia: Qスキル中断（CC）');
       return;
     }
 
-    // アクティブな各wayから1発ずつ発射
-    let allComplete = true;
-    for (let i = 0; i < this.qSkillFiringWayIndex && i < wayCount; i++) {
-      if (this.qSkillBulletsPerWay[i] < bulletsPerWay) {
-        this.fireBullet(this.qSkillWayAngles[i]);
-        this.qSkillBulletsPerWay[i]++;
-        allComplete = false;
+    const currentTime = this.scene.time.now;
+    const fireDelay = this.currentSkillConfig.Q.WARNING_TO_FIRE_DELAY ?? 500;
+
+    // 各予告線から弾幕を発射
+    for (const line of this.qSkillWarningLines) {
+      if (line.fired) continue;
+
+      // 発射タイミングチェック
+      if (currentTime - line.createdTime >= fireDelay) {
+        this.fireQSkillBullets(line.angle, line.lineIndex);
+        line.fired = true;
       }
     }
 
-    this.qSkillLastBulletTime = time;
+    // 実行時間更新
+    qSkill.executionTimeRemaining -= delta;
 
-    // 全弾発射完了チェック
-    if (allComplete && this.qSkillFiringWayIndex >= wayCount) {
+    // 全予告線から発射完了かつ実行時間終了
+    const allFired = this.qSkillWarningLines.every(line => line.fired);
+    if (allFired && qSkill.executionTimeRemaining <= 0) {
       this.completeSkill(BossSkillSlot.Q, this.currentSkillConfig.Q.COOLDOWN);
+      this.qSkillWarningLines = [];
       console.log('Rumia: Qスキル完了');
     }
   }
 
   /**
-   * 弾を発射（ノーマルフェーズQスキル用）
-   * kShotのVIOLET小丸弾を使用
+   * Qスキルの弾幕を発射（予告線1本分）
+   * 縦10発 × 横N列（予告線番号で変動）
+   * 八の字に広がるように角度をつけて発射
    */
-  private fireBullet(angle: number): void {
+  private fireQSkillBullets(angle: number, lineIndex: number): void {
     if (!this.bulletPool) return;
 
-    const bullet = this.bulletPool.acquire();
-    if (!bullet) return;
+    const config = this.currentSkillConfig.Q;
+    const rows = config.BULLET_ROWS ?? 10;
+    const cols = this.getQSkillBulletColumns(lineIndex);
+    const rowSpacing = config.BULLET_ROW_SPACING ?? 40;
+    const colSpacing = config.BULLET_COL_SPACING ?? 30;
+    const bulletSpeed = config.BULLET_SPEED;
+    const bulletColor = config.BULLET_COLOR ?? 1;
+    const displayScale = config.BULLET_DISPLAY_SCALE ?? 0.12;
+    const damage = config.DAMAGE.BASE + this.stats.attackPower * config.DAMAGE.RATIO;
 
-    // ダメージ計算
-    const damage = this.currentSkillConfig.Q.DAMAGE.BASE + this.stats.attackPower * this.currentSkillConfig.Q.DAMAGE.RATIO;
+    // 八の字の広がり角度（各列ごとの角度オフセット、度単位）
+    const spreadAngleDeg = 3; // 各列が中心から3度ずつ広がる
+    const spreadAngleRad = Phaser.Math.DegToRad(spreadAngleDeg);
 
-    // 目標座標（角度方向に遠くへ）
-    const targetX = this.x + Math.cos(angle) * 1000;
-    const targetY = this.y + Math.sin(angle) * 1000;
+    // 横方向の単位ベクトル（90度回転）
+    const perpX = -Math.sin(angle);
+    const perpY = Math.cos(angle);
 
-    // kShotのVIOLET小丸弾を使用
-    bullet.fire(
-      this.x,
-      this.y,
-      targetX,
-      targetY,
-      BulletType.ENEMY_NORMAL,
-      damage,
-      null,
-      false,
-      KSHOT.MEDIUM_BALL.MAGENTA
-    );
+    // 弾発射
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const bullet = this.bulletPool.acquire();
+        if (!bullet) continue;
 
-    // 弾速を設定
-    const body = bullet.body as Phaser.Physics.Arcade.Body;
-    if (body) {
-      body.setVelocity(
-        Math.cos(angle) * this.currentSkillConfig.Q.BULLET_SPEED,
-        Math.sin(angle) * this.currentSkillConfig.Q.BULLET_SPEED
-      );
+        // 横方向のオフセット（中央揃え）- 列番号から中央を引いた値
+        const colFromCenter = col - (cols - 1) / 2;
+        const colOffset = colFromCenter * colSpacing;
+
+        // 八の字の角度オフセット（中央から離れるほど広がる）
+        const angleOffset = colFromCenter * spreadAngleRad;
+        const bulletAngle = angle + angleOffset;
+
+        // 角度の単位ベクトル（八の字用）
+        const dirX = Math.cos(bulletAngle);
+        const dirY = Math.sin(bulletAngle);
+
+        // 発射位置（縦方向は進行方向、横方向は垂直方向）
+        const startX = this.x + perpX * colOffset;
+        const startY = this.y + perpY * colOffset;
+
+        // 目標座標
+        const targetX = startX + dirX * 1000;
+        const targetY = startY + dirY * 1000;
+
+        // 黒縁中玉を使用
+        const kshotFrame = this.getKshotFrameByColor(bulletColor);
+        bullet.fire(
+          startX,
+          startY,
+          targetX,
+          targetY,
+          BulletType.ENEMY_NORMAL,
+          damage,
+          null,
+          false,
+          kshotFrame
+        );
+
+        // 表示スケール設定
+        bullet.setScale(displayScale);
+
+        // 弾速を設定（八の字方向に発射）
+        const body = bullet.body as Phaser.Physics.Arcade.Body;
+        if (body) {
+          // 縦方向の遅延（row番号が大きいほど遅く発射される効果）
+          const delayOffset = row * rowSpacing;
+          body.setVelocity(
+            dirX * bulletSpeed,
+            dirY * bulletSpeed
+          );
+          // 初期位置をずらして縦の列を作る
+          bullet.setPosition(
+            startX - dirX * delayOffset,
+            startY - dirY * delayOffset
+          );
+        }
+      }
     }
+
+    console.log(`Rumia Q: 予告線${lineIndex + 1}から弾幕発射 (${rows}x${cols}発)`);
+  }
+
+  /**
+   * 色IDからKSHOT番号を取得
+   * 1=赤, 2=橙, 3=黄, 4=緑, 5=シアン, 6=青, 7=マゼンタ, 8=白
+   */
+  private getKshotFrameByColor(colorId: number): number {
+    // colorIdはKSHOT.MEDIUM_BALLの値と一致（1-8）
+    if (colorId >= 1 && colorId <= 8) {
+      return colorId;
+    }
+    return KSHOT.MEDIUM_BALL.RED; // デフォルトは赤
   }
 
   /**
@@ -1323,7 +1494,7 @@ export class Rumia extends Boss {
     if (!this.bulletPool) return;
 
     const qConfig = this.currentSkillConfig.Q;
-    const wayCount = qConfig.WAY_COUNT; // 12
+    const wayCount = qConfig.WAY_COUNT ?? 12;
     const damage = qConfig.DAMAGE.BASE + this.stats.attackPower * qConfig.DAMAGE.RATIO;
 
     for (let i = 0; i < wayCount; i++) {
@@ -1554,7 +1725,7 @@ export class Rumia extends Boss {
 
     const qConfig = this.currentSkillConfig.Q;
     const wConfig = this.currentSkillConfig.W;
-    const wayCount = qConfig.WAY_COUNT; // 12
+    const wayCount = qConfig.WAY_COUNT ?? 12;
     const damage = wConfig.DAMAGE.BASE + this.stats.attackPower * wConfig.DAMAGE.RATIO;
     // W専用の弾速（設定がなければQの弾速を使用）
     const bulletSpeed = wConfig.BULLET_SPEED ?? qConfig.BULLET_SPEED;
@@ -1722,14 +1893,31 @@ export class Rumia extends Boss {
     const qSkill = this.skills.get(BossSkillSlot.Q);
     const wSkill = this.skills.get(BossSkillSlot.W);
 
-    // Qスキル詠唱中の予告線（アクティブなwayのみ順次表示）
-    if (qSkill && qSkill.state === BossSkillState.CASTING) {
-      this.warningGraphics.lineStyle(2, 0xff0000, 0.7);
+    // Qスキル詠唱中/実行中の予告線（通常弾幕1）
+    const isCastingOrExecuting = qSkill && (
+      qSkill.state === BossSkillState.CASTING ||
+      qSkill.state === BossSkillState.EXECUTING
+    );
+    if (isCastingOrExecuting && this.qSkillWarningLines.length > 0) {
+      const currentTime = this.scene.time.now;
+      const fireDelay = this.currentSkillConfig.Q.WARNING_TO_FIRE_DELAY ?? 500;
+      const warningLineLength = 800; // 予告線の長さ
 
-      for (let i = 0; i < this.qSkillActiveWays && i < this.qSkillWayAngles.length; i++) {
-        const angle = this.qSkillWayAngles[i];
-        const endX = this.x + Math.cos(angle) * this.currentSkillConfig.Q.WARNING_LINE_LENGTH;
-        const endY = this.y + Math.sin(angle) * this.currentSkillConfig.Q.WARNING_LINE_LENGTH;
+      for (const line of this.qSkillWarningLines) {
+        // 発射済みの予告線は表示しない
+        if (line.fired) continue;
+
+        // 発射までの残り時間で透明度を変化
+        const elapsed = currentTime - line.createdTime;
+        const progress = Math.min(elapsed / fireDelay, 1);
+        const alpha = 0.3 + progress * 0.5; // 0.3 → 0.8
+
+        // 予告線番号で色を変化（1本目=薄い、7本目=濃い）
+        const colorIntensity = 0.5 + (line.lineIndex / 6) * 0.5;
+        this.warningGraphics.lineStyle(2 + line.lineIndex * 0.5, 0xff0000, alpha * colorIntensity);
+
+        const endX = this.x + Math.cos(line.angle) * warningLineLength;
+        const endY = this.y + Math.sin(line.angle) * warningLineLength;
 
         // プレイエリア内にクリップ
         const clipped = this.clipLineToPlayArea(this.x, this.y, endX, endY);
@@ -1810,8 +1998,12 @@ export class Rumia extends Boss {
   spawn(x: number, y: number): void {
     super.spawn(x, y);
 
-    // ルーミアの色
-    this.setTint(0x660066);
+    // ルーミアのコマアニメーションを再生（super.spawnでTintが上書きされるため）
+    this.setTexture('coma_rumia_idle');
+    this.play('rumia_idle');
+    this.clearTint();
+    // スケール調整（704x800は大きいので縮小）
+    this.setScale(0.2);
 
     // 最初のスキル発動までの遅延
     const qSkill = this.skills.get(BossSkillSlot.Q);
@@ -1852,6 +2044,55 @@ export class Rumia extends Boss {
     this.eSkillRingBullets = [];
     this.eSkillWavesFired = 0;
     this.eSkillWaveTimer = 0;
+  }
+
+  /**
+   * 被弾エフェクト（コマアニメーション用にオーバーライド）
+   */
+  protected flashDamage(): void {
+    this.setTint(0xff0000); // 赤くフラッシュ
+    this.scene.time.delayedCall(100, () => {
+      if (this.isActive) {
+        // コマアニメーションを使用しているのでTintをクリア
+        this.clearTint();
+      }
+    });
+  }
+
+  /**
+   * 状態異常を更新（コマアニメーション用にオーバーライド）
+   */
+  protected updateStatusEffects(delta: number): void {
+    const statusEffects = this.getStatusEffects();
+    for (let i = statusEffects.length - 1; i >= 0; i--) {
+      statusEffects[i].remainingTime -= delta;
+      if (statusEffects[i].remainingTime <= 0) {
+        // スタン解除時はTintをクリア（コマアニメーション用）
+        if (statusEffects[i].type === StatusEffectType.STUN) {
+          this.clearTint();
+        }
+        statusEffects.splice(i, 1);
+      }
+    }
+  }
+
+  /**
+   * 状態異常を付与（コマアニメーション用にオーバーライド）
+   */
+  applyStatusEffect(effect: StatusEffect): void {
+    const statusEffects = this.getStatusEffects();
+    const existingIndex = statusEffects.findIndex(e => e.type === effect.type);
+    if (existingIndex >= 0) {
+      statusEffects[existingIndex] = effect;
+    } else {
+      statusEffects.push(effect);
+    }
+
+    // スタンの視覚エフェクト（黄色）
+    if (effect.type === StatusEffectType.STUN) {
+      this.setTint(0xffff00);
+      this.setVelocity(0, 0);
+    }
   }
 
   /**

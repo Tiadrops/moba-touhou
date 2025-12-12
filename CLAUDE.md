@@ -39,6 +39,16 @@ rm old_file.ts
 1. **黒縁中玉 (MEDIUM_BALL)**: ID 1-8, 512x512px, 当たり判定440px
 2. **輪弾 (RINDAN)**: ID 9-16, 278x278px, 当たり判定275px
 
+### キャラクターコマ（アニメーション用スプライト）
+- **霊夢**: `img/reimu/reimu_coma1.png`（待機）, `reimu_coma2.png`（移動）
+  - サイズ: 2816x1504px (2x2グリッド、各1408x752px)
+  - アニメーション: 6fps（待機）、8fps（移動）
+- **ルーミア**:
+  - `rumia_koma1.png`（詠唱）: 2816x800px, 横4フレーム, 1.5fps
+  - `rumia_koma2.png`（待機）: 2816x800px, 横4フレーム, 1.5fps
+  - `rumia_koma3.png`（移動）: 1408x800px, 横2フレーム, 4fps
+  - 待機・詠唱のフレーム順: 1→3→2→4
+
 ### ドキュメント
 - 弾幕仕様: `docs/BULLET_SYSTEM.md`
 - ボスシステム: `docs/BOSS_SYSTEM.md`

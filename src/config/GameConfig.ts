@@ -215,57 +215,60 @@ export const BOSS_CONFIG = {
 
     // ノーマルフェーズのスキル
     PHASE_0_SKILLS: {
-      // Qスキル「月符・ムーンライトレイ」
+      // Qスキル「通常弾幕1」
       Q: {
-        NAME: '月符・ムーンライトレイ',
-        CAST_TIME: 350,            // 詠唱時間（ms）- 全予告線表示完了までの時間
-        COOLDOWN: 4000,            // クールダウン（ms）
+        NAME: '通常弾幕1',
+        CAST_TIME: 1400,           // 詠唱時間（ms）- 予告線7本 × 200ms = 1400ms
+        COOLDOWN: 5000,            // クールダウン（ms）
         DAMAGE: {
           BASE: 30,
           RATIO: 0.5,              // ATK × 0.5
         },
-        // 弾幕パラメータ
-        WAY_COUNT: 7,              // 7way弾
-        ANGLE_SPREAD: 30,          // ±30度（度数法）
-        BULLETS_PER_WAY: 10,       // 各wayの弾数
-        BULLET_INTERVAL: 50,       // 弾の発射間隔（ms）
-        BULLET_SPEED: 10 * 55,     // 10m/s = 550px/s
-        BULLET_RADIUS: 8,          // 弾の半径
-        WARNING_LINE_LENGTH: 600,  // 予告線の長さ
-        WAY_DELAY: 50,             // 各way間の遅延（ms）- 左から順に表示/発射
+        // 予告線パラメータ
+        WARNING_LINE_COUNT: 7,     // 予告線の本数
+        WARNING_LINE_INTERVAL: 200, // 予告線出現間隔（ms）
+        WARNING_TO_FIRE_DELAY: 300, // 予告線から弾発射までの遅延（ms）
+        // 弾幕パラメータ（横方向の弾数は予告線番号で変動: 1本目=1, 2-3本目=2, 4-6本目=3, 7本目=4）
+        BULLET_ROWS: 10,           // 縦方向の弾数
+        BULLET_ROW_SPACING: 40,    // 縦方向の弾間隔（px）
+        BULLET_COL_SPACING: 30,    // 横方向の弾間隔（px）
+        BULLET_SPEED: 20 * 55,     // 20m/s = 1100px/s
+        BULLET_RADIUS: 0.25 * 55,  // 0.25m = 13.75px（当たり判定）
+        BULLET_DISPLAY_SCALE: 0.06, // 黒縁中玉（512px）の表示スケール
+        BULLET_COLOR: 1,           // 黒縁中玉の色ID（1=赤）
+        // CC中断可能フラグ
+        INTERRUPTIBLE: true,
       },
-      // Wスキル「闇符・ダークサイドオブムーン」
+      // Wスキル「闇符・ダークサイドオブムーン」（デバッグ用に無効化）
       W: {
         NAME: '闇符・ダークサイドオブムーン',
-        CAST_TIME: 500,              // 詠唱時間（予告表示）（ms）
-        COOLDOWN: 4000,              // クールダウン（ms）
+        CAST_TIME: 500,
+        COOLDOWN: 999999,            // 実質無効化
         DAMAGE: {
           BASE: 50,
           RATIO: 0.8,
         },
-        // レーザーパラメータ
-        LASER_COUNT: 5,              // レーザー総数（自機狙い1 + ランダム4）
-        LASER_WIDTH: 30,             // レーザーの幅（px）
-        LASER_LENGTH: 800,           // レーザーの長さ（px）
-        LASER_DURATION: 100,         // レーザーの持続時間（ms）- ダメージ判定期間
+        LASER_COUNT: 5,
+        LASER_WIDTH: 30,
+        LASER_LENGTH: 800,
+        LASER_DURATION: 100,
       },
-      // Eスキル「闘符・ディマーケイション」
+      // Eスキル「闘符・ディマーケイション」（デバッグ用に無効化）
       E: {
         NAME: '闘符・ディマーケイション',
-        CAST_TIME: 300,            // 詠唱時間（ms）
-        COOLDOWN: 6000,            // クールダウン（ms）
+        CAST_TIME: 300,
+        COOLDOWN: 999999,            // 実質無効化
         DAMAGE: {
           BASE: 20,
-          RATIO: 0.3,              // ATK × 0.3
+          RATIO: 0.3,
         },
-        // 弾幕パラメータ
-        BULLETS_PER_RING: 16,      // 1リングあたりの弾数
-        WAVE_COUNT: 3,             // 波の数
-        WAVE_INTERVAL: 400,        // 波の発射間隔（ms）
-        INITIAL_RADIUS: 30,        // 初期半径（px）
-        EXPANSION_SPEED: 200,      // 拡大速度（px/s）
-        ROTATION_SPEED: 0.8,       // 回転速度（rad/s）- 波ごとに交互に正負
-        BULLET_RADIUS: 10,         // 弾の半径
+        BULLETS_PER_RING: 16,
+        WAVE_COUNT: 3,
+        WAVE_INTERVAL: 400,
+        INITIAL_RADIUS: 30,
+        EXPANSION_SPEED: 200,
+        ROTATION_SPEED: 0.8,
+        BULLET_RADIUS: 10,
       },
     },
 

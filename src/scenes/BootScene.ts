@@ -18,6 +18,32 @@ export class BootScene extends Phaser.Scene {
     this.load.image('portrait_rumia_1', 'img/Rumia/rumia_1.png');
     this.load.image('portrait_rumia_2', 'img/Rumia/rumia_2.png');
 
+    // キャラクターコマ（スプライトシート）の読み込み
+    // 霊夢コマ: 2816x1504px, 2x2グリッド、4フレーム
+    this.load.spritesheet('coma_reimu_idle', 'img/reimu/reimu_coma1.png', {
+      frameWidth: 1408,  // 2816 / 2
+      frameHeight: 752,  // 1504 / 2
+    });
+    this.load.spritesheet('coma_reimu_move', 'img/reimu/reimu_coma2.png', {
+      frameWidth: 1408,  // 2816 / 2
+      frameHeight: 752,  // 1504 / 2
+    });
+    // ルーミアコマ1（詠唱用）: 2816x800px, 横4フレーム
+    this.load.spritesheet('coma_rumia_cast', 'img/Rumia/rumia_koma1.png', {
+      frameWidth: 704,   // 2816 / 4
+      frameHeight: 800,
+    });
+    // ルーミアコマ2（デフォルト）: 2816x800px, 横4フレーム
+    this.load.spritesheet('coma_rumia_idle', 'img/Rumia/rumia_koma2.png', {
+      frameWidth: 704,   // 2816 / 4
+      frameHeight: 800,
+    });
+    // ルーミアコマ3（移動用）: 1408x800px, 横2フレーム
+    this.load.spritesheet('coma_rumia_move', 'img/Rumia/rumia_koma3.png', {
+      frameWidth: 704,   // 1408 / 2
+      frameHeight: 800,
+    });
+
     // 弾幕スプライトシートの読み込み
     // 黒縁中玉: 4096x512px (512x512 × 8色)
     this.load.image('kshot_medium_ball', 'img/bullets/kshot_medium_ball.png');
@@ -42,6 +68,9 @@ export class BootScene extends Phaser.Scene {
 
     // 弾幕スプライトシートからテクスチャを生成
     this.createBulletTextures();
+
+    // キャラクターアニメーションを定義
+    this.createCharacterAnimations();
 
     // タイトル画面へ遷移
     this.scene.start(SCENES.TITLE);
@@ -143,5 +172,63 @@ export class BootScene extends Phaser.Scene {
     }
 
     console.log('Bullet textures created: 8 frames (黒縁中玉), 8 rindan textures (輪弾)');
+  }
+
+  /**
+   * キャラクターアニメーションを定義
+   */
+  private createCharacterAnimations(): void {
+    // 霊夢待機アニメーション（左上→右上→左下→右下→左上...）
+    // フレーム順: 0(左上), 1(右上), 2(左下), 3(右下)
+    this.anims.create({
+      key: 'reimu_idle',
+      frames: this.anims.generateFrameNumbers('coma_reimu_idle', {
+        frames: [0, 1, 2, 3],
+      }),
+      frameRate: 6, // 1秒間に6フレーム
+      repeat: -1,   // 無限ループ
+    });
+
+    // 霊夢移動アニメーション
+    this.anims.create({
+      key: 'reimu_move',
+      frames: this.anims.generateFrameNumbers('coma_reimu_move', {
+        frames: [0, 1, 2, 3],
+      }),
+      frameRate: 8, // 移動時は少し速めに
+      repeat: -1,   // 無限ループ
+    });
+
+    // ルーミア待機アニメーション（1→3→2→4の順）
+    this.anims.create({
+      key: 'rumia_idle',
+      frames: this.anims.generateFrameNumbers('coma_rumia_idle', {
+        frames: [0, 2, 1, 3], // 1→3→2→4 (0-indexed)
+      }),
+      frameRate: 1.5, // ゆっくり
+      repeat: -1,
+    });
+
+    // ルーミア詠唱アニメーション（1→3→2→4の順）
+    this.anims.create({
+      key: 'rumia_cast',
+      frames: this.anims.generateFrameNumbers('coma_rumia_cast', {
+        frames: [0, 2, 1, 3], // 1→3→2→4 (0-indexed)
+      }),
+      frameRate: 1.5, // ゆっくり
+      repeat: -1,
+    });
+
+    // ルーミア移動アニメーション（2フレーム）
+    this.anims.create({
+      key: 'rumia_move',
+      frames: this.anims.generateFrameNumbers('coma_rumia_move', {
+        frames: [0, 1],
+      }),
+      frameRate: 4, // 移動時は少し速めに
+      repeat: -1,
+    });
+
+    console.log('Character animations created: reimu_idle, reimu_move, rumia_idle, rumia_cast, rumia_move');
   }
 }

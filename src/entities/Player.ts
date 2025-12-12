@@ -81,7 +81,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     y: number,
     characterType: CharacterType = CharacterType.REIMU
   ) {
-    super(scene, x, y, 'player');
+    // キャラクターに応じたテクスチャを選択
+    const textureKey = characterType === CharacterType.REIMU ? 'coma_reimu_idle' : 'player';
+    super(scene, x, y, textureKey);
 
     // キャラクター設定を取得
     this.characterConfig = CHARACTER_DATA[characterType];
@@ -91,13 +93,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     scene.physics.add.existing(this);
 
     // 初期化
-    this.initialize();
+    this.initialize(characterType);
   }
 
   /**
    * 初期化
    */
-  private initialize(): void {
+  private initialize(characterType: CharacterType): void {
     const { stats } = this.characterConfig;
 
     // HP設定
@@ -108,15 +110,27 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     // 表示設定
     this.setDepth(DEPTH.PLAYER);
-    this.setTint(COLORS.PLAYER);
+
+    // キャラクターに応じた表示設定
+    if (characterType === CharacterType.REIMU) {
+      // 霊夢のコマアニメーションを再生
+      this.play('reimu_idle');
+      // スケール調整（1408x752は大きすぎるので縮小）
+      this.setScale(0.16);
+      // Tintをクリア（元の色で表示）
+      this.clearTint();
+    } else {
+      // フォールバック: 仮スプライトを使用
+      this.setTint(COLORS.PLAYER);
+    }
 
     // 当たり判定設定
     const body = this.body as Phaser.Physics.Arcade.Body;
     if (body) {
       body.setCircle(stats.hitboxRadius);
       body.setOffset(
-        this.width / 2 - stats.hitboxRadius,
-        this.height / 2 - stats.hitboxRadius
+        (this.width - stats.hitboxRadius * 2) / 2,
+        (this.height - stats.hitboxRadius * 2) / 2
       );
     }
   }
@@ -715,6 +729,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (!this.targetPosition) {
       // 目標位置がない場合は停止
       this.setVelocity(0, 0);
+      // 移動中だった場合は待機アニメーションに戻す
+      if (this.isMoving) {
+        this.switchToIdleAnimation();
+      }
       this.isMoving = false;
       return;
     }
@@ -728,6 +746,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (distance < arrivalThreshold) {
       this.setVelocity(0, 0);
       this.targetPosition = null;
+      // 移動中だった場合は待機アニメーションに戻す
+      if (this.isMoving) {
+        this.switchToIdleAnimation();
+      }
       this.isMoving = false;
 
       // Attack Move中に到達したらAttack Move終了
@@ -748,7 +770,47 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       directionY * moveSpeed
     );
 
+    // 移動方向に応じてスプライトを回転・反転
+    const angle = Math.atan2(dy, dx); // ラジアン
+    const angleDeg = Phaser.Math.RadToDeg(angle);
+
+    // 左向き（90度〜270度）の場合は反転して角度を調整
+    if (Math.abs(angleDeg) > 90) {
+      this.setFlipX(true);
+      // 反転時は角度を反転（上下が逆にならないように）
+      this.setRotation(angle + Math.PI);
+    } else {
+      this.setFlipX(false);
+      this.setRotation(angle);
+    }
+
+    // 移動開始時に移動アニメーションに切り替え
+    if (!this.isMoving) {
+      this.switchToMoveAnimation();
+    }
+
     this.isMoving = true;
+  }
+
+  /**
+   * 待機アニメーションに切り替え
+   */
+  private switchToIdleAnimation(): void {
+    if (this.characterConfig.type === CharacterType.REIMU) {
+      this.play('reimu_idle');
+      // 回転をリセット
+      this.setRotation(0);
+      this.setFlipX(false);
+    }
+  }
+
+  /**
+   * 移動アニメーションに切り替え
+   */
+  private switchToMoveAnimation(): void {
+    if (this.characterConfig.type === CharacterType.REIMU) {
+      this.play('reimu_move');
+    }
   }
 
   /**
@@ -813,7 +875,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private flashDamage(): void {
     this.setTint(0xff0000);
     this.scene.time.delayedCall(100, () => {
-      this.setTint(COLORS.PLAYER);
+      // 霊夢の場合はTintをクリア、それ以外は緑に戻す
+      if (this.characterConfig.type === CharacterType.REIMU) {
+        this.clearTint();
+      } else {
+        this.setTint(COLORS.PLAYER);
+      }
     });
   }
 
