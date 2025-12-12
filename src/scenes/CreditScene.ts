@@ -35,6 +35,7 @@ export class CreditScene extends Phaser.Scene {
       '',
       '--- 素材 ---',
       'キャラクター: TBD',
+      '弾幕素材: かずぎつね',
       'BGM: TBD',
       'SE: TBD',
       '',

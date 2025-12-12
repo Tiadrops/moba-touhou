@@ -116,6 +116,9 @@ export const SCENES = {
   GAME_OVER: 'GameOverScene',
   OPTION: 'OptionScene',
   CREDIT: 'CreditScene',
+  // デバッグ用シーン
+  DEBUG_ROOM: 'DebugRoomScene',
+  BULLET_TEST: 'BulletTestScene',
 } as const;
 
 /**

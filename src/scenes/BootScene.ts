@@ -18,6 +18,20 @@ export class BootScene extends Phaser.Scene {
     this.load.image('portrait_rumia_1', 'img/Rumia/rumia_1.png');
     this.load.image('portrait_rumia_2', 'img/Rumia/rumia_2.png');
 
+    // 弾幕スプライトシートの読み込み
+    // 黒縁中玉: 4096x512px (512x512 × 8色)
+    this.load.image('kshot_medium_ball', 'img/bullets/kshot_medium_ball.png');
+
+    // 輪弾: 各278x278px × 8色（個別ファイル）
+    this.load.image('rindan_9', 'img/bullets/rindan_red.png');
+    this.load.image('rindan_10', 'img/bullets/rindan_yellow.png');
+    this.load.image('rindan_11', 'img/bullets/rindan_lime.png');
+    this.load.image('rindan_12', 'img/bullets/rindan_green.png');
+    this.load.image('rindan_13', 'img/bullets/rindan_cyan.png');
+    this.load.image('rindan_14', 'img/bullets/rindan_magenta.png');
+    this.load.image('rindan_15', 'img/bullets/rindan_purple.png');
+    this.load.image('rindan_16', 'img/bullets/rindan_blue.png');
+
     // TODO: 将来的にここで音声アセットを読み込む
     // this.load.audio('bgm', 'assets/audio/bgm.mp3');
   }
@@ -25,6 +39,9 @@ export class BootScene extends Phaser.Scene {
   create(): void {
     // 仮のスプライトをプログラムで生成（テスト用）
     this.createTemporarySprites();
+
+    // 弾幕スプライトシートからテクスチャを生成
+    this.createBulletTextures();
 
     // タイトル画面へ遷移
     this.scene.start(SCENES.TITLE);
@@ -89,7 +106,7 @@ export class BootScene extends Phaser.Scene {
     playerBulletGraphics.generateTexture('bullet_player', 16, 16);
     playerBulletGraphics.destroy();
 
-    // 敵の弾（東方風 - 赤い縁 + 白い内側）
+    // 敵の弾（東方風 - 赤い縁 + 白い内側）- フォールバック用
     const enemyBulletGraphics = this.add.graphics();
     const bulletRadius = 12; // 大きめのサイズ
     const textureSize = bulletRadius * 2 + 4; // 余白を含む
@@ -102,5 +119,29 @@ export class BootScene extends Phaser.Scene {
     enemyBulletGraphics.fillCircle(center, center, bulletRadius * 0.6);
     enemyBulletGraphics.generateTexture('bullet_enemy', textureSize, textureSize);
     enemyBulletGraphics.destroy();
+  }
+
+  /**
+   * 弾幕スプライトシートからテクスチャを生成
+   *
+   * 黒縁中玉 (kshot_medium_ball.png): 4096x512px
+   * - 各弾512x512px × 8色 = ID 1-8
+   */
+  private createBulletTextures(): void {
+    const mediumBallTexture = this.textures.get('kshot_medium_ball');
+
+    if (!mediumBallTexture || mediumBallTexture.key === '__MISSING') {
+      console.warn('kshot_medium_ball not loaded');
+      return;
+    }
+
+    // 黒縁中玉: 8色 (512x512px × 8 = 4096x512px)
+    for (let col = 0; col < 8; col++) {
+      const x = col * 512;
+      const frameId = col + 1; // ID 1-8
+      mediumBallTexture.add(`kshot_${frameId}`, 0, x, 0, 512, 512);
+    }
+
+    console.log('Bullet textures created: 8 frames (黒縁中玉), 8 rindan textures (輪弾)');
   }
 }

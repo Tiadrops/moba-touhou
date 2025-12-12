@@ -8,6 +8,7 @@ import {
   StatusEffectType,
 } from '@/types';
 import { BOSS_CONFIG, GAME_CONFIG } from '@/config/GameConfig';
+import { KSHOT } from '../Bullet';
 
 const CONFIG = BOSS_CONFIG.RUMIA;
 
@@ -686,7 +687,8 @@ export class Rumia extends Boss {
   }
 
   /**
-   * 弾を発射
+   * 弾を発射（ノーマルフェーズQスキル用）
+   * kShotのVIOLET小丸弾を使用
    */
   private fireBullet(angle: number): void {
     if (!this.bulletPool) return;
@@ -701,13 +703,17 @@ export class Rumia extends Boss {
     const targetX = this.x + Math.cos(angle) * 1000;
     const targetY = this.y + Math.sin(angle) * 1000;
 
+    // kShotのVIOLET小丸弾を使用
     bullet.fire(
       this.x,
       this.y,
       targetX,
       targetY,
       BulletType.ENEMY_NORMAL,
-      damage
+      damage,
+      null,
+      false,
+      KSHOT.MEDIUM_BALL.MAGENTA
     );
 
     // 弾速を設定
@@ -929,13 +935,13 @@ export class Rumia extends Boss {
 
   /**
    * Eスキルの波を発射
+   * kShotのPURPLE大丸弾を使用
    */
   private fireESkillWave(time: number): void {
     if (!this.bulletPool) return;
 
     const bulletsPerRing = this.currentSkillConfig.E.BULLETS_PER_RING ?? 16;
     const initialRadius = this.currentSkillConfig.E.INITIAL_RADIUS ?? 30;
-    const bulletRadius = this.currentSkillConfig.E.BULLET_RADIUS ?? 10;
     const damage = this.currentSkillConfig.E.DAMAGE.BASE + this.stats.attackPower * this.currentSkillConfig.E.DAMAGE.RATIO;
 
     for (let i = 0; i < bulletsPerRing; i++) {
@@ -948,18 +954,18 @@ export class Rumia extends Boss {
       const initialX = this.x + Math.cos(angle) * initialRadius;
       const initialY = this.y + Math.sin(angle) * initialRadius;
 
-      // 弾を発射（速度は後で制御するので、とりあえず同位置に発射）
+      // kShotのPURPLE大丸弾を使用
       bullet.fire(
         initialX,
         initialY,
         initialX,
         initialY,
         BulletType.ENEMY_NORMAL,
-        damage
+        damage,
+        null,
+        false,
+        KSHOT.MEDIUM_BALL.MAGENTA
       );
-
-      // 弾のサイズを設定
-      bullet.setDisplaySize(bulletRadius * 2, bulletRadius * 2);
 
       // 弾情報を保存
       this.eSkillRingBullets.push({
@@ -1140,7 +1146,8 @@ export class Rumia extends Boss {
   /**
    * Rスキルの弾を発射
    * ランダム弾: 小2、中2、大2 = 6発
-   * 自機狙い弾: 小1、中1、大1 = 3発
+   * 自機狙い弾: 小2、中2、大2 = 6発
+   * kShotの小丸弾/大丸弾/大玉弾を使用
    */
   private fireRSkillBullets(): void {
     if (!this.bulletPool) return;
@@ -1149,14 +1156,21 @@ export class Rumia extends Boss {
 
     const damage = rConfig.DAMAGE.BASE + this.stats.attackPower * rConfig.DAMAGE.RATIO;
 
+    // サイズごとのkShotフレームID
+    const sizeToKshot = {
+      small: KSHOT.MEDIUM_BALL.MAGENTA,
+      medium: KSHOT.MEDIUM_BALL.MAGENTA,
+      large: KSHOT.MEDIUM_BALL.MAGENTA,
+    };
+
     // ランダム弾6発（小2、中2、大2）
     const randomBulletConfigs = [
-      { size: rConfig.BULLET_SIZE_SMALL },
-      { size: rConfig.BULLET_SIZE_SMALL },
-      { size: rConfig.BULLET_SIZE_MEDIUM },
-      { size: rConfig.BULLET_SIZE_MEDIUM },
-      { size: rConfig.BULLET_SIZE_LARGE },
-      { size: rConfig.BULLET_SIZE_LARGE },
+      { kshot: sizeToKshot.small },
+      { kshot: sizeToKshot.small },
+      { kshot: sizeToKshot.medium },
+      { kshot: sizeToKshot.medium },
+      { kshot: sizeToKshot.large },
+      { kshot: sizeToKshot.large },
     ];
 
     for (const config of randomBulletConfigs) {
@@ -1174,10 +1188,13 @@ export class Rumia extends Boss {
         targetX,
         targetY,
         BulletType.ENEMY_NORMAL,
-        damage
+        damage,
+        null,
+        false,
+        config.kshot
       );
 
-      // 弾速とサイズを設定
+      // 弾速を設定
       const body = bullet.body as Phaser.Physics.Arcade.Body;
       if (body) {
         body.setVelocity(
@@ -1185,7 +1202,6 @@ export class Rumia extends Boss {
           Math.sin(angle) * rConfig.BULLET_SPEED
         );
       }
-      bullet.setDisplaySize(config.size * 2, config.size * 2);
     }
 
     // 自機狙い弾6発（小2、中2、大2）
@@ -1198,12 +1214,12 @@ export class Rumia extends Boss {
       );
 
       const aimedBulletConfigs = [
-        { size: rConfig.BULLET_SIZE_SMALL },
-        { size: rConfig.BULLET_SIZE_SMALL },
-        { size: rConfig.BULLET_SIZE_MEDIUM },
-        { size: rConfig.BULLET_SIZE_MEDIUM },
-        { size: rConfig.BULLET_SIZE_LARGE },
-        { size: rConfig.BULLET_SIZE_LARGE },
+        { kshot: sizeToKshot.small },
+        { kshot: sizeToKshot.small },
+        { kshot: sizeToKshot.medium },
+        { kshot: sizeToKshot.medium },
+        { kshot: sizeToKshot.large },
+        { kshot: sizeToKshot.large },
       ];
 
       for (const config of aimedBulletConfigs) {
@@ -1219,10 +1235,13 @@ export class Rumia extends Boss {
           targetX,
           targetY,
           BulletType.ENEMY_NORMAL,
-          damage
+          damage,
+          null,
+          false,
+          config.kshot
         );
 
-        // 弾速とサイズを設定
+        // 弾速を設定
         const body = bullet.body as Phaser.Physics.Arcade.Body;
         if (body) {
           body.setVelocity(
@@ -1230,7 +1249,6 @@ export class Rumia extends Boss {
             Math.sin(angleToPlayer) * rConfig.BULLET_SPEED
           );
         }
-        bullet.setDisplaySize(config.size * 2, config.size * 2);
       }
     }
   }
@@ -1299,6 +1317,7 @@ export class Rumia extends Boss {
 
   /**
    * スペルカード用Qスキルの弾発射（12方向同時）
+   * kShotのPURPLE大丸弾を使用
    */
   private fireSpellCardQSkillBullets(): void {
     if (!this.bulletPool) return;
@@ -1316,28 +1335,26 @@ export class Rumia extends Boss {
       const targetX = this.x + Math.cos(angle) * 1000;
       const targetY = this.y + Math.sin(angle) * 1000;
 
+      // kShotのPURPLE大丸弾を使用
       bullet.fire(
         this.x,
         this.y,
         targetX,
         targetY,
         BulletType.ENEMY_NORMAL,
-        damage
+        damage,
+        null,
+        false,
+        KSHOT.MEDIUM_BALL.MAGENTA
       );
 
-      // 弾速とサイズを設定
+      // 弾速を設定
       const body = bullet.body as Phaser.Physics.Arcade.Body;
       if (body) {
         body.setVelocity(
           Math.cos(angle) * qConfig.BULLET_SPEED,
           Math.sin(angle) * qConfig.BULLET_SPEED
         );
-      }
-      bullet.setDisplaySize(qConfig.BULLET_RADIUS * 2, qConfig.BULLET_RADIUS * 2);
-
-      // 色を設定（指定がある場合）
-      if (qConfig.BULLET_COLOR !== undefined) {
-        bullet.setTint(qConfig.BULLET_COLOR);
       }
     }
 
@@ -1408,6 +1425,7 @@ export class Rumia extends Boss {
 
   /**
    * スペルカード用Eスキルの弾発射（8方向スパイラル）
+   * kShotのVIOLET小丸弾を使用
    */
   private fireSpellCardESkillBullets(time: number): void {
     if (!this.bulletPool) return;
@@ -1415,9 +1433,7 @@ export class Rumia extends Boss {
     const eConfig = this.currentSkillConfig.E;
     const spiralArms = eConfig.SPIRAL_ARMS ?? 8;
     const bulletSpeed = eConfig.BULLET_SPEED ?? 165;
-    const bulletRadius = eConfig.BULLET_RADIUS ?? 8;
     const rotationSpeed = eConfig.ROTATION_SPEED ?? 1.5;
-    const bulletColor = eConfig.BULLET_COLOR ?? 0x9900ff;
     const damage = eConfig.DAMAGE.BASE + this.stats.attackPower * eConfig.DAMAGE.RATIO;
 
     // 経過時間から回転角度を計算
@@ -1435,16 +1451,20 @@ export class Rumia extends Boss {
       const targetX = this.x + Math.cos(angle) * 1000;
       const targetY = this.y + Math.sin(angle) * 1000;
 
+      // kShotのVIOLET小丸弾を使用
       bullet.fire(
         this.x,
         this.y,
         targetX,
         targetY,
         BulletType.ENEMY_NORMAL,
-        damage
+        damage,
+        null,
+        false,
+        KSHOT.MEDIUM_BALL.MAGENTA
       );
 
-      // 弾速とサイズを設定
+      // 弾速を設定
       const body = bullet.body as Phaser.Physics.Arcade.Body;
       if (body) {
         body.setVelocity(
@@ -1452,8 +1472,6 @@ export class Rumia extends Boss {
           Math.sin(angle) * bulletSpeed
         );
       }
-      bullet.setDisplaySize(bulletRadius * 2, bulletRadius * 2);
-      bullet.setTint(bulletColor);
     }
   }
 
@@ -1529,6 +1547,7 @@ export class Rumia extends Boss {
 
   /**
    * スペルカード用WスキルでQ弾幕を発射（Qより弾速速い）
+   * kShotのPURPLE大丸弾を使用
    */
   private fireSpellCardWSkillBurst(): void {
     if (!this.bulletPool) return;
@@ -1549,28 +1568,26 @@ export class Rumia extends Boss {
       const targetX = this.x + Math.cos(angle) * 1000;
       const targetY = this.y + Math.sin(angle) * 1000;
 
+      // kShotのPURPLE大丸弾を使用
       bullet.fire(
         this.x,
         this.y,
         targetX,
         targetY,
         BulletType.ENEMY_NORMAL,
-        damage
+        damage,
+        null,
+        false,
+        KSHOT.MEDIUM_BALL.MAGENTA
       );
 
-      // 弾速とサイズを設定（W専用の弾速を使用）
+      // 弾速を設定（W専用の弾速を使用）
       const body = bullet.body as Phaser.Physics.Arcade.Body;
       if (body) {
         body.setVelocity(
           Math.cos(angle) * bulletSpeed,
           Math.sin(angle) * bulletSpeed
         );
-      }
-      bullet.setDisplaySize(qConfig.BULLET_RADIUS * 2, qConfig.BULLET_RADIUS * 2);
-
-      // 色を設定（指定がある場合）
-      if (qConfig.BULLET_COLOR !== undefined) {
-        bullet.setTint(qConfig.BULLET_COLOR);
       }
     }
 

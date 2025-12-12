@@ -2,14 +2,16 @@ import Phaser from 'phaser';
 import { SCENES, GAME_CONFIG } from '@/config/GameConfig';
 
 /**
- * TitleScene - タイトル画面
+ * DebugRoomScene - デバッグルーム
+ * 各種デバッグ機能へアクセスするためのメニュー画面
  */
-export class TitleScene extends Phaser.Scene {
+export class DebugRoomScene extends Phaser.Scene {
   private menuItems: Phaser.GameObjects.Text[] = [];
   private selectedIndex: number = 0;
+  private menuOptions: { text: string; scene: string | null; action?: () => void }[] = [];
 
   constructor() {
-    super({ key: SCENES.TITLE });
+    super({ key: SCENES.DEBUG_ROOM });
   }
 
   create(): void {
@@ -20,34 +22,26 @@ export class TitleScene extends Phaser.Scene {
     this.selectedIndex = 0;
 
     const centerX = GAME_CONFIG.WIDTH / 2;
-    const centerY = GAME_CONFIG.HEIGHT / 2;
 
     // 背景
     this.createBackground();
 
-    // タイトルロゴ
-    this.add.text(centerX, centerY - 200, 'MOBA x 東方', {
+    // タイトル
+    this.add.text(centerX, 80, 'DEBUG ROOM', {
       fontFamily: 'Arial, sans-serif',
-      fontSize: '72px',
-      color: '#ffffff',
+      fontSize: '48px',
+      color: '#ff6600',
       stroke: '#000000',
       strokeThickness: 4,
     }).setOrigin(0.5);
 
-    this.add.text(centerX, centerY - 120, '〜弾幕幻想郷〜', {
+    this.add.text(centerX, 130, '開発・デバッグ用メニュー', {
       fontFamily: 'Arial, sans-serif',
-      fontSize: '36px',
-      color: '#aaaaff',
+      fontSize: '20px',
+      color: '#888888',
     }).setOrigin(0.5);
 
-    // バージョン表示
-    this.add.text(20, GAME_CONFIG.HEIGHT - 30, 'Version 0.1.0', {
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '16px',
-      color: '#888888',
-    });
-
-    // メニューを直接表示
+    // メニュー作成
     this.createMenu();
 
     // キーボード入力
@@ -58,38 +52,23 @@ export class TitleScene extends Phaser.Scene {
    * 背景を作成
    */
   private createBackground(): void {
-    // グラデーション風の背景
     const graphics = this.add.graphics();
-    graphics.fillGradientStyle(0x1a1a2e, 0x1a1a2e, 0x16213e, 0x16213e, 1);
+    // 暗めの赤/オレンジ系グラデーション（デバッグ感）
+    graphics.fillGradientStyle(0x2a1a1a, 0x2a1a1a, 0x1a1a2a, 0x1a1a2a, 1);
     graphics.fillRect(0, 0, GAME_CONFIG.WIDTH, GAME_CONFIG.HEIGHT);
 
-    // 装飾的な弾幕パターン（背景）
-    this.createBackgroundBullets();
-  }
-
-  /**
-   * 背景に装飾的な弾幕を追加
-   */
-  private createBackgroundBullets(): void {
-    const bulletCount = 50;
-    for (let i = 0; i < bulletCount; i++) {
-      const x = Phaser.Math.Between(0, GAME_CONFIG.WIDTH);
-      const y = Phaser.Math.Between(0, GAME_CONFIG.HEIGHT);
-      const radius = Phaser.Math.Between(3, 8);
-      const alpha = Phaser.Math.FloatBetween(0.1, 0.3);
-
-      const bullet = this.add.circle(x, y, radius, 0x4444aa, alpha);
-
-      // ゆっくり動くアニメーション
-      this.tweens.add({
-        targets: bullet,
-        y: y + Phaser.Math.Between(50, 150),
-        duration: Phaser.Math.Between(3000, 6000),
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut',
-      });
+    // グリッドパターン
+    graphics.lineStyle(1, 0x333333, 0.3);
+    const gridSize = 40;
+    for (let x = 0; x < GAME_CONFIG.WIDTH; x += gridSize) {
+      graphics.moveTo(x, 0);
+      graphics.lineTo(x, GAME_CONFIG.HEIGHT);
     }
+    for (let y = 0; y < GAME_CONFIG.HEIGHT; y += gridSize) {
+      graphics.moveTo(0, y);
+      graphics.lineTo(GAME_CONFIG.WIDTH, y);
+    }
+    graphics.strokePath();
   }
 
   /**
@@ -97,19 +76,21 @@ export class TitleScene extends Phaser.Scene {
    */
   private createMenu(): void {
     const centerX = GAME_CONFIG.WIDTH / 2;
-    const menuStartY = GAME_CONFIG.HEIGHT / 2 + 50;
+    const menuStartY = 220;
 
-    const menuOptions = [
-      { text: 'ゲームスタート', scene: SCENES.MODE_SELECT },
-      { text: 'オプション', scene: SCENES.OPTION },
-      { text: 'クレジット', scene: SCENES.CREDIT },
-      { text: 'デバッグルーム', scene: SCENES.DEBUG_ROOM },
+    this.menuOptions = [
+      { text: '弾幕テスト', scene: SCENES.BULLET_TEST },
+      // 今後追加するメニュー
+      // { text: 'キャラクターテスト', scene: SCENES.CHARACTER_TEST },
+      // { text: 'ボステスト', scene: SCENES.BOSS_TEST },
+      // { text: 'UIテスト', scene: SCENES.UI_TEST },
+      { text: '戻る', scene: SCENES.TITLE },
     ];
 
-    menuOptions.forEach((option, index) => {
-      const menuItem = this.add.text(centerX, menuStartY + index * 50, option.text, {
+    this.menuOptions.forEach((option, index) => {
+      const menuItem = this.add.text(centerX, menuStartY + index * 60, option.text, {
         fontFamily: 'Arial, sans-serif',
-        fontSize: '32px',
+        fontSize: '28px',
         color: index === 0 ? '#ffff00' : '#ffffff',
       }).setOrigin(0.5);
 
@@ -125,6 +106,13 @@ export class TitleScene extends Phaser.Scene {
 
       this.menuItems.push(menuItem);
     });
+
+    // 操作説明
+    this.add.text(centerX, GAME_CONFIG.HEIGHT - 60, '↑↓: 選択  Enter/Space: 決定  Esc: 戻る', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '18px',
+      color: '#666666',
+    }).setOrigin(0.5);
   }
 
   /**
@@ -145,6 +133,10 @@ export class TitleScene extends Phaser.Scene {
 
     this.input.keyboard?.on('keydown-SPACE', () => {
       this.confirmSelection();
+    });
+
+    this.input.keyboard?.on('keydown-ESC', () => {
+      this.goBack();
     });
   }
 
@@ -168,13 +160,28 @@ export class TitleScene extends Phaser.Scene {
    * 選択を確定
    */
   private confirmSelection(): void {
-    const scenes = [SCENES.MODE_SELECT, SCENES.OPTION, SCENES.CREDIT, SCENES.DEBUG_ROOM];
-    const targetScene = scenes[this.selectedIndex];
+    const option = this.menuOptions[this.selectedIndex];
 
-    // フェードアウトして遷移
+    if (option.action) {
+      option.action();
+      return;
+    }
+
+    if (option.scene) {
+      this.cameras.main.fadeOut(300, 0, 0, 0);
+      this.cameras.main.once('camerafadeoutcomplete', () => {
+        this.scene.start(option.scene!);
+      });
+    }
+  }
+
+  /**
+   * 戻る
+   */
+  private goBack(): void {
     this.cameras.main.fadeOut(300, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
-      this.scene.start(targetScene);
+      this.scene.start(SCENES.TITLE);
     });
   }
 }
