@@ -22,6 +22,14 @@ export class StageIntroScene extends Phaser.Scene {
   }
 
   create(): void {
+    // 状態をリセット
+    this.selectedSkillD = PlayerSkillType.FLASH;
+    this.selectedSkillF = PlayerSkillType.HEAL;
+    this.skillDButtons = [];
+    this.skillFButtons = [];
+
+    // カメラのフェード状態をリセットしてからフェードイン
+    this.cameras.main.resetFX();
     this.cameras.main.fadeIn(300);
 
     // 背景
@@ -333,8 +341,11 @@ export class StageIntroScene extends Phaser.Scene {
       practiceConfig: this.stageData.practiceConfig,
     };
 
-    // 即座にゲームシーンへ遷移
-    this.scene.start(SCENES.GAME, gameData);
+    // フェードアウトしてゲームシーンへ遷移
+    this.cameras.main.fadeOut(300, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.scene.start(SCENES.GAME, gameData);
+    });
   }
 
   /**

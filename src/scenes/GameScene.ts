@@ -6,6 +6,7 @@ import { Bullet } from '@/entities/Bullet';
 import { Rumia } from '@/entities/bosses/Rumia';
 import { Boss } from '@/entities/Boss';
 import { InputManager } from '@/systems/InputManager';
+import { AudioManager } from '@/systems/AudioManager';
 import { BulletPool } from '@/utils/ObjectPool';
 import { DamageCalculator } from '@/utils/DamageCalculator';
 import { UIManager } from '@/ui/UIManager';
@@ -41,6 +42,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    // カメラのフェード状態をリセットしてからフェードイン
+    this.cameras.main.resetFX();
+    this.cameras.main.fadeIn(300);
+
     // プレイエリアの作成
     this.createPlayArea();
 
@@ -247,6 +252,11 @@ export class GameScene extends Phaser.Scene {
    * ゲームプレイ開始
    */
   private startGameplay(): void {
+    // ルーミア戦BGMを再生
+    const audioManager = AudioManager.getInstance();
+    audioManager.setScene(this);
+    audioManager.playBgm('bgm_rumia');
+
     // 弾プールを作成（初期50個、最大10000個まで拡張可能）
     this.bulletPool = new BulletPool(this, 50, 10000);
 

@@ -18,6 +18,14 @@ export class ArcadeSetupScene extends Phaser.Scene {
   }
 
   create(): void {
+    // 状態をリセット
+    this.selectedCharacter = CharacterType.REIMU;
+    this.selectedDifficulty = Difficulty.NORMAL;
+    this.characterCards = [];
+    this.difficultyButtons = [];
+
+    // カメラのフェード状態をリセットしてからフェードイン
+    this.cameras.main.resetFX();
     this.cameras.main.fadeIn(300);
 
     // 背景

@@ -9,7 +9,9 @@
       "Bash(npm run build:*)",
       "Bash(find:*)",
       "Bash(mkdir:*)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Bash(python -c:*)",
+      "Bash(git log:*)"
     ],
     "deny": [],
     "ask": []

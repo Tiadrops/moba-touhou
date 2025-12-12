@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { SCENES, GAME_CONFIG } from '@/config/GameConfig';
+import { AudioManager } from '@/systems/AudioManager';
 
 /**
  * ModeSelectScene - モード選択画面
@@ -13,6 +14,12 @@ export class ModeSelectScene extends Phaser.Scene {
   }
 
   create(): void {
+    // 状態をリセット
+    this.selectedIndex = 0;
+    this.modeCards = [];
+
+    // カメラのフェード状態をリセットしてからフェードイン
+    this.cameras.main.resetFX();
     this.cameras.main.fadeIn(300);
 
     const centerX = GAME_CONFIG.WIDTH / 2;
@@ -138,8 +145,10 @@ export class ModeSelectScene extends Phaser.Scene {
     // インタラクティブ設定
     bg.setInteractive({ useHandCursor: true });
     bg.on('pointerover', () => {
-      this.selectedIndex = index;
-      this.updateSelection();
+      if (this.selectedIndex !== index) {
+        this.selectedIndex = index;
+        this.updateSelection(true);
+      }
     });
     bg.on('pointerdown', () => {
       this.confirmSelection();
@@ -155,7 +164,11 @@ export class ModeSelectScene extends Phaser.Scene {
   /**
    * 選択状態を更新
    */
-  private updateSelection(): void {
+  private updateSelection(playSound: boolean = false): void {
+    if (playSound) {
+      AudioManager.getInstance().playSe('se_select');
+    }
+
     this.modeCards.forEach((card, index) => {
       const bg = card.getData('bg') as Phaser.GameObjects.Rectangle;
       if (index === this.selectedIndex) {
@@ -173,13 +186,19 @@ export class ModeSelectScene extends Phaser.Scene {
    */
   private setupKeyboardInput(): void {
     this.input.keyboard?.on('keydown-LEFT', () => {
+      const prevIndex = this.selectedIndex;
       this.selectedIndex = Math.max(0, this.selectedIndex - 1);
-      this.updateSelection();
+      if (prevIndex !== this.selectedIndex) {
+        this.updateSelection(true);
+      }
     });
 
     this.input.keyboard?.on('keydown-RIGHT', () => {
+      const prevIndex = this.selectedIndex;
       this.selectedIndex = Math.min(this.modeCards.length - 1, this.selectedIndex + 1);
-      this.updateSelection();
+      if (prevIndex !== this.selectedIndex) {
+        this.updateSelection(true);
+      }
     });
 
     this.input.keyboard?.on('keydown-ENTER', () => {
@@ -199,6 +218,8 @@ export class ModeSelectScene extends Phaser.Scene {
    * 選択を確定
    */
   private confirmSelection(): void {
+    AudioManager.getInstance().playSe('se_decision');
+
     const targetScene = this.modeCards[this.selectedIndex].getData('scene') as string;
 
     this.cameras.main.fadeOut(300, 0, 0, 0);
@@ -211,6 +232,8 @@ export class ModeSelectScene extends Phaser.Scene {
    * 戻る
    */
   private goBack(): void {
+    AudioManager.getInstance().playSe('se_cancel');
+
     this.cameras.main.fadeOut(300, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
       this.scene.start(SCENES.TITLE);

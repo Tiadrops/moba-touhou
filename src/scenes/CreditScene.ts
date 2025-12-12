@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { SCENES, GAME_CONFIG } from '@/config/GameConfig';
+import { AudioManager } from '@/systems/AudioManager';
 
 /**
  * CreditScene - クレジット画面（仮）
@@ -84,6 +85,8 @@ export class CreditScene extends Phaser.Scene {
    * タイトルに戻る
    */
   private goBack(): void {
+    AudioManager.getInstance().playSe('se_cancel');
+
     this.cameras.main.fadeOut(300, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
       this.scene.start(SCENES.TITLE);

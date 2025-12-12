@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { SCENES, GAME_CONFIG } from '@/config/GameConfig';
 import { StageIntroData } from '@/types';
+import { AudioManager } from '@/systems/AudioManager';
 
 /**
  * PauseScene用のデータ
@@ -26,6 +27,10 @@ export class PauseScene extends Phaser.Scene {
   }
 
   create(): void {
+    // 状態をリセット
+    this.selectedIndex = 0;
+    this.menuItems = [];
+
     const centerX = GAME_CONFIG.WIDTH / 2;
     const centerY = GAME_CONFIG.HEIGHT / 2;
 
@@ -82,11 +87,14 @@ export class PauseScene extends Phaser.Scene {
       menuItem.setInteractive({ useHandCursor: true });
 
       menuItem.on('pointerover', () => {
-        this.selectedIndex = index;
-        this.updateSelection();
+        if (this.selectedIndex !== index) {
+          this.selectedIndex = index;
+          this.updateSelection(true);
+        }
       });
 
       menuItem.on('pointerdown', () => {
+        AudioManager.getInstance().playSe('se_decision');
         option.action();
       });
 
@@ -98,7 +106,11 @@ export class PauseScene extends Phaser.Scene {
   /**
    * 選択状態を更新
    */
-  private updateSelection(): void {
+  private updateSelection(playSound: boolean = false): void {
+    if (playSound) {
+      AudioManager.getInstance().playSe('se_select');
+    }
+
     this.menuItems.forEach((item, index) => {
       if (index === this.selectedIndex) {
         item.setColor('#ffff00');
@@ -116,22 +128,20 @@ export class PauseScene extends Phaser.Scene {
   private setupKeyboardInput(): void {
     this.input.keyboard?.on('keydown-UP', () => {
       this.selectedIndex = (this.selectedIndex - 1 + this.menuItems.length) % this.menuItems.length;
-      this.updateSelection();
+      this.updateSelection(true);
     });
 
     this.input.keyboard?.on('keydown-DOWN', () => {
       this.selectedIndex = (this.selectedIndex + 1) % this.menuItems.length;
-      this.updateSelection();
+      this.updateSelection(true);
     });
 
     this.input.keyboard?.on('keydown-ENTER', () => {
-      const action = this.menuItems[this.selectedIndex].getData('action') as () => void;
-      action();
+      this.confirmSelection();
     });
 
     this.input.keyboard?.on('keydown-SPACE', () => {
-      const action = this.menuItems[this.selectedIndex].getData('action') as () => void;
-      action();
+      this.confirmSelection();
     });
 
     this.input.keyboard?.on('keydown-ESC', () => {
@@ -140,9 +150,19 @@ export class PauseScene extends Phaser.Scene {
   }
 
   /**
+   * 選択を確定
+   */
+  private confirmSelection(): void {
+    AudioManager.getInstance().playSe('se_decision');
+    const action = this.menuItems[this.selectedIndex].getData('action') as () => void;
+    action();
+  }
+
+  /**
    * ゲームを再開
    */
   private resume(): void {
+    AudioManager.getInstance().playSe('se_cancel');
     this.scene.stop();
     this.scene.resume(SCENES.GAME);
   }
@@ -174,8 +194,10 @@ export class PauseScene extends Phaser.Scene {
    * タイトルへ
    */
   private goToTitle(): void {
+    // GameSceneを完全に停止
     this.scene.stop(SCENES.GAME);
     this.scene.stop();
+    // TitleSceneを開始（TitleScene側でフェードインする）
     this.scene.start(SCENES.TITLE);
   }
 }

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { SCENES, GAME_CONFIG } from '@/config/GameConfig';
+import { AudioManager } from '@/systems/AudioManager';
 
 /**
  * TitleScene - タイトル画面
@@ -7,17 +8,26 @@ import { SCENES, GAME_CONFIG } from '@/config/GameConfig';
 export class TitleScene extends Phaser.Scene {
   private menuItems: Phaser.GameObjects.Text[] = [];
   private selectedIndex: number = 0;
+  private hasInteracted: boolean = false; // 初回操作フラグ
 
   constructor() {
     super({ key: SCENES.TITLE });
   }
 
   create(): void {
+    // カメラのフェード状態をリセットしてからフェードイン
+    this.cameras.main.resetFX();
     this.cameras.main.fadeIn(300);
 
     // 状態リセット
     this.menuItems = [];
     this.selectedIndex = 0;
+    this.hasInteracted = false;
+
+    // タイトルBGMを再生
+    const audioManager = AudioManager.getInstance();
+    audioManager.setScene(this);
+    audioManager.playBgm('bgm_title');
 
     const centerX = GAME_CONFIG.WIDTH / 2;
     const centerY = GAME_CONFIG.HEIGHT / 2;
@@ -52,6 +62,15 @@ export class TitleScene extends Phaser.Scene {
 
     // キーボード入力
     this.setupKeyboardInput();
+
+    // 画面クリックでAudioContextを再開（ブラウザのAutoPlay Policy対策）
+    this.input.once('pointerdown', () => {
+      if (!this.hasInteracted) {
+        const audioManager = AudioManager.getInstance();
+        audioManager.resumeOnUserGesture();
+        audioManager.playBgm('bgm_title');
+      }
+    });
   }
 
   /**
@@ -119,6 +138,13 @@ export class TitleScene extends Phaser.Scene {
         this.selectMenuItem(index);
       });
 
+      // シーン開始時にマウスが既にボタン上にある場合にも対応
+      menuItem.on('pointermove', () => {
+        if (!this.hasInteracted) {
+          this.selectMenuItem(index);
+        }
+      });
+
       menuItem.on('pointerdown', () => {
         this.confirmSelection();
       });
@@ -152,6 +178,22 @@ export class TitleScene extends Phaser.Scene {
    * メニュー項目を選択
    */
   private selectMenuItem(index: number): void {
+    // 同じ項目で既に操作済みなら何もしない
+    if (index === this.selectedIndex && this.hasInteracted) return;
+
+    const audioManager = AudioManager.getInstance();
+
+    // 初回操作時にAudioContextを再開してBGMを再生
+    if (!this.hasInteracted) {
+      audioManager.resumeOnUserGesture();
+      // BGMがまだ再生されていなければ再生
+      audioManager.playBgm('bgm_title');
+    }
+
+    // 選択SEを再生
+    audioManager.playSe('se_select');
+    this.hasInteracted = true;
+
     // 前の選択を解除
     if (this.menuItems[this.selectedIndex]) {
       this.menuItems[this.selectedIndex].setColor('#ffffff');
@@ -168,6 +210,9 @@ export class TitleScene extends Phaser.Scene {
    * 選択を確定
    */
   private confirmSelection(): void {
+    // 決定SEを再生
+    AudioManager.getInstance().playSe('se_decision');
+
     const scenes = [SCENES.MODE_SELECT, SCENES.OPTION, SCENES.CREDIT, SCENES.DEBUG_ROOM];
     const targetScene = scenes[this.selectedIndex];
 

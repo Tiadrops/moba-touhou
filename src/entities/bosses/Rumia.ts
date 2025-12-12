@@ -10,6 +10,7 @@ import {
 } from '@/types';
 import { BOSS_CONFIG, GAME_CONFIG } from '@/config/GameConfig';
 import { KSHOT } from '../Bullet';
+import { AudioManager } from '@/systems/AudioManager';
 
 const CONFIG = BOSS_CONFIG.RUMIA;
 
@@ -748,6 +749,8 @@ export class Rumia extends Boss {
       // 実行時間 = 最後の予告線から弾発射までの遅延 + 弾が飛ぶ時間
       const fireDelay = this.currentSkillConfig.Q.WARNING_TO_FIRE_DELAY ?? 500;
       qSkill.executionTimeRemaining = fireDelay + 2000;
+      // 弾幕発射SE（実行開始時に1回だけ再生）
+      AudioManager.getInstance().playSe('se_shot1_multi');
       console.log('Rumia: Qスキル実行開始!');
     }
   }

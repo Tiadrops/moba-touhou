@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { SCENES, COLORS } from '@/config/GameConfig';
+import { AudioManager } from '@/systems/AudioManager';
 
 /**
  * BootScene - ゲーム起動時の初期化とアセット読み込み
@@ -58,8 +59,16 @@ export class BootScene extends Phaser.Scene {
     this.load.image('rindan_15', 'img/bullets/rindan_purple.png');
     this.load.image('rindan_16', 'img/bullets/rindan_blue.png');
 
-    // TODO: 将来的にここで音声アセットを読み込む
-    // this.load.audio('bgm', 'assets/audio/bgm.mp3');
+    // BGM読み込み
+    this.load.audio('bgm_title', 'sound/bgm/赤より紅い夢.mp3');
+    this.load.audio('bgm_rumia', 'sound/bgm/nc119989_東方原曲_妖魔夜行.mp3');
+
+    // SE読み込み
+    this.load.audio('se_select', 'sound/se/select.mp3');
+    this.load.audio('se_decision', 'sound/se/decision.mp3');
+    this.load.audio('se_cancel', 'sound/se/cancel.mp3');
+    this.load.audio('se_shot1', 'sound/se/shot1.mp3');
+    this.load.audio('se_shot1_multi', 'sound/se/shot1_multi.mp3');
   }
 
   create(): void {
@@ -71,6 +80,9 @@ export class BootScene extends Phaser.Scene {
 
     // キャラクターアニメーションを定義
     this.createCharacterAnimations();
+
+    // AudioManagerを初期化
+    AudioManager.getInstance().initialize(this);
 
     // タイトル画面へ遷移
     this.scene.start(SCENES.TITLE);
