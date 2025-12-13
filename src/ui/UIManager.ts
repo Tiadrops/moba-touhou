@@ -91,6 +91,20 @@ export class UIManager {
   }
 
   /**
+   * ブレイク発生時の処理
+   */
+  onBreak(): void {
+    this.playerZone.addBreak();
+  }
+
+  /**
+   * PlayerZoneを取得
+   */
+  getPlayerZone(): PlayerZone {
+    return this.playerZone;
+  }
+
+  /**
    * 破棄
    */
   destroy(): void {

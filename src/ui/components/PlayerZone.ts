@@ -28,6 +28,22 @@ export class PlayerZone extends Phaser.GameObjects.Container {
   // バフ/デバフ表示
   private statusEffectBar!: CombinedStatusEffectBar;
 
+  // 装備スロット
+  private equipmentSlots: Phaser.GameObjects.Rectangle[] = [];
+  private equipmentBorders: Phaser.GameObjects.Graphics[] = [];
+
+  // パラメータ表示
+  private statsPanelBg!: Phaser.GameObjects.Rectangle;
+  private statsTexts: Phaser.GameObjects.Text[] = [];
+
+  // スコアボード
+  private scoreboardBg!: Phaser.GameObjects.Rectangle;
+  private scoreboardTexts: Phaser.GameObjects.Text[] = [];
+  private breakScoreUnit!: Phaser.GameObjects.Text; // x100単位表示
+  private breakCount: number = 0;
+  private gameStartTime: number = 0;
+  private totalScore: number = 0; // 過去ステージのスコア合算
+
   // スキルスロット順序
   private readonly slotOrder: SkillSlot[] = [
     SkillSlot.Q,
@@ -58,6 +74,9 @@ export class PlayerZone extends Phaser.GameObjects.Container {
 
     this.createPortrait();
     this.createInfoPanel();
+    this.createEquipmentSlots();
+    this.createStatsPanel();
+    this.createScoreboard();
     this.createSkillBar();
     this.createStatusEffectDisplay();
 
@@ -133,6 +152,137 @@ export class PlayerZone extends Phaser.GameObjects.Container {
     this.updateLivesDisplay();
   }
 
+  /**
+   * 装備スロットを作成（6スロット）
+   */
+  private createEquipmentSlots(): void {
+    const layout = UI_LAYOUT.PLAYER_ZONE.EQUIPMENT_SLOTS;
+    const { SLOT_SIZE, SLOT_GAP, SLOT_COUNT } = layout;
+    const totalWidth = (SLOT_SIZE + SLOT_GAP) * SLOT_COUNT - SLOT_GAP;
+    const startX = layout.X - totalWidth / 2 + SLOT_SIZE / 2;
+
+    for (let i = 0; i < SLOT_COUNT; i++) {
+      const slotX = startX + i * (SLOT_SIZE + SLOT_GAP);
+
+      // スロット背景
+      const slot = this.scene.add.rectangle(
+        slotX,
+        layout.Y,
+        SLOT_SIZE,
+        SLOT_SIZE,
+        0x2a2a4e
+      );
+      slot.setAlpha(0.8);
+      this.add(slot);
+      this.equipmentSlots.push(slot);
+
+      // スロット枠線
+      const border = this.scene.add.graphics();
+      border.lineStyle(2, 0x4a4a6a, 1);
+      border.strokeRect(
+        slotX - SLOT_SIZE / 2,
+        layout.Y - SLOT_SIZE / 2,
+        SLOT_SIZE,
+        SLOT_SIZE
+      );
+      this.add(border);
+      this.equipmentBorders.push(border);
+    }
+  }
+
+  /**
+   * パラメータ表示パネルを作成
+   */
+  private createStatsPanel(): void {
+    const layout = UI_LAYOUT.PLAYER_ZONE.STATS_PANEL;
+    const stats = this.player.getCombatStats();
+
+    const statLabels = [
+      { label: 'ATK', getValue: () => Math.floor(this.player.getEffectiveAttackPower()) },
+      { label: 'AS', getValue: () => this.player.getEffectiveAttackSpeed().toFixed(2) },
+      { label: 'DEF', getValue: () => this.player.getDefense() },
+      { label: 'MS', getValue: () => Math.floor(this.player.getEffectiveMoveSpeed()) },
+      { label: 'Range', getValue: () => Math.floor(stats.attackRange) },
+      { label: 'Crit', getValue: () => `${Math.floor(stats.critChance * 100)}%` },
+    ];
+
+    // 背景パネル
+    const bgHeight = statLabels.length * layout.LINE_HEIGHT + layout.PADDING * 2;
+    this.statsPanelBg = this.scene.add.rectangle(
+      layout.X + layout.WIDTH / 2,
+      layout.Y + bgHeight / 2,
+      layout.WIDTH,
+      bgHeight,
+      0x1a1a2e
+    );
+    this.statsPanelBg.setAlpha(0.7);
+    this.add(this.statsPanelBg);
+
+    statLabels.forEach((stat, index) => {
+      const text = this.scene.add.text(
+        layout.X,
+        layout.Y + layout.PADDING + index * layout.LINE_HEIGHT,
+        `${stat.label}: ${stat.getValue()}`,
+        {
+          font: '16px monospace',
+          color: '#aaddaa',
+        }
+      );
+      this.add(text);
+      this.statsTexts.push(text);
+    });
+  }
+
+  /**
+   * スコアボードを作成
+   */
+  private createScoreboard(): void {
+    const layout = UI_LAYOUT.PLAYER_ZONE.SCOREBOARD;
+
+    // 背景パネル（4行分）
+    const bgHeight = 4 * layout.LINE_HEIGHT + layout.PADDING * 2;
+    this.scoreboardBg = this.scene.add.rectangle(
+      layout.X,
+      layout.Y + bgHeight / 2,
+      layout.WIDTH,
+      bgHeight,
+      0x1a1a2e
+    );
+    this.scoreboardBg.setAlpha(0.7);
+    this.add(this.scoreboardBg);
+
+    // スコアテキスト（4行）
+    const labels = ['Total Score', 'Stage Score', 'Break Score', 'Time Score'];
+    labels.forEach((label, index) => {
+      const text = this.scene.add.text(
+        layout.X - layout.WIDTH / 2 + layout.PADDING,
+        layout.Y + layout.PADDING + index * layout.LINE_HEIGHT,
+        `${label}: 0`,
+        {
+          font: '16px monospace',
+          color: '#ffdd88',
+        }
+      );
+      this.add(text);
+      this.scoreboardTexts.push(text);
+    });
+
+    // Break Score用の単位表示（小さいフォント、後で位置調整）
+    this.breakScoreUnit = this.scene.add.text(
+      0, 0,
+      'x100',
+      {
+        font: '11px monospace',
+        color: '#ffdd88',
+      }
+    );
+    this.breakScoreUnit.setAlpha(0.8);
+    this.add(this.breakScoreUnit);
+
+    // ゲーム開始時間を記録
+    this.gameStartTime = this.scene.time.now;
+  }
+
   private createSkillBar(): void {
     const skillBarLayout = UI_LAYOUT.PLAYER_ZONE.SKILL_BAR;
     const { SLOT_SIZE, SLOT_GAP } = skillBarLayout;
@@ -176,6 +326,8 @@ export class PlayerZone extends Phaser.GameObjects.Container {
     this.updateSkillSlots(time);
     this.updateHealthBar();
     this.updateStatusEffects();
+    this.updateStatsPanel();
+    this.updateScoreboard(time);
   }
 
   /**
@@ -273,6 +425,113 @@ export class PlayerZone extends Phaser.GameObjects.Container {
   }
 
   /**
+   * パラメータ表示を更新
+   */
+  private updateStatsPanel(): void {
+    const stats = this.player.getCombatStats();
+    // 1m = 55px で変換
+    const msInMeters = (this.player.getEffectiveMoveSpeed() / 55).toFixed(1);
+    const rangeInMeters = (stats.attackRange / 55).toFixed(1);
+    const statValues = [
+      `ATK: ${Math.floor(this.player.getEffectiveAttackPower())}`,
+      `AS: ${this.player.getEffectiveAttackSpeed().toFixed(2)}`,
+      `DEF: ${this.player.getDefense()}`,
+      `MS: ${msInMeters}m`,
+      `Range: ${rangeInMeters}m`,
+      `Crit: ${Math.floor(stats.critChance * 100)}%`,
+    ];
+
+    this.statsTexts.forEach((text, index) => {
+      if (statValues[index]) {
+        text.setText(statValues[index]);
+      }
+    });
+  }
+
+  /**
+   * スコアボードを更新
+   */
+  private updateScoreboard(time: number): void {
+    const layout = UI_LAYOUT.PLAYER_ZONE.SCOREBOARD;
+    const targetTime = layout.TARGET_TIME;
+
+    // 経過時間（秒）
+    const elapsedSeconds = Math.floor((time - this.gameStartTime) / 1000);
+
+    // タイムスコア表示: 経過時間 / 目標時間
+    const timeScoreDisplay = `${elapsedSeconds}s / ${targetTime}s`;
+
+    // タイムボーナス（目標時間 - 経過時間）、マイナスにならないように
+    const timeBonus = Math.max(0, targetTime - elapsedSeconds);
+
+    // ステージスコア: BreakScore x 100 + タイムボーナス x 100（0以上）
+    const stageScore = Math.max(0, this.breakCount * 100 + timeBonus * 100);
+
+    // トータルスコア: 過去ステージのスコア合算 + 現在のステージスコア
+    const currentTotalScore = this.totalScore + stageScore;
+
+    // テキスト更新
+    if (this.scoreboardTexts[0]) {
+      this.scoreboardTexts[0].setText(`Total Score: ${currentTotalScore}`);
+    }
+    if (this.scoreboardTexts[1]) {
+      this.scoreboardTexts[1].setText(`Stage Score: ${stageScore}`);
+    }
+    if (this.scoreboardTexts[2]) {
+      this.scoreboardTexts[2].setText(`Break Score: ${this.breakCount}`);
+      // 単位をBreak Scoreテキストの直後に配置
+      const breakText = this.scoreboardTexts[2];
+      this.breakScoreUnit.setPosition(
+        breakText.x + breakText.width + 4,
+        breakText.y + 4
+      );
+    }
+    if (this.scoreboardTexts[3]) {
+      this.scoreboardTexts[3].setText(`Time Score: ${timeScoreDisplay}`);
+    }
+  }
+
+  /**
+   * ブレイク回数を増加
+   */
+  addBreak(): void {
+    this.breakCount++;
+  }
+
+  /**
+   * 現在のブレイク回数を取得
+   */
+  getBreakCount(): number {
+    return this.breakCount;
+  }
+
+  /**
+   * ステージクリア時にスコアを確定してtotalScoreに加算
+   */
+  finalizeStageScore(time: number): number {
+    const layout = UI_LAYOUT.PLAYER_ZONE.SCOREBOARD;
+    const targetTime = layout.TARGET_TIME;
+    const elapsedSeconds = Math.floor((time - this.gameStartTime) / 1000);
+    const timeBonus = Math.max(0, targetTime - elapsedSeconds);
+    const stageScore = Math.max(0, this.breakCount * 100 + timeBonus * 100);
+
+    this.totalScore += stageScore;
+
+    // 次のステージ用にリセット
+    this.breakCount = 0;
+    this.gameStartTime = time;
+
+    return stageScore;
+  }
+
+  /**
+   * 現在のトータルスコアを取得
+   */
+  getTotalScore(): number {
+    return this.totalScore;
+  }
+
+  /**
    * 残機を設定
    */
   setLives(lives: number, maxLives?: number): void {
@@ -331,6 +590,10 @@ export class PlayerZone extends Phaser.GameObjects.Container {
     this.skillSlots.forEach(slot => slot.destroy());
     this.healthBar.destroy();
     this.statusEffectBar.destroy();
+    this.equipmentBorders.forEach(border => border.destroy());
+    this.statsTexts.forEach(text => text.destroy());
+    this.scoreboardTexts.forEach(text => text.destroy());
+    this.breakScoreUnit?.destroy();
     super.destroy(fromScene);
   }
 }

@@ -356,6 +356,9 @@ export abstract class Boss extends Phaser.Physics.Arcade.Sprite {
         breakText.destroy();
       },
     });
+
+    // ブレイクイベントを発火（UIManager経由でスコア加算）
+    this.scene.events.emit('bossBreak');
   }
 
   /**

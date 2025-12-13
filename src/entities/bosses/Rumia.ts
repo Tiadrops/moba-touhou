@@ -951,10 +951,16 @@ export class Rumia extends Boss {
     const perpY = Math.cos(angle);
 
     // 弾発射
+    let acquiredCount = 0;
+    let failedCount = 0;
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         const bullet = this.bulletPool.acquire();
-        if (!bullet) continue;
+        if (!bullet) {
+          failedCount++;
+          continue;
+        }
+        acquiredCount++;
 
         // 横方向のオフセット（中央揃え）- 列番号から中央を引いた値
         const colFromCenter = col - (cols - 1) / 2;
@@ -1011,7 +1017,6 @@ export class Rumia extends Boss {
       }
     }
 
-    console.log(`Rumia Q: 予告線${lineIndex + 1}から弾幕発射 (${rows}x${cols}発)`);
   }
 
   /**
@@ -1481,10 +1486,6 @@ export class Rumia extends Boss {
     const sinValue = Math.sin(t * Math.PI); // 0→1→0の滑らかな曲線
     const bulletSpeed = speedBase + (speedMax - speedBase) * sinValue;
 
-    // プレイエリアの境界
-    const { X: areaX, Y: areaY, WIDTH: areaW, HEIGHT: areaH } = GAME_CONFIG.PLAY_AREA;
-    const margin = 10; // 境界からのマージン
-
     // 各列に1発ずつ配置（事前計算した位置を使用）
     for (let line = 0; line < this.eSkillBulletPositions.length; line++) {
       const linePositions = this.eSkillBulletPositions[line];
@@ -1493,12 +1494,7 @@ export class Rumia extends Boss {
       // 事前計算した位置を使用
       const spawnPos = linePositions[bulletIndex];
 
-      // プレイエリア外の弾はスキップ
-      if (spawnPos.x < areaX + margin || spawnPos.x > areaX + areaW - margin ||
-          spawnPos.y < areaY + margin || spawnPos.y > areaY + areaH - margin) {
-        continue;
-      }
-
+      // プレイエリア外の弾も発射する（非表示だが、プレイエリアに入ると表示される）
       const bullet = this.bulletPool.acquire();
       if (!bullet) continue;
 

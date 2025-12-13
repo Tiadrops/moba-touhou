@@ -52,6 +52,7 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
   private isCritical: boolean = false; // クリティカルヒットフラグ
   private kshotFrameId: number | null = null; // kShotフレームID（使用時）
   private hasEnteredPlayArea: boolean = false; // プレイエリアに入ったことがあるか
+  private fireTime: number = 0; // 発射時刻（猶予時間用）
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'bullet_player');
@@ -99,6 +100,7 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     this.isCritical = isCritical;
     this.kshotFrameId = kshotFrameId;
     this.hasEnteredPlayArea = false; // プレイエリア入場フラグをリセット
+    this.fireTime = this.scene.time.now; // 発射時刻を記録
 
     // 発射開始位置を記録
     this.startX = x;
@@ -193,11 +195,12 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
         // プレイエリア内に入った
         this.hasEnteredPlayArea = true;
         this.setVisible(true);
-      } else if (!this.hasEnteredPlayArea) {
-        // まだプレイエリアに入っていない場合は非表示のまま
+      } else {
+        // プレイエリア外に配置された場合、フラグをリセットして非表示に
+        // （弾列形成のため後方に配置される場合への対応）
+        this.hasEnteredPlayArea = false;
         this.setVisible(false);
       }
-      // 注: 一度入ってから出た場合の処理はupdate()に任せる
     }
 
     return this;
@@ -248,9 +251,32 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
       this.setVisible(true);
     }
 
+    // プレイエリア外にいる弾は非表示にする（常に）
+    if (!isInsidePlayArea) {
+      this.setVisible(false);
+    } else {
+      this.setVisible(true);
+    }
+
+    // 弾が発射位置から一定距離を移動するまでは保護する（消さない）
+    const MIN_TRAVEL_DISTANCE = 300; // 最低移動距離（px）
+    const distanceFromStart = Phaser.Math.Distance.Between(this.startX, this.startY, this.x, this.y);
+    const isProtected = distanceFromStart <= MIN_TRAVEL_DISTANCE;
+
     // プレイエリアに一度入った後に出たら非アクティブ化
-    // （まだ入っていない弾は消さない）
-    if (this.hasEnteredPlayArea && !isInsidePlayArea) {
+    // ただし、弾が発射位置から一定距離を移動するまでは消さない
+    if (this.hasEnteredPlayArea && !isInsidePlayArea && !isProtected) {
+      this.deactivate();
+    }
+
+    // プレイエリアに入っていない弾でも、極端に遠い場合は消す（プール枯渇防止）
+    // ただし、発射から一定時間は猶予を与える（弾列形成のため後方に配置される弾への対応）
+    const GRACE_PERIOD = 2000; // 発射から2秒間は猶予
+    const timeSinceFire = this.scene.time.now - this.fireTime;
+    const FAR_BOUNDARY = 500;
+    const isTooFarAway = this.x < X - FAR_BOUNDARY || this.x > X + WIDTH + FAR_BOUNDARY ||
+                         this.y < Y - FAR_BOUNDARY || this.y > Y + HEIGHT + FAR_BOUNDARY;
+    if (!this.hasEnteredPlayArea && isTooFarAway && timeSinceFire > GRACE_PERIOD) {
       this.deactivate();
     }
   }

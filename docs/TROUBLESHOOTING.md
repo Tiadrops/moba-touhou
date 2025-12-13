@@ -130,6 +130,89 @@ setPosition(x?: number, y?: number, z?: number, w?: number): this {
 
 ---
 
+## 2024年 - Eスキルの弾幕が欠ける・早期に消失する問題
+
+### 問題の症状
+
+ルーミアのEスキル（移動弾幕）で、以下の問題が発生した：
+1. 弾が18発中一部しか表示されない（列が欠ける）
+2. ルーミアが画面端にいると特に発生しやすい
+3. Qスキルでも同様に弾が早期に消失することがあった
+
+### 原因
+
+複数の原因が絡み合っていた：
+
+**原因1: プレイエリア境界でのスキップ処理**
+- Eスキルは弾をプレイエリア境界の外側にも配置することがある（幅550pxの弾列）
+- プレイエリア外の弾は`spawnESkillBullets()`内でスキップされ、発射されなかった
+
+```typescript
+// 問題のあったコード
+if (spawnPos.x < areaX + margin || spawnPos.x > areaX + areaW - margin ||
+    spawnPos.y < areaY + margin || spawnPos.y > areaY + areaH - margin) {
+  skippedCount++;
+  continue;  // 発射されない
+}
+```
+
+**原因2: 弾の早期消失判定**
+- 弾がプレイエリアに入った後、すぐに出ると消される（`hasEnteredPlayArea && !isInsidePlayArea`）
+- 画面端で発射された弾は、プレイエリアの境界をわずかに出入りして即座に消されていた
+
+**原因3: 非表示状態の維持**
+- プレイエリア外の弾は`setVisible(false)`になるが、保護中（300px未満の移動）でも非表示のままだった
+- 弾は存在するが見えない状態だった
+
+### 解決策
+
+**解決策1: スキップ処理の削除**
+- プレイエリア外の弾もスキップせずに発射する
+- 弾はプレイエリア外では非表示だが、プレイエリアに入ると表示される
+
+```typescript
+// 修正後：スキップ処理を削除
+// プレイエリア外の弾も発射する（非表示だが、プレイエリアに入ると表示される）
+const bullet = this.bulletPool.acquire();
+```
+
+**解決策2: 距離ベースの保護**
+- 時間ベース（500ms）ではなく、距離ベース（300px）で弾を保護
+- 弾が発射位置から300px移動するまでは、プレイエリア外に出ても消さない
+
+```typescript
+const MIN_TRAVEL_DISTANCE = 300;
+const distanceFromStart = Phaser.Math.Distance.Between(this.startX, this.startY, this.x, this.y);
+const isProtected = distanceFromStart <= MIN_TRAVEL_DISTANCE;
+
+if (this.hasEnteredPlayArea && !isInsidePlayArea && !isProtected) {
+  this.deactivate();
+}
+```
+
+**解決策3: 表示制御はプレイエリア内のみ**
+- プレイエリア外の弾は常に非表示（`setVisible(false)`）
+- プレイエリア内の弾は常に表示（`setVisible(true)`）
+- 保護状態でも表示制御は同じ（プレイエリア外なら非表示）
+
+### 修正箇所
+
+1. `src/entities/Bullet.ts`
+   - `update()`内の消失判定を距離ベースに変更
+   - 表示制御をシンプル化（プレイエリア内外のみで判定）
+
+2. `src/entities/bosses/Rumia.ts`
+   - `spawnESkillBullets()`のプレイエリア外スキップ処理を削除
+
+### 教訓
+
+- 弾幕ゲームでは、弾がプレイエリア境界を出入りするケースが多い
+- 「弾が消えた」と「弾が非表示」は別問題として切り分ける
+- 時間ベースの保護は弾速によって効果が変わるため、距離ベースの方が安定
+- デバッグログは問題解決まで消さない
+
+---
+
 ## テンプレート
 
 ### 問題の症状

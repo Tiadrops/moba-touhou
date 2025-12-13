@@ -366,6 +366,11 @@ export class GameScene extends Phaser.Scene {
       this.onBossPhaseStart(data);
     });
 
+    // ブレイクイベントをリスニング（スコア加算）
+    this.events.on('bossBreak', () => {
+      this.uiManager?.onBreak();
+    });
+
     console.log(`Rumia spawned! Phase: ${phaseName}, HP: ${currentPhase?.hp}`);
   }
 
