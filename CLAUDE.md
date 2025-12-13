@@ -49,6 +49,14 @@ rm old_file.ts
   - `rumia_koma3.png`（移動）: 1408x800px, 横2フレーム, 4fps
   - 待機・詠唱のフレーム順: 1→3→2→4
 
+### ステージ背景
+- 背景画像: `img/background/stage1.png`
+- 読み込み: `src/scenes/BootScene.ts`
+- 表示・スクロール: `src/scenes/GameScene.ts`
+- スクロール方式: パン方式（斜め移動、端で反転）
+- 速度: X方向8px/秒、Y方向15px/秒
+- 画像サイズに応じて自動スケール（プレイエリア+50%余白）
+
 ### ドキュメント
 - 弾幕仕様: `docs/BULLET_SYSTEM.md`
 - ボスシステム: `docs/BOSS_SYSTEM.md`

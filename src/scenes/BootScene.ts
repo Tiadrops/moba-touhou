@@ -55,6 +55,9 @@ export class BootScene extends Phaser.Scene {
       frameHeight: 800,
     });
 
+    // ステージ背景の読み込み
+    this.load.image('bg_stage1', 'img/background/stage1.png');
+
     // 弾幕スプライトシートの読み込み
     // 黒縁中玉: 4096x512px (512x512 × 8色)
     this.load.image('kshot_medium_ball', 'img/bullets/kshot_medium_ball.png');

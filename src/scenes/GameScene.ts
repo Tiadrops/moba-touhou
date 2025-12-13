@@ -22,6 +22,11 @@ export class GameScene extends Phaser.Scene {
   private infoText!: Phaser.GameObjects.Text;
   private debugText!: Phaser.GameObjects.Text;
 
+  // 背景スクロール（パン方式）
+  private bgImage!: Phaser.GameObjects.Image;
+  private bgVelocityX: number = 8; // X方向速度（ピクセル/秒）
+  private bgVelocityY: number = 15; // Y方向速度（ピクセル/秒）
+
   // ゲームオブジェクト
   private player!: Player;
   private inputManager!: InputManager;
@@ -59,6 +64,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number): void {
+    // 背景スクロール
+    this.updateScrollingBackground(delta);
+
     // FPS表示の更新
     if (GAME_CONFIG.DEBUG && this.fpsText) {
       const fps = Math.round(this.game.loop.actualFps);
@@ -203,7 +211,7 @@ export class GameScene extends Phaser.Scene {
   private createPlayArea(): void {
     const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
 
-    // プレイエリアの背景
+    // プレイエリアの背景（フォールバック用）
     this.playArea = this.add.rectangle(
       X,
       Y,
@@ -212,13 +220,99 @@ export class GameScene extends Phaser.Scene {
       COLORS.PLAY_AREA_BG
     );
     this.playArea.setOrigin(0, 0);
-    this.playArea.setDepth(DEPTH.PLAY_AREA);
+    this.playArea.setDepth(DEPTH.BACKGROUND);
+
+    // スクロール背景を作成
+    this.createScrollingBackground();
 
     // プレイエリアの枠線
     const border = this.add.graphics();
     border.lineStyle(2, COLORS.PLAY_AREA_BORDER, 1);
     border.strokeRect(X, Y, WIDTH, HEIGHT);
     border.setDepth(DEPTH.PLAY_AREA);
+  }
+
+  /**
+   * スクロール背景を作成（パン方式）
+   */
+  private createScrollingBackground(): void {
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const centerX = X + WIDTH / 2;
+    const centerY = Y + HEIGHT / 2;
+
+    // 背景テクスチャが存在するか確認
+    if (!this.textures.exists('bg_stage1')) {
+      console.warn('bg_stage1 texture not found');
+      return;
+    }
+
+    // 背景画像の元サイズを取得
+    const bgTexture = this.textures.get('bg_stage1');
+    const bgFrame = bgTexture.get();
+    const bgOriginalWidth = bgFrame.width;
+    const bgOriginalHeight = bgFrame.height;
+
+    // プレイエリアをカバーしつつ、パン用の余白を確保するスケール
+    // 幅と高さの両方をカバーし、さらに50%余白を追加
+    const scaleX = (WIDTH * 1.5) / bgOriginalWidth;
+    const scaleY = (HEIGHT * 1.5) / bgOriginalHeight;
+    const scale = Math.max(scaleX, scaleY);
+
+    // 背景画像を作成（中央配置）
+    this.bgImage = this.add.image(centerX, centerY, 'bg_stage1');
+    this.bgImage.setOrigin(0.5, 0.5);
+    this.bgImage.setScale(scale);
+    this.bgImage.setDepth(DEPTH.PLAY_AREA);
+
+    // プレイエリア外をマスクで隠す
+    const maskGraphics = this.make.graphics({ x: 0, y: 0 });
+    maskGraphics.fillStyle(0xffffff);
+    maskGraphics.fillRect(X, Y, WIDTH, HEIGHT);
+    const mask = maskGraphics.createGeometryMask();
+    this.bgImage.setMask(mask);
+
+    console.log(`Background created: scale=${scale.toFixed(2)}, size=${(bgOriginalWidth * scale).toFixed(0)}x${(bgOriginalHeight * scale).toFixed(0)}`);
+  }
+
+  /**
+   * 背景スクロールを更新（パン方式 - 端で反転）
+   */
+  private updateScrollingBackground(delta: number): void {
+    if (!this.bgImage) return;
+
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const centerX = X + WIDTH / 2;
+    const centerY = Y + HEIGHT / 2;
+
+    // 画像の表示サイズ
+    const imgHalfWidth = this.bgImage.displayWidth / 2;
+    const imgHalfHeight = this.bgImage.displayHeight / 2;
+
+    // 移動可能な範囲（画像がプレイエリアをはみ出さない範囲）
+    const maxOffsetX = imgHalfWidth - WIDTH / 2;
+    const maxOffsetY = imgHalfHeight - HEIGHT / 2;
+
+    // 移動
+    const deltaSeconds = delta / 1000;
+    this.bgImage.x += this.bgVelocityX * deltaSeconds;
+    this.bgImage.y += this.bgVelocityY * deltaSeconds;
+
+    // 端に達したら方向を反転
+    if (this.bgImage.x <= centerX - maxOffsetX) {
+      this.bgImage.x = centerX - maxOffsetX;
+      this.bgVelocityX = Math.abs(this.bgVelocityX);
+    } else if (this.bgImage.x >= centerX + maxOffsetX) {
+      this.bgImage.x = centerX + maxOffsetX;
+      this.bgVelocityX = -Math.abs(this.bgVelocityX);
+    }
+
+    if (this.bgImage.y <= centerY - maxOffsetY) {
+      this.bgImage.y = centerY - maxOffsetY;
+      this.bgVelocityY = Math.abs(this.bgVelocityY);
+    } else if (this.bgImage.y >= centerY + maxOffsetY) {
+      this.bgImage.y = centerY + maxOffsetY;
+      this.bgVelocityY = -Math.abs(this.bgVelocityY);
+    }
   }
 
   /**
