@@ -19,6 +19,11 @@ export class BootScene extends Phaser.Scene {
     this.load.image('portrait_rumia_1', 'img/Rumia/rumia_1.png');
     this.load.image('portrait_rumia_2', 'img/Rumia/rumia_2.png');
 
+    // 霊夢スキル画像
+    this.load.image('reimu_skill_q', 'img/reimu/reimu_Q.png');
+    this.load.image('reimu_skill_w', 'img/reimu/reimu_W.png');
+    this.load.image('reimu_aa', 'img/reimu/reimu_aa.png');
+
     // キャラクターコマ（スプライトシート）の読み込み
     // 霊夢コマ: 2816x1504px, 2x2グリッド、4フレーム
     this.load.spritesheet('coma_reimu_idle', 'img/reimu/reimu_coma1.png', {
@@ -74,6 +79,9 @@ export class BootScene extends Phaser.Scene {
     this.load.audio('se_cancel', 'sound/se/cancel.mp3');
     this.load.audio('se_shot1', 'sound/se/shot1.mp3');
     this.load.audio('se_shot1_multi', 'sound/se/shot1_multi.mp3');
+    this.load.audio('se_break', 'sound/se/break.mp3');
+    this.load.audio('se_hit_player', 'sound/se/hit_player.mp3');
+    this.load.audio('se_hit_enemy', 'sound/se/hit_enemy.mp3');
   }
 
   create(): void {

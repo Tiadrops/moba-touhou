@@ -58,6 +58,19 @@ const BUFF_DISPLAY_CONFIG: Record<string, EffectDisplayConfig> = {
     bgColor: 0x333300,
     label: 'CRT',
   },
+  [BuffType.HARIBABA_STACK]: {
+    icon: '📍',
+    color: 0xff4488,
+    bgColor: 0x331122,
+    label: '針巫女',
+  },
+  // ダメージカット（特殊バフ）
+  damage_cut: {
+    icon: '🛡',
+    color: 0x44aaff,
+    bgColor: 0x112233,
+    label: 'DMG↓',
+  },
   // 無敵（特殊バフ）
   invincible: {
     icon: '✨',
@@ -117,9 +130,11 @@ export class StatusEffectSlotUI extends Phaser.GameObjects.Container {
   private iconText!: Phaser.GameObjects.Text;
   private labelText!: Phaser.GameObjects.Text;
   private durationText!: Phaser.GameObjects.Text;
+  private stackText!: Phaser.GameObjects.Text;
 
   private displayConfig: EffectDisplayConfig;
   private maxDuration: number = 0;
+  private isDisappearing: boolean = false; // 消滅アニメーション中フラグ
 
   constructor(scene: Phaser.Scene, config: StatusEffectSlotConfig) {
     super(scene, config.x, config.y);
@@ -210,6 +225,17 @@ export class StatusEffectSlotUI extends Phaser.GameObjects.Container {
     });
     this.durationText.setOrigin(0.5, 0.5);
     this.add(this.durationText);
+
+    // スタック数テキスト（右下角）
+    this.stackText = this.scene.add.text(halfSize - 4, halfSize - 12, '', {
+      font: 'bold 12px monospace',
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 2,
+    });
+    this.stackText.setOrigin(1, 1);
+    this.stackText.setVisible(false);
+    this.add(this.stackText);
   }
 
   /**
@@ -244,6 +270,19 @@ export class StatusEffectSlotUI extends Phaser.GameObjects.Container {
   }
 
   /**
+   * スタック数を更新
+   * @param stacks スタック数（0以下で非表示）
+   */
+  updateStacks(stacks: number): void {
+    if (stacks > 0) {
+      this.stackText.setText(`x${stacks}`);
+      this.stackText.setVisible(true);
+    } else {
+      this.stackText.setVisible(false);
+    }
+  }
+
+  /**
    * 出現アニメーション
    */
   playAppearAnimation(): void {
@@ -262,6 +301,12 @@ export class StatusEffectSlotUI extends Phaser.GameObjects.Container {
    * 消滅アニメーション
    */
   playDisappearAnimation(onComplete?: () => void): void {
+    // 既に消滅アニメーション中なら何もしない
+    if (this.isDisappearing) {
+      return;
+    }
+    this.isDisappearing = true;
+
     this.scene.tweens.add({
       targets: this,
       scale: 0,
@@ -273,6 +318,13 @@ export class StatusEffectSlotUI extends Phaser.GameObjects.Container {
         this.destroy();
       },
     });
+  }
+
+  /**
+   * 消滅アニメーション中かどうか
+   */
+  getIsDisappearing(): boolean {
+    return this.isDisappearing;
   }
 
   /**
@@ -352,9 +404,9 @@ export class StatusEffectBar extends Phaser.GameObjects.Container {
 
   /**
    * バフ/デバフリストを更新（2段表示対応）
-   * @param effects { type: string, remainingTime: number, totalDuration?: number }[]
+   * @param effects { type: string, remainingTime: number, totalDuration?: number, stacks?: number }[]
    */
-  updateEffects(effects: { type: string; remainingTime: number; totalDuration?: number }[]): void {
+  updateEffects(effects: { type: string; remainingTime: number; totalDuration?: number; stacks?: number }[]): void {
     const { slotSize, slotGap, slotsPerRow, maxRows, isBuff } = this.barConfig;
     const maxSlots = slotsPerRow * maxRows;
     const currentTypes = new Set(effects.map(e => e.type));
@@ -362,9 +414,10 @@ export class StatusEffectBar extends Phaser.GameObjects.Container {
     // 削除されたエフェクトを消す
     this.slots.forEach((slot, type) => {
       if (!currentTypes.has(type)) {
-        slot.playDisappearAnimation(() => {
-          this.slots.delete(type);
-        });
+        // 即座にMapから削除（アニメーション完了を待たない）
+        this.slots.delete(type);
+        // 消滅アニメーションを開始
+        slot.playDisappearAnimation();
       }
     });
 
@@ -402,6 +455,10 @@ export class StatusEffectBar extends Phaser.GameObjects.Container {
         this.slots.set(effect.type, slot);
         slot.playAppearAnimation();
       } else {
+        // 消滅アニメーション中のスロットは更新しない
+        if (slot.getIsDisappearing()) {
+          return;
+        }
         // 既存スロットの位置を更新（アニメーション付き）
         if (slot.x !== x || slot.y !== y) {
           this.scene.tweens.add({
@@ -416,6 +473,11 @@ export class StatusEffectBar extends Phaser.GameObjects.Container {
 
       // 残り時間を更新
       slot.updateDuration(effect.remainingTime, effect.totalDuration);
+
+      // スタック数を更新
+      if (effect.stacks !== undefined) {
+        slot.updateStacks(effect.stacks);
+      }
     });
   }
 
@@ -530,8 +592,8 @@ export class CombinedStatusEffectBar extends Phaser.GameObjects.Container {
    * @param debuffs デバフリスト
    */
   updateEffects(
-    buffs: { type: string; remainingTime: number; totalDuration?: number }[],
-    debuffs: { type: string; remainingTime: number; totalDuration?: number }[]
+    buffs: { type: string; remainingTime: number; totalDuration?: number; stacks?: number }[],
+    debuffs: { type: string; remainingTime: number; totalDuration?: number; stacks?: number }[]
   ): void {
     const { slotSize, slotGap, slotsPerRow } = this.barConfig;
     const rowHeight = slotSize + 28;
@@ -547,7 +609,7 @@ export class CombinedStatusEffectBar extends Phaser.GameObjects.Container {
    * 1行分のエフェクトを更新
    */
   private updateRow(
-    effects: { type: string; remainingTime: number; totalDuration?: number }[],
+    effects: { type: string; remainingTime: number; totalDuration?: number; stacks?: number }[],
     slots: Map<string, StatusEffectSlotUI>,
     rowY: number,
     isBuff: boolean,
@@ -560,9 +622,10 @@ export class CombinedStatusEffectBar extends Phaser.GameObjects.Container {
     // 削除されたエフェクトを消す
     slots.forEach((slot, type) => {
       if (!currentTypes.has(type)) {
-        slot.playDisappearAnimation(() => {
-          slots.delete(type);
-        });
+        // 即座にMapから削除（アニメーション完了を待たない）
+        slots.delete(type);
+        // 消滅アニメーションを開始
+        slot.playDisappearAnimation();
       }
     });
 
@@ -590,6 +653,10 @@ export class CombinedStatusEffectBar extends Phaser.GameObjects.Container {
         slots.set(effect.type, slot);
         slot.playAppearAnimation();
       } else {
+        // 消滅アニメーション中のスロットは更新しない
+        if (slot.getIsDisappearing()) {
+          return;
+        }
         // 既存スロットの位置を更新（アニメーション付き）
         if (slot.x !== x || slot.y !== y) {
           this.scene.tweens.add({
@@ -604,6 +671,11 @@ export class CombinedStatusEffectBar extends Phaser.GameObjects.Container {
 
       // 残り時間を更新
       slot.updateDuration(effect.remainingTime, effect.totalDuration);
+
+      // スタック数を更新
+      if (effect.stacks !== undefined) {
+        slot.updateStacks(effect.stacks);
+      }
     });
   }
 

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { BulletType, Attackable } from '@/types';
-import { DEPTH, COLORS, GAME_CONFIG } from '@/config/GameConfig';
+import { DEPTH, GAME_CONFIG } from '@/config/GameConfig';
 
 /**
  * 弾フレームID定数
@@ -59,7 +59,7 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     // 初期値
     this.bulletType = BulletType.PLAYER_NORMAL;
     this.damage = 10;
-    this.speed = 300; // 速度を500から300に減速
+    this.speed = 600; // AA弾速（600px/s）
 
     // 物理エンジンに追加
     scene.add.existing(this);
@@ -111,9 +111,9 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     }
 
     // 位置を設定（setPositionの前にbodyを有効化）
+    // 注: setPositionオーバーライドで自動的にプレイエリア判定と表示制御が行われる
     this.setPosition(x, y);
     this.setActive(true);
-    this.setVisible(true);
     this.setScale(1); // スケールを明示的に1に設定
     this.setAlpha(1); // 透明度を明示的に1に設定
 
@@ -136,9 +136,9 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
         bodyRef.setCircle(hitboxRadius);
       }
     } else if (bulletType === BulletType.PLAYER_NORMAL) {
-      this.setTexture('bullet_player');
-      this.setTint(COLORS.BULLET_PLAYER);
-      this.setScale(1); // プレイヤー弾は標準サイズ
+      this.setTexture('reimu_aa');
+      this.clearTint(); // テクスチャ自体に色があるのでTintなし
+      this.setScale(0.5); // 画像サイズに応じてスケール調整
       // プレイヤー弾は当たり判定を大きめに
       const bodyRef = this.body as Phaser.Physics.Arcade.Body;
       if (bodyRef) {
@@ -175,6 +175,32 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
         this.setRotation(0); // 丸弾は回転させない
       }
     }
+  }
+
+  /**
+   * 位置設定をオーバーライド（hasEnteredPlayAreaフラグを更新）
+   * fire()後にsetPosition()で位置を変更した場合に対応
+   */
+  setPosition(x?: number, y?: number, z?: number, w?: number): this {
+    super.setPosition(x, y, z, w);
+
+    // アクティブな弾の場合、位置に応じてフラグと表示を更新
+    if (this.isActive && x !== undefined && y !== undefined) {
+      const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+      const isInsidePlayArea = x >= X && x <= X + WIDTH && y >= Y && y <= Y + HEIGHT;
+
+      if (isInsidePlayArea) {
+        // プレイエリア内に入った
+        this.hasEnteredPlayArea = true;
+        this.setVisible(true);
+      } else if (!this.hasEnteredPlayArea) {
+        // まだプレイエリアに入っていない場合は非表示のまま
+        this.setVisible(false);
+      }
+      // 注: 一度入ってから出た場合の処理はupdate()に任せる
+    }
+
+    return this;
   }
 
   /**
@@ -216,9 +242,10 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     const isInsidePlayArea = this.x >= X && this.x <= X + WIDTH &&
                              this.y >= Y && this.y <= Y + HEIGHT;
 
-    // プレイエリアに入ったらフラグを立てる
-    if (isInsidePlayArea) {
+    // プレイエリアに入ったらフラグを立てて表示
+    if (isInsidePlayArea && !this.hasEnteredPlayArea) {
       this.hasEnteredPlayArea = true;
+      this.setVisible(true);
     }
 
     // プレイエリアに一度入った後に出たら非アクティブ化

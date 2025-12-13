@@ -4,6 +4,7 @@ import { CHARACTER_DATA } from '@/config/CharacterData';
 import { DEPTH, COLORS, SKILL_CONFIG, GAME_CONFIG } from '@/config/GameConfig';
 import { BulletPool } from '@/utils/ObjectPool';
 import { DamageCalculator } from '@/utils/DamageCalculator';
+import { AudioManager } from '@/systems/AudioManager';
 import { Enemy } from './Enemy';
 import { SkillProjectile } from './SkillProjectile';
 
@@ -45,9 +46,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private currentSkillState: SkillState = SkillState.READY;
   private skillCastTimeRemaining: number = 0;
   private skillExecutionTimeRemaining: number = 0;
-  private skillTarget: Attackable | null = null;
-  private skillProjectilesRemaining: number = 0;
-  private skillProjectileTimer: number = 0;
 
   // 現在キャスト中のスキル
   private currentCastingSkill: SkillSlot | null = null;
@@ -56,6 +54,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private skillTargetDirection: number = 0; // ラジアン
   private wSkillProjectile: SkillProjectile | null = null;
   private wSkillMotionTime: number = 0; // モーション硬直残り時間
+
+  // Qスキル用（妖怪バスター）
+  private qSkillProjectile: SkillProjectile | null = null;
+  private qSkillMotionTime: number = 0; // モーション硬直残り時間
+
+  // 針巫女スタック
+  private haribabaStacks: number = 0;
+  private haribabaStackTimer: number = 0;
 
   // Eスキル用（ダッシュ）
   private isDashing: boolean = false;
@@ -71,6 +77,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private rSkillTimeRemaining: number = 0;
   private rSkillDamageTimer: number = 0;
   private rSkillAreaGraphics: Phaser.GameObjects.Graphics | null = null;
+
+  // 当たり判定表示用
+  private hitboxGraphics: Phaser.GameObjects.Graphics | null = null;
 
   // バフ関連
   private buffs: Buff[] = [];
@@ -133,6 +142,27 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         (this.height - stats.hitboxRadius * 2) / 2
       );
     }
+
+    // 当たり判定表示を作成
+    this.hitboxGraphics = this.scene.add.graphics();
+    this.hitboxGraphics.setDepth(DEPTH.PLAYER + 1);
+    this.drawHitbox();
+  }
+
+  /**
+   * 当たり判定を描画
+   */
+  private drawHitbox(): void {
+    if (!this.hitboxGraphics) return;
+
+    const radius = this.characterConfig.stats.hitboxRadius;
+
+    this.hitboxGraphics.clear();
+    // 黄色い円で当たり判定を表示
+    this.hitboxGraphics.lineStyle(2, 0xffff00, 0.8);
+    this.hitboxGraphics.fillStyle(0xffff00, 0.3);
+    this.hitboxGraphics.fillCircle(this.x, this.y, radius);
+    this.hitboxGraphics.strokeCircle(this.x, this.y, radius);
   }
 
   /**
@@ -153,6 +183,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // ダッシュ処理
     if (this.isDashing) {
       this.updateDash(delta);
+      // 当たり判定表示を更新
+      this.drawHitbox();
       return; // ダッシュ中は他の移動処理をスキップ
     }
 
@@ -165,6 +197,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     // Attack Move処理
     this.updateAttackMove(time);
+
+    // 当たり判定表示を更新
+    this.drawHitbox();
   }
 
   /**
@@ -254,8 +289,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
    * スキルの更新処理
    */
   private updateSkill(time: number, delta: number): void {
+    // Qスキルのモーション硬直と投射物の更新
+    this.updateQSkillMotion(delta);
+
     // Wスキルのモーション硬直と投射物の更新
     this.updateWSkillMotion(delta);
+
+    // 針巫女スタックの更新
+    this.updateHaribabaStack(delta);
 
     if (this.currentSkillState === SkillState.CASTING) {
       // キャスト中
@@ -263,26 +304,30 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       if (this.skillCastTimeRemaining <= 0) {
         // キャスト完了 → 実行開始
         if (this.currentCastingSkill === SkillSlot.Q) {
-          this.startQSkillExecution(time);
+          this.executeQSkill(time);
         } else if (this.currentCastingSkill === SkillSlot.W) {
           this.executeWSkill(time);
         } else if (this.currentCastingSkill === SkillSlot.E) {
           this.executeESkill(time);
         }
       }
-    } else if (this.currentSkillState === SkillState.EXECUTING) {
-      // スキル実行中（Qスキルの弾発射中）
-      this.skillProjectileTimer -= delta;
-      if (this.skillProjectileTimer <= 0 && this.skillProjectilesRemaining > 0) {
-        this.fireSkillProjectile();
-        this.skillProjectilesRemaining--;
-        this.skillProjectileTimer = SKILL_CONFIG.REIMU_Q.PROJECTILE_INTERVAL;
-      }
+    }
+  }
 
-      // 全弾発射完了
-      if (this.skillProjectilesRemaining <= 0) {
-        this.finishSkillExecution();
+  /**
+   * Qスキルのモーション硬直更新
+   */
+  private updateQSkillMotion(delta: number): void {
+    if (this.qSkillMotionTime > 0) {
+      this.qSkillMotionTime -= delta;
+      if (this.qSkillMotionTime <= 0) {
+        this.qSkillMotionTime = 0;
       }
+    }
+
+    // Qスキル投射物の更新
+    if (this.qSkillProjectile && this.qSkillProjectile.getIsActive()) {
+      this.qSkillProjectile.update(0, delta);
     }
   }
 
@@ -294,7 +339,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.wSkillMotionTime -= delta;
       if (this.wSkillMotionTime <= 0) {
         this.wSkillMotionTime = 0;
-        // モーション終了
       }
     }
 
@@ -302,6 +346,63 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.wSkillProjectile && this.wSkillProjectile.getIsActive()) {
       this.wSkillProjectile.update(0, delta);
     }
+  }
+
+  /**
+   * 針巫女スタックの更新
+   */
+  private updateHaribabaStack(delta: number): void {
+    if (this.haribabaStacks > 0) {
+      this.haribabaStackTimer -= delta;
+      if (this.haribabaStackTimer <= 0) {
+        // スタック全て失う
+        this.haribabaStacks = 0;
+        console.log('Haribaba stacks expired!');
+      }
+    }
+  }
+
+  /**
+   * 針巫女スタックを追加
+   */
+  private addHaribabaStack(): void {
+    const { MAX_STACK, DURATION } = SKILL_CONFIG.REIMU_Q.HARIBABA_STACK;
+
+    if (this.haribabaStacks < MAX_STACK) {
+      this.haribabaStacks++;
+    }
+    // 持続時間を更新
+    this.haribabaStackTimer = DURATION;
+
+    console.log(`Haribaba stack: ${this.haribabaStacks}/${MAX_STACK}`);
+  }
+
+  /**
+   * 針巫女スタック数を取得
+   */
+  getHaribabaStacks(): number {
+    return this.haribabaStacks;
+  }
+
+  /**
+   * 針巫女スタックの残り時間を取得
+   */
+  getHaribabaStackTimer(): number {
+    return this.haribabaStackTimer;
+  }
+
+  /**
+   * ダッシュ中かどうかを取得
+   */
+  getIsDashing(): boolean {
+    return this.isDashing;
+  }
+
+  /**
+   * ダッシュ残り時間を取得
+   */
+  getDashTimeRemaining(): number {
+    return this.dashTimeRemaining;
   }
 
   /**
@@ -319,21 +420,30 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * Qスキルを使用開始
+   * Qスキルを使用開始（妖怪バスター - 方向指定）
    */
-  useQSkill(currentTime: number, target: Attackable): boolean {
+  useQSkill(currentTime: number, targetX: number, targetY: number): boolean {
     if (!this.canUseSkill(SkillSlot.Q, currentTime)) {
       return false;
     }
+
+    // モーション硬直中は使用不可
+    if (this.qSkillMotionTime > 0) {
+      return false;
+    }
+
+    // 方向を計算
+    this.skillTargetDirection = Phaser.Math.Angle.Between(this.x, this.y, targetX, targetY);
 
     // キャスト開始
     this.currentSkillState = SkillState.CASTING;
     this.currentCastingSkill = SkillSlot.Q;
     this.skillCastTimeRemaining = SKILL_CONFIG.REIMU_Q.CAST_TIME;
-    this.skillTarget = target;
 
     // 移動を停止
     this.stopMovement();
+
+    console.log('Q skill (Youkai Buster) casting started');
 
     return true;
   }
@@ -374,22 +484,87 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * Qスキル実行開始（キャスト完了後）
+   * Qスキル実行（妖怪バスター - キャスト完了後、長方形弾を発射）
    */
-  private startQSkillExecution(time: number): void {
-    this.currentSkillState = SkillState.EXECUTING;
-    this.skillProjectilesRemaining = SKILL_CONFIG.REIMU_Q.PROJECTILE_COUNT;
-    this.skillProjectileTimer = 0; // 即座に1発目を発射
+  private executeQSkill(time: number): void {
+    const { PROJECTILE_WIDTH, PROJECTILE_HEIGHT, PROJECTILE_RANGE, PROJECTILE_TRAVEL_TIME,
+            SLOW_DURATION, SLOW_AMOUNT, CD_REFUND_ON_HIT, DAMAGE, MOTION_TIME, COOLDOWN } = SKILL_CONFIG.REIMU_Q;
+
+    // スキルダメージ計算
+    const rawDamage = DAMAGE.BASE_DAMAGE +
+      this.characterConfig.stats.attackPower * DAMAGE.SCALING_RATIO;
+
+    // 方向ベクトルを正規化
+    const dirX = Math.cos(this.skillTargetDirection);
+    const dirY = Math.sin(this.skillTargetDirection);
+
+    // SkillProjectileを作成（なければ新規作成）
+    if (!this.qSkillProjectile) {
+      this.qSkillProjectile = new SkillProjectile(this.scene);
+    }
+
+    // ターゲット配列を作成（敵 + ボス）
+    const targets: Attackable[] = [...this.enemies];
+    if (this.boss && this.boss.getIsActive()) {
+      targets.push(this.boss);
+    }
+
+    // 命中時コールバック
+    const onHit = (_target: Attackable, _damage: number, _didBreak: boolean) => {
+      // CD75%解消
+      const currentCd = this.skillCooldowns[SkillSlot.Q] - time;
+      if (currentCd > 0) {
+        const refund = COOLDOWN * CD_REFUND_ON_HIT;
+        this.skillCooldowns[SkillSlot.Q] = Math.max(time, this.skillCooldowns[SkillSlot.Q] - refund);
+        console.log(`Q skill hit! CD reduced by ${refund}ms`);
+      }
+
+      // 針巫女スタック追加
+      this.addHaribabaStack();
+    };
+
+    // 投射物を発射
+    this.qSkillProjectile.fire(
+      this.x,
+      this.y,
+      dirX,
+      dirY,
+      PROJECTILE_WIDTH,
+      PROJECTILE_HEIGHT,
+      PROJECTILE_RANGE,
+      PROJECTILE_TRAVEL_TIME,
+      rawDamage,
+      0, // スタンなし
+      targets,
+      {
+        slowDuration: SLOW_DURATION,
+        slowAmount: SLOW_AMOUNT,
+        onHitCallback: onHit,
+        skillSource: 'reimu_q',
+        color: 0xff6666, // 赤っぽい色
+        textureKey: 'reimu_skill_q',
+      }
+    );
+
+    console.log(`Q skill (Youkai Buster) executed! (${PROJECTILE_WIDTH}x${PROJECTILE_HEIGHT}px, Damage: ${rawDamage})`);
 
     // クールダウン開始
-    this.skillCooldowns[SkillSlot.Q] = time + SKILL_CONFIG.REIMU_Q.COOLDOWN;
+    this.skillCooldowns[SkillSlot.Q] = time + COOLDOWN;
+
+    // モーション硬直開始
+    this.qSkillMotionTime = MOTION_TIME;
+
+    // スキル完了
+    this.currentSkillState = SkillState.READY;
+    this.currentCastingSkill = null;
   }
 
   /**
-   * Wスキル実行（キャスト完了後、長方形弾を発射）
+   * Wスキル実行（封魔針 - 即時発動、長方形弾を発射）
    */
   private executeWSkill(time: number): void {
-    const { PROJECTILE_WIDTH, PROJECTILE_HEIGHT, PROJECTILE_RANGE, PROJECTILE_TRAVEL_TIME, STUN_DURATION, DAMAGE, MOTION_TIME, COOLDOWN } = SKILL_CONFIG.REIMU_W;
+    const { PROJECTILE_WIDTH, PROJECTILE_HEIGHT, PROJECTILE_RANGE, PROJECTILE_SPEED,
+            STUN_DURATION, DAMAGE, MOTION_TIME, COOLDOWN, E_CD_REFUND_ON_BREAK, BREAK_BONUS_DAMAGE_RATIO } = SKILL_CONFIG.REIMU_W;
 
     // スキルダメージ計算
     const rawDamage = DAMAGE.BASE_DAMAGE +
@@ -410,7 +585,25 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       targets.push(this.boss);
     }
 
-    // 投射物を発射
+    // 命中時コールバック（ブレイク時にEスキルCD回復 + 追加ダメージ）
+    const onHit = (target: Attackable, damage: number, didBreak: boolean) => {
+      if (didBreak) {
+        // EスキルのCD30%解消
+        const currentECd = this.skillCooldowns[SkillSlot.E] - time;
+        if (currentECd > 0) {
+          const refund = SKILL_CONFIG.REIMU_E.COOLDOWN * E_CD_REFUND_ON_BREAK;
+          this.skillCooldowns[SkillSlot.E] = Math.max(time, this.skillCooldowns[SkillSlot.E] - refund);
+          console.log(`W skill break! E CD reduced by ${refund}ms`);
+        }
+
+        // 追加ダメージ
+        const bonusDamage = Math.floor(damage * BREAK_BONUS_DAMAGE_RATIO);
+        target.takeDamage(bonusDamage);
+        console.log(`W skill break bonus damage: ${bonusDamage}`);
+      }
+    };
+
+    // 投射物を発射（弾速指定）
     this.wSkillProjectile.fire(
       this.x,
       this.y,
@@ -419,13 +612,20 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       PROJECTILE_WIDTH,
       PROJECTILE_HEIGHT,
       PROJECTILE_RANGE,
-      PROJECTILE_TRAVEL_TIME,
+      0, // travelTimeは使わない
       rawDamage,
       STUN_DURATION,
-      targets
+      targets,
+      {
+        speed: PROJECTILE_SPEED,
+        onHitCallback: onHit,
+        skillSource: 'reimu_w',
+        color: 0x9966ff, // 紫色
+        textureKey: 'reimu_skill_w',
+      }
     );
 
-    console.log(`W skill executed! Projectile fired (${PROJECTILE_WIDTH}x${PROJECTILE_HEIGHT}px, Damage: ${rawDamage}, Stun: ${STUN_DURATION}ms)`);
+    console.log(`W skill (Fuuma Needle) executed! (${PROJECTILE_WIDTH}x${PROJECTILE_HEIGHT}px, Speed: ${PROJECTILE_SPEED}px/s, Damage: ${rawDamage}, Stun: ${STUN_DURATION}ms)`);
 
     // クールダウン開始
     this.skillCooldowns[SkillSlot.W] = time + COOLDOWN;
@@ -461,10 +661,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * Eスキル実行（キャスト完了後、ダッシュ開始）
+   * Eスキル実行（昇天蹴 - キャスト完了後、ダッシュ開始）
    */
   private executeESkill(time: number): void {
-    const { DASH_DISTANCE, DASH_DURATION, COOLDOWN } = SKILL_CONFIG.REIMU_E;
+    const { DASH_DISTANCE, DASH_DURATION, COOLDOWN, DAMAGE } = SKILL_CONFIG.REIMU_E;
 
     // ダッシュ先の位置を計算
     const targetX = this.x + Math.cos(this.skillTargetDirection) * DASH_DISTANCE;
@@ -475,7 +675,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const clampedX = Phaser.Math.Clamp(targetX, X, X + WIDTH);
     const clampedY = Phaser.Math.Clamp(targetY, Y, Y + HEIGHT);
 
-    // ダッシュ開始（0.5秒かけて移動）
+    // ダッシュ開始
     this.isDashing = true;
     this.dashStartX = this.x;
     this.dashStartY = this.y;
@@ -484,22 +684,83 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.dashTotalTime = DASH_DURATION;
     this.dashTimeRemaining = DASH_DURATION;
 
+    // ダッシュダメージ計算
+    const rawDamage = DAMAGE.BASE_DAMAGE +
+      this.characterConfig.stats.attackPower * DAMAGE.SCALING_RATIO;
+
+    // ダッシュ経路上の敵にダメージ（即座に判定）
+    this.dealDashDamage(this.x, this.y, clampedX, clampedY, rawDamage);
+
     // WスキルのCDを完全回復
     this.skillCooldowns[SkillSlot.W] = 0;
-    console.log('E skill: W cooldown reset!');
+    console.log('E skill (Shouten Kick): W cooldown reset!');
 
     // QスキルのCDを完全回復
     this.skillCooldowns[SkillSlot.Q] = 0;
-    console.log('E skill: Q cooldown reset!');
+    console.log('E skill (Shouten Kick): Q cooldown reset!');
 
     // クールダウン開始
     this.skillCooldowns[SkillSlot.E] = time + COOLDOWN;
 
-    console.log(`E skill executed! Dashing ${DASH_DISTANCE}px over ${DASH_DURATION}ms`);
+    console.log(`E skill (Shouten Kick) executed! Dashing ${DASH_DISTANCE}px over ${DASH_DURATION}ms, Damage: ${rawDamage}`);
 
     // スキル完了（硬直なし、ダッシュ中も行動可能）
     this.currentSkillState = SkillState.READY;
     this.currentCastingSkill = null;
+  }
+
+  /**
+   * ダッシュ経路上の敵にダメージを与える
+   */
+  private dealDashDamage(startX: number, startY: number, endX: number, endY: number, damage: number): void {
+    // ターゲット配列を作成（敵 + ボス）
+    const targets: Attackable[] = [...this.enemies];
+    if (this.boss && this.boss.getIsActive()) {
+      targets.push(this.boss);
+    }
+
+    // ダッシュ経路（線分）と敵の円の当たり判定
+    const dashWidth = 30; // ダッシュの幅（当たり判定用）
+
+    for (const target of targets) {
+      if (!target.getIsActive()) continue;
+
+      // 線分と円の距離を計算
+      const targetRadius = target.getHitboxRadius();
+      const dist = this.pointToLineDistance(target.x, target.y, startX, startY, endX, endY);
+
+      if (dist < targetRadius + dashWidth) {
+        // ダメージを与える（防御力考慮）
+        const defenseReduction = 100 / (target.getDefense() + 100);
+        const finalDamage = Math.max(1, Math.floor(damage * defenseReduction));
+        target.takeDamage(finalDamage);
+        console.log(`E skill dash hit! Damage: ${finalDamage}`);
+      }
+    }
+  }
+
+  /**
+   * 点から線分への最短距離を計算
+   */
+  private pointToLineDistance(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lengthSquared = dx * dx + dy * dy;
+
+    if (lengthSquared === 0) {
+      // 線分の長さが0の場合
+      return Math.sqrt((px - x1) * (px - x1) + (py - y1) * (py - y1));
+    }
+
+    // 線分上の最近傍点のパラメータt（0〜1にクランプ）
+    const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lengthSquared));
+
+    // 最近傍点の座標
+    const nearestX = x1 + t * dx;
+    const nearestY = y1 + t * dy;
+
+    // 距離を返す
+    return Math.sqrt((px - nearestX) * (px - nearestX) + (py - nearestY) * (py - nearestY));
   }
 
   /**
@@ -623,60 +884,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       y: this.y,
       size: SKILL_CONFIG.REIMU_R.AREA_SIZE,
     };
-  }
-
-  /**
-   * スキル弾を発射
-   */
-  private fireSkillProjectile(): void {
-    if (!this.bulletPool || !this.skillTarget) {
-      return;
-    }
-
-    // ターゲットが死んでいる場合は発射しない
-    if (!this.skillTarget.getIsActive()) {
-      return;
-    }
-
-    // スキルダメージ計算
-    const { DAMAGE } = SKILL_CONFIG.REIMU_Q;
-    const rawDamage = DAMAGE.BASE_DAMAGE +
-      this.characterConfig.stats.attackPower * DAMAGE.SCALING_RATIO;
-
-    const bullet = this.bulletPool.acquire();
-    if (bullet) {
-      bullet.fire(
-        this.x,
-        this.y,
-        this.skillTarget.x,
-        this.skillTarget.y,
-        BulletType.PLAYER_NORMAL,
-        rawDamage,
-        this.skillTarget // 追尾弾
-      );
-    }
-  }
-
-  /**
-   * Qスキル実行完了
-   */
-  private finishSkillExecution(): void {
-    this.currentSkillState = SkillState.READY;
-    this.currentCastingSkill = null;
-    this.skillTarget = null;
-
-    // 攻撃速度バフを付与
-    this.addBuff(
-      BuffType.ATTACK_SPEED,
-      SKILL_CONFIG.REIMU_Q.ATTACK_SPEED_BUFF,
-      SKILL_CONFIG.REIMU_Q.BUFF_DURATION,
-      'reimu_q'
-    );
-
-    // デバッグログ
-    const baseAS = this.characterConfig.stats.attackSpeed;
-    const buffedAS = baseAS * SKILL_CONFIG.REIMU_Q.ATTACK_SPEED_BUFF;
-    console.log(`Q skill finished! AS buff applied: ${baseAS} → ${buffedAS} (${SKILL_CONFIG.REIMU_Q.BUFF_DURATION / 1000}s)`);
   }
 
   /**
@@ -828,7 +1035,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       return;
     }
 
+    // Eスキルダッシュ中はダメージ軽減
+    if (this.isDashing) {
+      damage = Math.floor(damage * (1 - SKILL_CONFIG.REIMU_E.DAMAGE_REDUCTION));
+    }
+
     this.currentHp = Math.max(0, this.currentHp - damage);
+
+    // 被弾SE再生
+    AudioManager.getInstance().playSe('se_hit_player');
 
     // 被弾エフェクト
     this.flashDamage();
@@ -1176,7 +1391,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         multiplier *= buff.multiplier;
       }
     }
-    return this.characterConfig.stats.attackSpeed * multiplier;
+    // 針巫女スタックによる攻撃速度上昇（1スタックあたり+0.1、数値加算）
+    const haribabaBonus = this.haribabaStacks * SKILL_CONFIG.REIMU_Q.HARIBABA_STACK.AS_PER_STACK;
+    return this.characterConfig.stats.attackSpeed * multiplier + haribabaBonus;
   }
 
   /**
@@ -1189,7 +1406,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         multiplier *= buff.multiplier;
       }
     }
-    return this.characterConfig.stats.moveSpeed * multiplier;
+    // 針巫女スタックによる移動速度上昇（5スタック毎に10%）
+    const fiveStackSets = Math.floor(this.haribabaStacks / 5);
+    const haribabaBonus = 1 + fiveStackSets * SKILL_CONFIG.REIMU_Q.HARIBABA_STACK.MS_PER_5_STACK;
+    return this.characterConfig.stats.moveSpeed * multiplier * haribabaBonus;
   }
 
   /**
@@ -1202,7 +1422,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         multiplier *= buff.multiplier;
       }
     }
-    return this.characterConfig.stats.attackPower * multiplier;
+    // 針巫女スタックによる攻撃力上昇（1スタックあたり+5）
+    const haribabaBonus = this.haribabaStacks * SKILL_CONFIG.REIMU_Q.HARIBABA_STACK.ATK_PER_STACK;
+    return this.characterConfig.stats.attackPower * multiplier + haribabaBonus;
   }
 
   /**

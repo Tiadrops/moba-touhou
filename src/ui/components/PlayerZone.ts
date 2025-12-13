@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { Player } from '@/entities/Player';
-import { SkillSlot, SkillState } from '@/types';
+import { SkillSlot, SkillState, BuffType } from '@/types';
 import { SKILL_CONFIG } from '@/config/GameConfig';
 import { UI_LAYOUT, UI_DEPTH, SKILL_KEY_LABELS } from '../constants/UIConstants';
 import { SkillSlotUI } from './SkillSlotUI';
@@ -196,7 +196,7 @@ export class PlayerZone extends Phaser.GameObjects.Container {
    */
   private updateStatusEffects(): void {
     const buffs = this.player.getBuffs();
-    const buffEffects: { type: string; remainingTime: number; totalDuration?: number }[] = [];
+    const buffEffects: { type: string; remainingTime: number; totalDuration?: number; stacks?: number }[] = [];
 
     // バフを追加
     buffs.forEach(buff => {
@@ -206,6 +206,27 @@ export class PlayerZone extends Phaser.GameObjects.Container {
         totalDuration: 5000, // バフのデフォルト持続時間（適切な値に調整）
       });
     });
+
+    // 針巫女スタック
+    const haribabaStacks = this.player.getHaribabaStacks();
+    if (haribabaStacks > 0) {
+      const haribabaTimer = this.player.getHaribabaStackTimer();
+      buffEffects.push({
+        type: BuffType.HARIBABA_STACK,
+        remainingTime: haribabaTimer,
+        totalDuration: SKILL_CONFIG.REIMU_Q.HARIBABA_STACK.DURATION,
+        stacks: haribabaStacks,
+      });
+    }
+
+    // Eスキルダッシュ中のダメージカット
+    if (this.player.getIsDashing()) {
+      buffEffects.push({
+        type: 'damage_cut',
+        remainingTime: this.player.getDashTimeRemaining(),
+        totalDuration: SKILL_CONFIG.REIMU_E.DASH_DURATION,
+      });
+    }
 
     // 無敵状態
     if (this.player.getIsRSkillActive()) {

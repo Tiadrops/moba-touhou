@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { Player } from '@/entities/Player';
 import { Enemy } from '@/entities/Enemy';
-import { GAME_CONFIG, COLORS, DEPTH, SKILL_CONFIG } from '@/config/GameConfig';
+import { GAME_CONFIG, COLORS, DEPTH } from '@/config/GameConfig';
 import { SkillSlot, Attackable } from '@/types';
 
 /**
@@ -78,15 +78,108 @@ export class InputManager {
    */
   private handleRightClick(x: number, y: number): void {
     // プレイエリア内かチェック
-    if (!this.playAreaBounds.contains(x, y)) {
-      return;
+    if (this.playAreaBounds.contains(x, y)) {
+      // プレイエリア内：通常の移動 + 波紋表示
+      this.player.setTargetPosition(x, y);
+      this.showMoveMarker(x, y);
+    } else {
+      // プレイエリア外：クリックした方角に向かって移動（波紋なし）
+      // プレイヤーからクリック位置への方角を計算
+      const angle = Phaser.Math.Angle.Between(
+        this.player.x,
+        this.player.y,
+        x,
+        y
+      );
+
+      // プレイエリアの境界との交点を計算
+      const targetPos = this.calculatePlayAreaEdgePoint(
+        this.player.x,
+        this.player.y,
+        angle
+      );
+
+      // プレイヤーに移動指示（波紋は表示しない）
+      this.player.setTargetPosition(targetPos.x, targetPos.y);
+    }
+  }
+
+  /**
+   * プレイヤー位置から指定角度でプレイエリアの境界との交点を計算
+   */
+  private calculatePlayAreaEdgePoint(
+    startX: number,
+    startY: number,
+    angle: number
+  ): { x: number; y: number } {
+    const { x: areaX, y: areaY, width, height } = this.playAreaBounds;
+    const areaRight = areaX + width;
+    const areaBottom = areaY + height;
+
+    // 方向ベクトル
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+
+    // プレイヤーの当たり判定サイズ分のマージン
+    const margin = 12; // プレイヤーのhitboxRadius
+
+    // 各境界との交点を計算し、最も近いものを選択
+    let minT = Infinity;
+
+    // 右境界との交点
+    if (dx > 0) {
+      const t = (areaRight - margin - startX) / dx;
+      if (t > 0 && t < minT) {
+        const intersectY = startY + dy * t;
+        if (intersectY >= areaY + margin && intersectY <= areaBottom - margin) {
+          minT = t;
+        }
+      }
     }
 
-    // プレイヤーに移動指示
-    this.player.setTargetPosition(x, y);
+    // 左境界との交点
+    if (dx < 0) {
+      const t = (areaX + margin - startX) / dx;
+      if (t > 0 && t < minT) {
+        const intersectY = startY + dy * t;
+        if (intersectY >= areaY + margin && intersectY <= areaBottom - margin) {
+          minT = t;
+        }
+      }
+    }
 
-    // 移動先マーカーを表示
-    this.showMoveMarker(x, y);
+    // 下境界との交点
+    if (dy > 0) {
+      const t = (areaBottom - margin - startY) / dy;
+      if (t > 0 && t < minT) {
+        const intersectX = startX + dx * t;
+        if (intersectX >= areaX + margin && intersectX <= areaRight - margin) {
+          minT = t;
+        }
+      }
+    }
+
+    // 上境界との交点
+    if (dy < 0) {
+      const t = (areaY + margin - startY) / dy;
+      if (t > 0 && t < minT) {
+        const intersectX = startX + dx * t;
+        if (intersectX >= areaX + margin && intersectX <= areaRight - margin) {
+          minT = t;
+        }
+      }
+    }
+
+    // 交点が見つかった場合
+    if (minT !== Infinity) {
+      return {
+        x: startX + dx * minT,
+        y: startY + dy * minT,
+      };
+    }
+
+    // 交点が見つからない場合（現在位置を返す）
+    return { x: startX, y: startY };
   }
 
   /**
@@ -460,7 +553,7 @@ export class InputManager {
 
   /**
    * Qスキル処理
-   * 対象指定スキル：カーソルが敵の当たり判定の0.5m以内にある時に発動
+   * 方向指定スキル：カーソル方向に妖怪バスターを発射
    */
   private handleQSkill(currentTime: number): void {
     // スキル使用可能か確認
@@ -477,58 +570,11 @@ export class InputManager {
     const cursorX = pointer.x;
     const cursorY = pointer.y;
 
-    // カーソル位置の近くにいる敵を探す
-    const targetEnemy = this.findEnemyNearCursor(cursorX, cursorY, SKILL_CONFIG.REIMU_Q.TARGET_DETECTION_RANGE);
-
-    if (!targetEnemy) {
-      console.log('Q skill: No valid target near cursor');
-      return;
-    }
-
-    // スキル発動
-    const success = this.player.useQSkill(currentTime, targetEnemy);
+    // スキル発動（カーソル方向に発射）
+    const success = this.player.useQSkill(currentTime, cursorX, cursorY);
     if (success) {
       console.log('Q skill activated!');
     }
-  }
-
-  /**
-   * カーソル位置の近くにいる攻撃対象を探す（敵とボス両方を含む）
-   */
-  private findEnemyNearCursor(x: number, y: number, radius: number): Attackable | null {
-    let nearestTarget: Attackable | null = null;
-    let nearestDistance = Infinity;
-
-    // 通常の敵をチェック
-    for (const enemy of this.enemies) {
-      if (!enemy.getIsActive()) {
-        continue;
-      }
-
-      const distance = Phaser.Math.Distance.Between(x, y, enemy.x, enemy.y);
-
-      // 敵の当たり判定半径も考慮
-      const effectiveDistance = distance - enemy.getHitboxRadius();
-
-      if (effectiveDistance <= radius && effectiveDistance < nearestDistance) {
-        nearestDistance = effectiveDistance;
-        nearestTarget = enemy;
-      }
-    }
-
-    // ボスもチェック
-    if (this.boss && this.boss.getIsActive()) {
-      const distance = Phaser.Math.Distance.Between(x, y, this.boss.x, this.boss.y);
-      // ボスの当たり判定半径も考慮（スケール適用）
-      const effectiveDistance = distance - this.boss.getHitboxRadius() * 1.6;
-
-      if (effectiveDistance <= radius && effectiveDistance < nearestDistance) {
-        nearestDistance = effectiveDistance;
-        nearestTarget = this.boss;
-      }
-    }
-
-    return nearestTarget;
   }
 
   /**

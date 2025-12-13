@@ -11,6 +11,7 @@ import {
 } from '@/types';
 import { DEPTH, COLORS } from '@/config/GameConfig';
 import { BulletPool } from '@/utils/ObjectPool';
+import { AudioManager } from '@/systems/AudioManager';
 
 /**
  * ボス基底クラス
@@ -190,13 +191,26 @@ export abstract class Boss extends Phaser.Physics.Arcade.Sprite {
    * すべてのスキルを中断（スタン時）
    */
   protected interruptAllSkills(): void {
+    let didBreak = false;
+
     for (const [slot, skill] of this.skills) {
       if (skill.state === BossSkillState.CASTING || skill.state === BossSkillState.EXECUTING) {
+        // キャスト中のスキルを中断した場合のみBreak
+        if (skill.state === BossSkillState.CASTING) {
+          didBreak = true;
+        }
         console.log(`Skill ${slot} interrupted by stun!`);
         skill.state = BossSkillState.COOLDOWN;
         skill.cooldownRemaining = this.getSkillCooldown(skill.slot) / 2;
       }
     }
+
+    // Break!演出（キャスト中断時のみ）
+    if (didBreak) {
+      this.showBreakText();
+      AudioManager.getInstance().playSe('se_break');
+    }
+
     // 予告線をクリア
     this.warningGraphics?.clear();
   }
@@ -313,6 +327,38 @@ export abstract class Boss extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
+   * Break!テキストを頭上に表示
+   */
+  protected showBreakText(): void {
+    const breakText = this.scene.add.text(
+      this.x,
+      this.y - 80,
+      'Break!',
+      {
+        font: 'bold 32px monospace',
+        color: '#ffff00',
+        stroke: '#000000',
+        strokeThickness: 4,
+      }
+    );
+    breakText.setOrigin(0.5, 0.5);
+    breakText.setDepth(DEPTH.UI + 10);
+
+    // アニメーション: 上に浮かびながらフェードアウト
+    this.scene.tweens.add({
+      targets: breakText,
+      y: breakText.y - 50,
+      alpha: { from: 1, to: 0 },
+      scale: { from: 1, to: 1.3 },
+      duration: 1000,
+      ease: 'Power2',
+      onComplete: () => {
+        breakText.destroy();
+      },
+    });
+  }
+
+  /**
    * 特定の状態異常があるか確認
    */
   hasStatusEffect(type: StatusEffectType): boolean {
@@ -324,6 +370,17 @@ export abstract class Boss extends Phaser.Physics.Arcade.Sprite {
    */
   getStatusEffects(): StatusEffect[] {
     return this.statusEffects;
+  }
+
+  /**
+   * スロウ効果を考慮した実効移動速度を取得
+   */
+  getEffectiveMoveSpeed(): number {
+    const slowEffect = this.statusEffects.find(e => e.type === StatusEffectType.SLOW);
+    if (slowEffect && slowEffect.value) {
+      return this.stats.moveSpeed * (1 - slowEffect.value);
+    }
+    return this.stats.moveSpeed;
   }
 
   /**
@@ -343,6 +400,10 @@ export abstract class Boss extends Phaser.Physics.Arcade.Sprite {
     }
 
     this.currentHp -= damage;
+
+    // 被弾SE再生
+    AudioManager.getInstance().playSe('se_hit_enemy');
+
     this.flashDamage();
 
     if (this.currentHp <= 0) {

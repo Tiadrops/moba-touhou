@@ -141,7 +141,6 @@ export class Rumia extends Boss {
 
   // Wスキル用（リング弾幕）
   private wSkillWarningGraphics: Phaser.GameObjects.Graphics | null = null;
-  private wSkillWarningShown: boolean = false;
 
   // Eスキル用（通常弾幕3 - 移動弾幕）
   private eSkillMoveDirection: number = 0;      // 移動方向（ラジアン）
@@ -169,10 +168,14 @@ export class Rumia extends Boss {
   private spellWSkillBurstsFired: number = 0;       // 発射済み回数
   private spellWSkillBurstTimer: number = 0;        // 発射間隔タイマー
 
-  // スペルカード用Eスキル（闇の潮汐）
+  // スペルカード用Eスキル（闘争の潮汐）
   private spellESkillStartTime: number = 0;         // スキル開始時間
   private spellESkillBulletTimer: number = 0;       // 弾発射タイマー
   private spellESkillBaseAngle: number = 0;         // 螺旋の基準角度
+
+  // スキル硬直時間（W/E使用後の硬直）
+  private skillRecoveryTime: number = 0;            // 残り硬直時間（ms）
+  private static readonly SKILL_RECOVERY_DURATION = 200; // 硬直時間（0.2秒）
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     // 最初のフェーズのHPを使用
@@ -291,6 +294,33 @@ export class Rumia extends Boss {
       default:
         return 5000;
     }
+  }
+
+  /**
+   * 全スキルを中断（ブレイク時などに呼ばれる）
+   * W スキルの予告線もクリアする
+   * Eスキル移動中（EXECUTING状態でINTERRUPTIBLE）もBreak判定
+   */
+  protected interruptAllSkills(): void {
+    // EスキルがEXECUTING状態で移動中の場合、Break判定を行う
+    const eSkill = this.skills.get(BossSkillSlot.E);
+    const isESkillInterruptible = eSkill &&
+      eSkill.state === BossSkillState.EXECUTING &&
+      this.currentSkillConfig.E.INTERRUPTIBLE &&
+      (this.eSkillPhase === 'moving' || this.eSkillPhase === 'before_move' || this.eSkillPhase === 'after_move');
+
+    // 親クラスの処理を呼び出し（CASTING状態のBreak判定含む）
+    super.interruptAllSkills();
+
+    // Eスキル移動中の中断はここでBreak演出を追加
+    if (isESkillInterruptible) {
+      this.showBreakText();
+      AudioManager.getInstance().playSe('se_break');
+      console.log('Rumia: Eスキル移動中にBreak!');
+    }
+
+    // W スキルの予告線をクリア
+    this.hideWSkillWarning();
   }
 
   /**
@@ -438,11 +468,24 @@ export class Rumia extends Boss {
    * ノーマルフェーズのAI
    */
   private updateNormalPhaseAI(time: number, delta: number): void {
+    // 硬直時間を更新
+    if (this.skillRecoveryTime > 0) {
+      this.skillRecoveryTime -= delta;
+    }
+
     // スキル状態を確認
     const qSkill = this.skills.get(BossSkillSlot.Q);
     const wSkill = this.skills.get(BossSkillSlot.W);
     const eSkill = this.skills.get(BossSkillSlot.E);
     if (!qSkill || !wSkill || !eSkill) return;
+
+    // 硬直中はスキルを使用しない
+    const isInRecovery = this.skillRecoveryTime > 0;
+
+    // Eスキル実行中かどうか（Eスキル中は他のスキルを使用できない）
+    const isESkillActive =
+      eSkill.state === BossSkillState.CASTING ||
+      eSkill.state === BossSkillState.EXECUTING;
 
     // 現在スキル実行中かどうか
     const isSkillActive =
@@ -450,14 +493,14 @@ export class Rumia extends Boss {
       qSkill.state === BossSkillState.EXECUTING ||
       wSkill.state === BossSkillState.CASTING ||
       wSkill.state === BossSkillState.EXECUTING ||
-      eSkill.state === BossSkillState.CASTING ||
-      eSkill.state === BossSkillState.EXECUTING;
+      isESkillActive;
 
     // Wスキルの処理（Qより優先度高め）
     switch (wSkill.state) {
       case BossSkillState.READY:
-        // Qスキルが使用中でなければWを使用
-        if (qSkill.state !== BossSkillState.CASTING && qSkill.state !== BossSkillState.EXECUTING) {
+        // Eスキル中または硬直中は使用しない
+        if (!isESkillActive && !isInRecovery &&
+            qSkill.state !== BossSkillState.CASTING && qSkill.state !== BossSkillState.EXECUTING) {
           this.tryUseWSkill();
         }
         break;
@@ -474,8 +517,9 @@ export class Rumia extends Boss {
     // Qスキルの処理
     switch (qSkill.state) {
       case BossSkillState.READY:
-        // Wスキルが使用中でなければQを使用
-        if (wSkill.state !== BossSkillState.CASTING && wSkill.state !== BossSkillState.EXECUTING) {
+        // Eスキル中または硬直中は使用しない
+        if (!isESkillActive && !isInRecovery &&
+            wSkill.state !== BossSkillState.CASTING && wSkill.state !== BossSkillState.EXECUTING) {
           this.tryUseQSkill();
         }
         break;
@@ -492,7 +536,8 @@ export class Rumia extends Boss {
     // Eスキルの処理（他のスキルが使用中でなければ使用）
     switch (eSkill.state) {
       case BossSkillState.READY:
-        if (!isSkillActive) {
+        // 硬直中は使用しない
+        if (!isSkillActive && !isInRecovery) {
           this.tryUseESkill();
         }
         break;
@@ -707,7 +752,7 @@ export class Rumia extends Boss {
     }
 
     const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
-    const speed = this.stats.moveSpeed;
+    const speed = this.getEffectiveMoveSpeed();
 
     // プレイヤー方向へ移動
     const dx = this.playerPosition.x - this.x;
@@ -988,7 +1033,8 @@ export class Rumia extends Boss {
     // スキル使用開始
     if (this.startSkill(BossSkillSlot.W, this.currentSkillConfig.W.CAST_TIME, 0)) {
       const ringCount = this.currentSkillConfig.W.RING_COUNT ?? 3;
-      this.wSkillWarningShown = false; // 予告線フラグをリセット
+      // スキル開始と同時に予告線を表示
+      this.showWSkillWarning();
       console.log(`Rumia: Wスキル詠唱開始 - ${this.currentSkillConfig.W.NAME}（リング${ringCount}つ）`);
     }
   }
@@ -999,12 +1045,6 @@ export class Rumia extends Boss {
   private updateWSkillCasting(delta: number): void {
     const wSkill = this.skills.get(BossSkillSlot.W);
     if (!wSkill) return;
-
-    // 詠唱残り200ms以下で予告線を表示
-    if (wSkill.castTimeRemaining <= 200 && !this.wSkillWarningShown) {
-      this.showWSkillWarning();
-      this.wSkillWarningShown = true;
-    }
 
     const castComplete = this.updateSkillCasting(BossSkillSlot.W, delta);
 
@@ -1038,7 +1078,7 @@ export class Rumia extends Boss {
     const areaBottom = GAME_CONFIG.PLAY_AREA.Y + GAME_CONFIG.PLAY_AREA.HEIGHT;
 
     this.wSkillWarningGraphics.clear();
-    this.wSkillWarningGraphics.lineStyle(2, 0x00ffff, 0.6); // 水色、半透明
+    this.wSkillWarningGraphics.lineStyle(2, 0x00ffff, 0.15); // 水色、薄く（Qと同程度）
 
     // 各弾の方向に予告線を描画（プレイエリア境界でクリップ）
     for (let i = 0; i < bulletsPerRing; i++) {
@@ -1083,7 +1123,6 @@ export class Rumia extends Boss {
     if (this.wSkillWarningGraphics) {
       this.wSkillWarningGraphics.clear();
     }
-    this.wSkillWarningShown = false;
   }
 
   /**
@@ -1098,6 +1137,8 @@ export class Rumia extends Boss {
     // 実行完了
     if (wSkill.executionTimeRemaining <= 0) {
       this.completeSkill(BossSkillSlot.W, this.currentSkillConfig.W.COOLDOWN);
+      // Wスキル完了後の硬直時間を設定
+      this.skillRecoveryTime = Rumia.SKILL_RECOVERY_DURATION;
       console.log('Rumia: Wスキル完了');
     }
   }
@@ -1171,8 +1212,11 @@ export class Rumia extends Boss {
   private tryUseESkill(): void {
     if (!this.playerPosition) return;
 
-    // スキル使用開始（詠唱時間0）
-    if (this.startSkill(BossSkillSlot.E, this.currentSkillConfig.E.CAST_TIME, 0)) {
+    const castTime = this.currentSkillConfig.E.CAST_TIME;
+    console.log(`Rumia: Eスキル開始試行 (CAST_TIME: ${castTime}ms)`);
+
+    // スキル使用開始（詠唱時間あり）
+    if (this.startSkill(BossSkillSlot.E, castTime, 0)) {
       const eConfig = this.currentSkillConfig.E;
       const moveDistance = eConfig.MOVE_DISTANCE ?? 275;
 
@@ -1202,16 +1246,11 @@ export class Rumia extends Boss {
       // 移動前の弾位置を事前計算（ルーミアの現在位置を中心に、1列）
       this.calculateESkillBulletPositions(this.eSkillMoveStartPos);
 
-      // 詠唱時間0なので即座に実行開始
-      const eSkill = this.skills.get(BossSkillSlot.E);
-      if (eSkill) {
-        eSkill.state = BossSkillState.EXECUTING;
-        const moveDuration = eConfig.MOVE_DURATION ?? 1000;
-        // 移動前配置 + 移動 + 移動後配置の時間
-        eSkill.executionTimeRemaining = moveDuration + 1000; // 移動後の配置時間も考慮
-      }
+      // 詠唱アニメーション開始
+      this.play('rumia_cast');
+      this.currentAnimState = 'cast';
 
-      console.log(`Rumia: Eスキル発動 - ${this.currentSkillConfig.E.NAME}（移動方向: ${Phaser.Math.RadToDeg(this.eSkillMoveDirection).toFixed(0)}度）`);
+      console.log(`Rumia: Eスキル詠唱開始 - ${this.currentSkillConfig.E.NAME}（移動方向: ${Phaser.Math.RadToDeg(this.eSkillMoveDirection).toFixed(0)}度）`);
     }
   }
 
@@ -1291,20 +1330,22 @@ export class Rumia extends Boss {
   }
 
   /**
-   * Eスキル詠唱更新（詠唱時間0のため通常は呼ばれない）
+   * Eスキル詠唱更新
    */
   private updateESkillCasting(delta: number): void {
-    const castComplete = this.updateSkillCasting(BossSkillSlot.E, delta);
+    const eSkill = this.skills.get(BossSkillSlot.E);
+    if (!eSkill) return;
 
-    if (castComplete) {
+    // 詠唱時間を減少
+    eSkill.castTimeRemaining -= delta;
+
+    if (eSkill.castTimeRemaining <= 0) {
       // 詠唱完了 → 実行開始
-      const eSkill = this.skills.get(BossSkillSlot.E);
-      if (eSkill) {
-        eSkill.state = BossSkillState.EXECUTING;
-        const moveDuration = this.currentSkillConfig.E.MOVE_DURATION ?? 1000;
-        eSkill.executionTimeRemaining = moveDuration;
-        console.log('Rumia: Eスキル実行開始!');
-      }
+      eSkill.state = BossSkillState.EXECUTING;
+      const moveDuration = this.currentSkillConfig.E.MOVE_DURATION ?? 1000;
+      // 移動前配置 + 移動 + 移動後配置の時間
+      eSkill.executionTimeRemaining = moveDuration + 1000;
+      console.log('Rumia: Eスキル詠唱完了、実行開始!');
     }
   }
 
@@ -1324,6 +1365,8 @@ export class Rumia extends Boss {
     if (eConfig.INTERRUPTIBLE && this.hasStatusEffect(StatusEffectType.STUN)) {
       this._eSkillInterrupted = true;
       this.completeSkill(BossSkillSlot.E, eConfig.COOLDOWN);
+      // Eスキル中断後も硬直時間を設定
+      this.skillRecoveryTime = Rumia.SKILL_RECOVERY_DURATION;
       console.log('Rumia: Eスキル中断（CC - ブレイク）');
       return;
     }
@@ -1407,6 +1450,8 @@ export class Rumia extends Boss {
         // 全弾配置完了 → スキル終了
         if (this.eSkillBulletsSpawned >= bulletsPerLine) {
           this.completeSkill(BossSkillSlot.E, eConfig.COOLDOWN);
+          // Eスキル完了後の硬直時間を設定
+          this.skillRecoveryTime = Rumia.SKILL_RECOVERY_DURATION;
           console.log('Rumia: Eスキル完了');
         }
         break;
@@ -2140,7 +2185,7 @@ export class Rumia extends Boss {
         // 発射までの残り時間で透明度を変化
         const elapsed = currentTime - line.createdTime;
         const progress = Math.min(elapsed / fireDelay, 1);
-        const alpha = 0.3 + progress * 0.5; // 0.3 → 0.8
+        const alpha = 0.1 + progress * 0.15; // 0.1 → 0.25（さらに薄く）
 
         // 予告線番号で色を変化（1本目=薄い、7本目=濃い）
         const colorIntensity = 0.5 + (line.lineIndex / 6) * 0.5;
@@ -2171,7 +2216,7 @@ export class Rumia extends Boss {
 
     // プレイエリア上部1/3で左右に移動
     const targetY = Y + HEIGHT / 4;
-    const speed = this.stats.moveSpeed;
+    const speed = this.getEffectiveMoveSpeed();
 
     // プレイヤーのX座標に緩やかに追従
     const dx = this.playerPosition.x - this.x;
@@ -2291,19 +2336,8 @@ export class Rumia extends Boss {
    * 状態異常を付与（コマアニメーション用にオーバーライド）
    */
   applyStatusEffect(effect: StatusEffect): void {
-    const statusEffects = this.getStatusEffects();
-    const existingIndex = statusEffects.findIndex(e => e.type === effect.type);
-    if (existingIndex >= 0) {
-      statusEffects[existingIndex] = effect;
-    } else {
-      statusEffects.push(effect);
-    }
-
-    // スタンの視覚エフェクト（黄色）
-    if (effect.type === StatusEffectType.STUN) {
-      this.setTint(0xffff00);
-      this.setVelocity(0, 0);
-    }
+    // 親クラスの処理を呼び出し（Break!表示、SE再生含む）
+    super.applyStatusEffect(effect);
   }
 
   /**

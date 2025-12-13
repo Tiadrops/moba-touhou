@@ -62,6 +62,74 @@ const shouldFlipX = angleDeg > 90 || angleDeg < -90;
 
 ---
 
+## 2024年 - プレイエリア外で生成された弾が表示されない問題
+
+### 問題の症状
+
+ルーミアのQスキルとEスキルで、プレイエリア外で生成された弾幕がプレイエリア内に入っても表示されなかった。
+- Qスキル：予告線から発射される弾幕の一部が消失
+- Eスキル：移動弾幕の端の弾が消失
+
+### 原因
+
+**`fire()`内でのプレイエリア判定と、その後の`setPosition()`呼び出しによるフラグの不整合**が原因だった。
+
+1. `Bullet.fire()`が呼ばれる
+2. `fire()`内で引数の座標(x, y)を使ってプレイエリア判定を行い、`hasEnteredPlayArea`フラグを設定
+3. Rumia側で`bullet.setPosition(newX, newY)`を呼んで弾の位置を調整（縦列を作るため）
+4. 手順2のフラグは元の座標で設定されているため、実際の位置と不整合が発生
+5. 弾がプレイエリア外にある場合、`hasEnteredPlayArea=false`かつ`visible=false`のまま
+6. `update()`でプレイエリアに入っても正しく表示されない
+
+```typescript
+// Rumia.ts - fireQSkillBullets()
+bullet.fire(startX, startY, ...);  // fire()内でhasEnteredPlayAreaが設定される
+// ...
+bullet.setPosition(                 // 位置が変更されるが、フラグは更新されない
+  startX - dirX * delayOffset,
+  startY - dirY * delayOffset
+);
+```
+
+### 解決策
+
+1. `Bullet.setPosition()`をオーバーライドして、位置変更時に`hasEnteredPlayArea`フラグと表示状態を自動更新
+2. `fire()`内のプレイエリア判定コードを削除し、すべて`setPosition`オーバーライドに統一
+
+```typescript
+// Bullet.ts - setPositionオーバーライド
+setPosition(x?: number, y?: number, z?: number, w?: number): this {
+  super.setPosition(x, y, z, w);
+
+  if (this.isActive && x !== undefined && y !== undefined) {
+    const isInsidePlayArea = /* プレイエリア判定 */;
+
+    if (isInsidePlayArea) {
+      this.hasEnteredPlayArea = true;
+      this.setVisible(true);
+    } else if (!this.hasEnteredPlayArea) {
+      this.setVisible(false);
+    }
+  }
+  return this;
+}
+```
+
+### 修正箇所
+
+1. `src/entities/Bullet.ts`
+   - `setPosition()`メソッドをオーバーライドして追加
+   - `fire()`内のプレイエリア判定コード（119-128行目相当）を削除
+
+### 教訓
+
+- Phaserで`fire()`後に`setPosition()`を呼ぶパターンがある場合、状態フラグとの整合性に注意
+- 弾幕ゲームでは弾の生成位置と初期表示位置が異なるケースがある
+- 状態管理は一箇所に集約する（`fire()`と`setPosition`で二重に判定しない）
+- プールから再利用するオブジェクトは、初期化時にフラグをリセットすることを忘れない
+
+---
+
 ## テンプレート
 
 ### 問題の症状

@@ -79,6 +79,7 @@ export enum BuffType {
   AA_MULTIPLIER = 'aa_multiplier',
   DEFENSE = 'defense',
   CRIT_CHANCE = 'crit_chance',
+  HARIBABA_STACK = 'haribaba_stack',  // 針巫女スタック
 }
 
 // バフ情報
@@ -87,6 +88,7 @@ export interface Buff {
   multiplier: number;          // 倍率（1.5 = 50%上昇）
   remainingTime: number;       // 残り時間（ms）
   source: string;              // バフの発生源（スキルIDなど）
+  stacks?: number;             // スタック数（スタック系バフ用）
 }
 
 // 状態異常の種類

@@ -11,9 +11,9 @@ const REIMU_STATS: CharacterStats = {
   defense: 5,                // 防御力
   attackSpeed: 2.0,          // 1秒に2回攻撃（0.5秒クールダウン）
   critChance: 0,             // テスト用: クリティカル確率0
-  moveSpeed: 300,            // ピクセル/秒
-  attackRange: 150,          // 攻撃範囲
-  hitboxRadius: 8,           // 当たり判定は小さめ（弾幕回避のため）
+  moveSpeed: 5.5 * 55,       // 移動速度（5.5m/s = 302.5px/s）
+  attackRange: 5.5 * 55,     // 攻撃範囲（5.5m = 302.5px）
+  hitboxRadius: 12,          // 当たり判定（8 * 1.5 = 12）
 };
 
 const MARISA_STATS: CharacterStats = {

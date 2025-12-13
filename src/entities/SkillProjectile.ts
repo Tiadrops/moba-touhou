@@ -2,15 +2,32 @@ import Phaser from 'phaser';
 import { StatusEffectType, Attackable } from '@/types';
 import { DEPTH, GAME_CONFIG } from '@/config/GameConfig';
 
+// 命中時コールバックの型定義
+export type OnHitCallback = (target: Attackable, damage: number, didBreak: boolean) => void;
+
+// 投射物発射のオプション
+export interface FireOptions {
+  slowDuration?: number;       // スロウ持続時間（ms）
+  slowAmount?: number;         // スロウ量（0.0-1.0）
+  onHitCallback?: OnHitCallback; // 命中時コールバック
+  skillSource?: string;        // スキルソース識別子
+  color?: number;              // 投射物の色
+  speed?: number;              // 弾速（px/s）- 指定時はtravelTimeを無視
+  textureKey?: string;         // 画像テクスチャキー（指定時はグラフィックスの代わりに画像を使用）
+}
+
 /**
  * スキル用の投射物（長方形弾など）
  */
 export class SkillProjectile extends Phaser.GameObjects.Container {
   private graphics: Phaser.GameObjects.Graphics;
+  private sprite: Phaser.GameObjects.Image | null = null; // 画像表示用
   private projectileWidth: number;   // 幅（進行方向に対して横）
   private projectileHeight: number;  // 高さ（進行方向に対して縦）
   private damage: number;
   private stunDuration: number;
+  private slowDuration: number = 0;  // スロウ持続時間
+  private slowAmount: number = 0;    // スロウ量（0.0-1.0）
   private isActive: boolean = false;
   private maxRange: number = 0;
   private travelTime: number = 0;
@@ -20,6 +37,10 @@ export class SkillProjectile extends Phaser.GameObjects.Container {
   private directionAngle: number = 0; // 進行方向の角度（ラジアン）
   private hitTargets: Set<Attackable> = new Set(); // 既にヒットした対象（多段ヒット防止）
   private targets: Attackable[] = []; // 攻撃対象（敵とボス）
+  private onHitCallback: OnHitCallback | null = null; // 命中時コールバック
+  private skillSource: string = 'skill'; // スキルソース識別子
+  private projectileColor: number = 0x9966ff; // 投射物の色
+  private useSprite: boolean = false; // 画像を使用するか
 
   constructor(scene: Phaser.Scene) {
     super(scene, 0, 0);
@@ -48,10 +69,11 @@ export class SkillProjectile extends Phaser.GameObjects.Container {
    * @param width 長方形の幅（px）
    * @param height 長方形の高さ（px）
    * @param maxRange 最大射程（px）- 弾の先端がここまで到達
-   * @param travelTime 射程到達までの時間（ms）
+   * @param travelTime 射程到達までの時間（ms）- speedが指定されている場合は無視
    * @param damage ダメージ量
    * @param stunDuration スタン時間（ms）
-   * @param enemies 敵配列
+   * @param targets 攻撃対象配列
+   * @param options オプション設定
    */
   fire(
     x: number,
@@ -64,13 +86,13 @@ export class SkillProjectile extends Phaser.GameObjects.Container {
     travelTime: number,
     damage: number,
     stunDuration: number,
-    targets: Attackable[]
+    targets: Attackable[],
+    options?: FireOptions
   ): void {
     this.projectileWidth = width;
     this.projectileHeight = height;
     // 長方形の先端が最大射程に到達するように調整（中心位置 = maxRange - height/2）
     this.maxRange = maxRange - height / 2;
-    this.travelTime = travelTime;
     this.damage = damage;
     this.stunDuration = stunDuration;
     this.targets = targets;
@@ -78,11 +100,48 @@ export class SkillProjectile extends Phaser.GameObjects.Container {
     this.hitTargets.clear();
     this.isActive = true;
 
+    // オプションを適用
+    this.slowDuration = options?.slowDuration ?? 0;
+    this.slowAmount = options?.slowAmount ?? 0;
+    this.onHitCallback = options?.onHitCallback ?? null;
+    this.skillSource = options?.skillSource ?? 'skill';
+    this.projectileColor = options?.color ?? 0x9966ff;
+
+    // 画像テクスチャの処理
+    this.useSprite = !!options?.textureKey;
+    if (this.useSprite && options?.textureKey) {
+      // 既存のスプライトがあれば削除
+      if (this.sprite) {
+        this.sprite.destroy();
+      }
+      // 新しいスプライトを作成
+      this.sprite = this.scene.add.image(0, 0, options.textureKey);
+      this.sprite.setDisplaySize(width, height);
+      this.add(this.sprite);
+      // グラフィックスは非表示に
+      this.graphics.setVisible(false);
+    } else {
+      // グラフィックスを表示
+      this.graphics.setVisible(true);
+      if (this.sprite) {
+        this.sprite.setVisible(false);
+      }
+    }
+
     // 進行方向の角度を保存
     this.directionAngle = Math.atan2(directionY, directionX);
 
-    // 速度を計算（距離 / 時間）
-    const speed = this.maxRange / travelTime;
+    // 速度を計算
+    let speed: number;
+    if (options?.speed) {
+      // 弾速が指定されている場合はそれを使用（px/s → px/ms に変換）
+      speed = options.speed / 1000;
+      this.travelTime = this.maxRange / speed;
+    } else {
+      // travelTimeから速度を計算
+      this.travelTime = travelTime;
+      speed = this.maxRange / travelTime;
+    }
     this.velocityX = directionX * speed;
     this.velocityY = directionY * speed;
 
@@ -99,10 +158,17 @@ export class SkillProjectile extends Phaser.GameObjects.Container {
    * 投射物を描画（進行方向に回転した長方形）
    */
   private drawProjectile(): void {
-    this.graphics.clear();
-
     // 進行方向に90度足して長方形を横向きに（高さが進行方向）
     const rotation = this.directionAngle + Math.PI / 2;
+
+    // 画像を使用する場合
+    if (this.useSprite && this.sprite) {
+      this.sprite.setRotation(rotation);
+      return;
+    }
+
+    // グラフィックスで描画
+    this.graphics.clear();
 
     // 回転行列の計算用
     const cos = Math.cos(rotation);
@@ -134,8 +200,8 @@ export class SkillProjectile extends Phaser.GameObjects.Container {
     this.graphics.closePath();
     this.graphics.strokePath();
 
-    // 内側（半透明の紫/封魔陣イメージ）
-    this.graphics.fillStyle(0x9966ff, 0.6);
+    // 内側（半透明、色はオプションで指定可能）
+    this.graphics.fillStyle(this.projectileColor, 0.6);
     this.graphics.beginPath();
     this.graphics.moveTo(rotatedCorners[0].x, rotatedCorners[0].y);
     for (let i = 1; i < rotatedCorners.length; i++) {
@@ -213,32 +279,47 @@ export class SkillProjectile extends Phaser.GameObjects.Container {
 
       if (distanceSquared < targetRadius * targetRadius) {
         // ヒット！
-        this.onHitTarget(target);
+        this.onHitTargetInternal(target);
       }
     }
   }
 
   /**
-   * 対象にヒット
+   * 対象にヒット（内部処理）
    */
-  private onHitTarget(target: Attackable): void {
+  private onHitTargetInternal(target: Attackable): void {
     this.hitTargets.add(target);
 
     // ダメージを与える（防御力考慮）
     const defenseReduction = 100 / (target.getDefense() + 100);
     const finalDamage = Math.max(1, Math.floor(this.damage * defenseReduction));
-    target.takeDamage(finalDamage);
+    const didBreak = target.takeDamage(finalDamage);
 
     // スタンを付与（applyStatusEffectがある場合のみ）
     if (this.stunDuration > 0 && 'applyStatusEffect' in target) {
-      (target as { applyStatusEffect: (effect: { type: StatusEffectType; remainingTime: number; source: string }) => void }).applyStatusEffect({
+      (target as { applyStatusEffect: (effect: { type: StatusEffectType; remainingTime: number; source: string; value?: number }) => void }).applyStatusEffect({
         type: StatusEffectType.STUN,
         remainingTime: this.stunDuration,
-        source: 'reimu_w',
+        source: this.skillSource,
       });
     }
 
-    console.log(`W skill hit! Damage: ${finalDamage}, Stun: ${this.stunDuration}ms`);
+    // スロウを付与（applyStatusEffectがある場合のみ）
+    if (this.slowDuration > 0 && this.slowAmount > 0 && 'applyStatusEffect' in target) {
+      (target as { applyStatusEffect: (effect: { type: StatusEffectType; remainingTime: number; source: string; value?: number }) => void }).applyStatusEffect({
+        type: StatusEffectType.SLOW,
+        remainingTime: this.slowDuration,
+        source: this.skillSource,
+        value: this.slowAmount,
+      });
+    }
+
+    // コールバックを呼び出し
+    if (this.onHitCallback) {
+      this.onHitCallback(target, finalDamage, didBreak);
+    }
+
+    console.log(`${this.skillSource} hit! Damage: ${finalDamage}, Stun: ${this.stunDuration}ms, Slow: ${this.slowAmount * 100}% for ${this.slowDuration}ms`);
   }
 
   /**
@@ -263,6 +344,9 @@ export class SkillProjectile extends Phaser.GameObjects.Container {
    */
   destroy(fromScene?: boolean): void {
     this.graphics.destroy();
+    if (this.sprite) {
+      this.sprite.destroy();
+    }
     super.destroy(fromScene);
   }
 }

@@ -133,43 +133,62 @@ export const UNIT = {
  * スキル設定
  */
 export const SKILL_CONFIG = {
-  // 霊夢のQスキル
+  // 霊夢のQスキル「妖怪バスター」
   REIMU_Q: {
-    CAST_TIME: 200,              // キャスト時間（ms）
-    PROJECTILE_COUNT: 3,         // 発射弾数
-    PROJECTILE_INTERVAL: 100,    // 弾の発射間隔（ms）
-    ATTACK_SPEED_BUFF: 1.5,      // AS上昇倍率（50%上昇）
-    BUFF_DURATION: 5000,         // バフ持続時間（ms）
-    COOLDOWN: 7000,              // クールダウン（ms）
-    TARGET_DETECTION_RANGE: 0.5 * 55, // ターゲット検出範囲（0.5m = 27.5px）
-    // スキルダメージ設定（テスト用: 固定100 + 攻撃力100% = 200/発, 3発で600）
+    CAST_TIME: 250,              // キャスト時間（ms）
+    MOTION_TIME: 150,            // モーション硬直（ms）
+    PROJECTILE_WIDTH: 0.5 * 55,  // 弾の幅（0.5m = 27.5px）
+    PROJECTILE_HEIGHT: 1.0 * 55, // 弾の高さ（1.0m = 55px）
+    PROJECTILE_RANGE: 6.5 * 55,  // 射程（6.5m = 357.5px）※弾の半分0.5mを考慮し最大7mに収まる
+    PROJECTILE_TRAVEL_TIME: 400, // 最大射程到達時間（ms）→ 約16.25m/s
+    COOLDOWN: 4000,              // クールダウン（ms）
+    CD_REFUND_ON_HIT: 0.75,      // 命中時CD解消率（75%）
+    SLOW_DURATION: 1000,         // スロウ持続時間（ms）
+    SLOW_AMOUNT: 0.30,           // スロウ量（30%減速）
+    // 針巫女スタック
+    HARIBABA_STACK: {
+      ATK_PER_STACK: 5,          // 1スタックあたり攻撃力上昇
+      AS_PER_STACK: 0.10,        // 1スタックあたりAS上昇（+0.1、数値加算）
+      MS_PER_5_STACK: 0.10,      // 5スタック毎に移動速度上昇（10%）
+      MAX_STACK: 10,             // 最大スタック数
+      DURATION: 6000,            // 持続時間（ms）
+    },
+    // スキルダメージ設定
     DAMAGE: {
-      BASE_DAMAGE: 100,          // 固定ダメージ
-      SCALING_RATIO: 1.0,        // 攻撃力増幅率（100%）
+      BASE_DAMAGE: 80,           // 固定ダメージ
+      SCALING_RATIO: 0.6,        // 攻撃力増幅率（60%）
     },
   },
-  // 霊夢のWスキル（封魔陣）
+  // 霊夢のWスキル「封魔針」
   REIMU_W: {
-    CAST_TIME: 250,              // キャスト時間（ms）
+    CAST_TIME: 0,                // キャスト時間（即時発動）
     MOTION_TIME: 150,            // スキルモーション硬直（ms）
     PROJECTILE_WIDTH: 0.5 * 55,  // 弾の幅（0.5m = 27.5px）
-    PROJECTILE_HEIGHT: 0.75 * 55, // 弾の高さ（0.75m = 41.25px）
-    PROJECTILE_RANGE: 7 * 55,    // 射程（7m = 385px）
-    PROJECTILE_TRAVEL_TIME: 400, // 最大射程到達時間（ms）
-    STUN_DURATION: 500,          // スタン時間（ms）
-    COOLDOWN: 7000,              // クールダウン（ms）
-    // スキルダメージ設定（テスト用: 固定100 + 攻撃力10% = 110/発）
+    PROJECTILE_HEIGHT: 1.0 * 55, // 弾の高さ（1.0m = 55px）
+    PROJECTILE_RANGE: 9 * 55,    // 射程（9m = 495px）
+    PROJECTILE_SPEED: 14 * 55,   // 弾速（14m/s = 770px/s）
+    STUN_DURATION: 1000,         // スタン時間（ms）
+    COOLDOWN: 6000,              // クールダウン（ms）
+    E_CD_REFUND_ON_BREAK: 0.50,  // ブレイク時EスキルCD解消率（50%）
+    BREAK_BONUS_DAMAGE_RATIO: 0.5, // ブレイク時追加ダメージ倍率（50%）
+    // スキルダメージ設定
     DAMAGE: {
-      BASE_DAMAGE: 100,          // 固定ダメージ
-      SCALING_RATIO: 0.1,        // 攻撃力増幅率（10%）
+      BASE_DAMAGE: 60,           // 固定ダメージ
+      SCALING_RATIO: 0.4,        // 攻撃力増幅率（40%）
     },
   },
-  // 霊夢のEスキル
+  // 霊夢のEスキル「昇天蹴」
   REIMU_E: {
     CAST_TIME: 100,              // キャスト時間（ms）
     DASH_DISTANCE: 3 * 55,       // ダッシュ距離（3m = 165px）
-    DASH_DURATION: 300,          // ダッシュ所要時間（ms）
-    COOLDOWN: 10000,             // クールダウン（ms）
+    DASH_DURATION: 200,          // ダッシュ所要時間（ms）
+    COOLDOWN: 12000,             // クールダウン（ms）
+    DAMAGE_REDUCTION: 0.90,      // ダッシュ中ダメージカット（90%）
+    // ダッシュダメージ設定
+    DAMAGE: {
+      BASE_DAMAGE: 50,           // 固定ダメージ
+      SCALING_RATIO: 0.3,        // 攻撃力増幅率（30%）
+    },
   },
   // 霊夢のRスキル（夢想天生）
   REIMU_R: {
@@ -260,7 +279,7 @@ export const BOSS_CONFIG = {
       // Eスキル「通常弾幕3」- 移動しながら直線弾幕を配置
       E: {
         NAME: '通常弾幕3',
-        CAST_TIME: 0,                // 詠唱なし（即座に移動開始）
+        CAST_TIME: 500,              // 詠唱時間（0.5秒）
         COOLDOWN: 6000,              // クールダウン（ms）
         DAMAGE: {
           BASE: 20,
@@ -271,7 +290,7 @@ export const BOSS_CONFIG = {
         MOVE_DISTANCE: 5 * 55,       // 移動距離（5m = 275px）
         // 弾幕パラメータ
         BULLET_LINES: 2,             // 弾列数（2列 - 前方に配置）
-        BULLETS_PER_LINE: 20,        // 1列あたりの弾数（横に並べる）
+        BULLETS_PER_LINE: 18,        // 1列あたりの弾数（横に並べる）
         BULLET_SPAWN_INTERVAL: 50,   // 弾配置間隔（0.05秒 = 50ms）
         LINE_SPACING: 1 * 55,        // 列の間隔（1m = 55px）- 前方2列の距離
         LINE_WIDTH: 10 * 55,         // 1列の横幅（10m = 550px）
