@@ -57,10 +57,32 @@ rm old_file.ts
 - 速度: X方向8px/秒、Y方向15px/秒
 - 画像サイズに応じて自動スケール（プレイエリア+50%余白）
 
+### スペルカードカットイン演出
+- 実装: `src/ui/components/SpellCardCutIn.ts`
+- 呼び出し: `src/scenes/GameScene.ts` のフェーズ移行処理
+- 立ち絵読み込み: `src/scenes/BootScene.ts`
+- フォント: `fonts/SawarabiMincho-Regular.ttf`（さわらび明朝）
+- 詳細仕様: `docs/CUTIN_SYSTEM.md`
+
+#### カットイン立ち絵
+| キャラ | キー | ファイル | サイズ |
+|-------|-----|---------|--------|
+| ルーミア | `cutin_rumia` | `img/Rumia/rumia_3.png` | 1920x810px |
+
+#### 演出パラメータ
+- 暗転時間: 200ms
+- 登場アニメーション: 400ms
+- 表示時間: 1200ms
+- 退場アニメーション: 300ms
+- 立ち絵透明度: 75%
+- 暗転濃さ: 85%
+- SE: `sound/se/spellcard.mp3`
+
 ### ドキュメント
 - 弾幕仕様: `docs/BULLET_SYSTEM.md`
 - ボスシステム: `docs/BOSS_SYSTEM.md`
 - ルーミアスキル: `docs/RUMIA_SKILLS.md`
+- カットイン演出: `docs/CUTIN_SYSTEM.md`
 - トラブルシューティング: `docs/TROUBLESHOOTING.md`
 
 ## コーディング規約

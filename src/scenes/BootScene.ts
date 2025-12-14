@@ -58,6 +58,9 @@ export class BootScene extends Phaser.Scene {
     // ステージ背景の読み込み
     this.load.image('bg_stage1', 'img/background/stage1.png');
 
+    // カットイン用立ち絵
+    this.load.image('cutin_rumia', 'img/Rumia/rumia_3.png');
+
     // 弾幕スプライトシートの読み込み
     // 黒縁中玉: 4096x512px (512x512 × 8色)
     this.load.image('kshot_medium_ball', 'img/bullets/kshot_medium_ball.png');
@@ -85,6 +88,7 @@ export class BootScene extends Phaser.Scene {
     this.load.audio('se_break', 'sound/se/break.mp3');
     this.load.audio('se_hit_player', 'sound/se/hit_player.mp3');
     this.load.audio('se_hit_enemy', 'sound/se/hit_enemy.mp3');
+    this.load.audio('se_spellcard', 'sound/se/spellcard.mp3');
   }
 
   create(): void {
