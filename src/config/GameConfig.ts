@@ -308,80 +308,60 @@ export const BOSS_CONFIG = {
 
     // スペルカードフェーズ1のスキル
     PHASE_1_SKILLS: {
-      // Qスキル: 12方向弾
+      // Qスキル: 無効化（リメイク予定）
       Q: {
-        NAME: '闇の拡散弾',
-        CAST_TIME: 200,              // キャスト時間0.2秒
-        COOLDOWN: 3000,              // CD3秒
-        DAMAGE: {
-          BASE: 30,
-          RATIO: 0.4,
-        },
-        // 12方向弾パラメータ
-        WAY_COUNT: 12,               // 12方向
-        ANGLE_SPREAD: 180,           // 360度（全方向）
-        BULLETS_PER_WAY: 1,          // 各方向1発
-        BULLET_INTERVAL: 0,          // 同時発射
-        BULLET_SPEED: 4 * 55,        // 4m/s = 220px/s
-        BULLET_RADIUS: 30,           // 特大の球（半径30）
-        BULLET_COLOR: 0xffff00,      // 黄色
-        WARNING_LINE_LENGTH: 0,      // 予告線なし
-        WAY_DELAY: 0,                // 同時発射
+        NAME: '（無効）',
+        CAST_TIME: 99999999,         // 実質使用不可
+        COOLDOWN: 99999999,
+        DAMAGE: { BASE: 0, RATIO: 0 },
+        BULLET_SPEED: 0,
+        ENABLED: false,
       },
-      // Wスキル「闘符・トリプルバースト」- Qスキルを3回連続発射
+      // Wスキル: 無効化（リメイク予定）
       W: {
-        NAME: '闘符・トリプルバースト',
-        CAST_TIME: 200,              // 詠唱時間（ms）
-        COOLDOWN: 6000,              // クールダウン（ms）
-        DAMAGE: {
-          BASE: 25,
-          RATIO: 0.4,
-        },
-        // 3連射パラメータ
-        BURST_COUNT: 3,              // 発射回数
-        BURST_INTERVAL: 300,         // 発射間隔（ms）
-        BULLET_SPEED: 5 * 55,        // 弾速（Qより少し速い: 5m/s = 275px/s）
+        NAME: '（無効）',
+        CAST_TIME: 99999999,
+        COOLDOWN: 99999999,
+        DAMAGE: { BASE: 0, RATIO: 0 },
+        ENABLED: false,
       },
-      // Eスキル「闇の潮汐」- 6方向スパイラル弾幕
+      // Eスキル: 無効化（リメイク予定）
       E: {
-        NAME: '闇の潮汐',
-        CAST_TIME: 300,              // キャスト時間0.3秒
-        COOLDOWN: 6000,              // CD6秒
-        DAMAGE: {
-          BASE: 25,
-          RATIO: 0.3,
-        },
-        // スパイラル弾幕パラメータ
-        SPIRAL_ARMS: 6,              // 6方向（螺旋の腕の数）
-        SPIRAL_DURATION: 2000,       // 発射持続時間（2秒）
-        BULLET_FIRE_INTERVAL: 150,   // 0.15秒ごとに発射
-        BULLET_SPEED: 2.5 * 55,      // 2.5m/s = 137.5px/s
-        BULLET_RADIUS: 15,           // 弾の半径（Rの大と同じ）
-        ROTATION_SPEED: 1.5,         // 回転速度（rad/s）- 螺旋の回転
-        BULLET_COLOR: 0x9900ff,      // 紫色
+        NAME: '（無効）',
+        CAST_TIME: 99999999,
+        COOLDOWN: 99999999,
+        DAMAGE: { BASE: 0, RATIO: 0 },
+        ENABLED: false,
       },
       // Rスキル「闇符・ダークサイドオブザムーン」
       R: {
         NAME: '闇符「ダークサイドオブザムーン」',
-        CAST_TIME: 700,              // キャスト時間0.7秒
+        CAST_TIME: 600,              // 詠唱時間600ms
         COOLDOWN: 8000,              // CD8秒
         DAMAGE: {
           BASE: 40,
           RATIO: 0.5,
         },
         // 移動パラメータ
-        INVINCIBILITY_DURATION: 2000, // 2秒間無敵
+        INVINCIBILITY_DURATION: 3000, // 3秒間無敵
         MOVE_DISTANCE: 5 * 55,       // 5m = 275px移動
-        BULLET_FIRE_INTERVAL: 100,   // 0.1秒ごとに弾発射
-        BULLET_SPEED: 1 * 55,        // 弾速1m/s = 55px/s
-        // 弾サイズ（半径）
-        BULLET_SIZE_SMALL: 6,        // 小さい球
-        BULLET_SIZE_MEDIUM: 10,      // 中くらいの球
-        BULLET_SIZE_LARGE: 15,       // 大きい球
-        // ランダム弾: 小2、中2、大2 = 6発
-        // 自機狙い弾: 小2、中2、大2 = 6発
-        BULLETS_RANDOM: 6,           // ランダム弾6発（小2、中2、大2）
-        BULLETS_AIMED: 6,            // 自機狙い弾6発（小2、中2、大2）
+        MOVE_SPEED: 3 * 55,          // 3m/s = 165px/s
+        BULLET_FIRE_INTERVAL: 100,   // 0.1秒ごとに弾発射（3秒間で30回）
+        BULLET_SPEED: 1 * 55,        // 黒縁中玉の弾速1m/s = 55px/s
+        // 移動中の弾幕
+        // 輪弾RED (ID:9) - ランダム4発 - 半径0.25m（元0.5mの半分）
+        RINDAN_RADIUS: 0.25 * 55,    // 半径0.25m = 13.75px
+        RINDAN_COUNT: 4,             // ランダム4発
+        RINDAN_SPEED: 2 * 55,        // 輪弾の弾速2m/s = 110px/s（黒縁中玉の2倍）
+        RINDAN_FIRE_OFFSETS: [100, 300, 500, 700, 900, 1100, 1300, 1500, 1700, 1900], // 200ms間隔、10回
+        // 黒縁中玉WHITE (ID:8) - ランダム4発 - 半径0.125m（元0.25mの半分）
+        MEDIUM_BALL_RADIUS: 0.125 * 55, // 半径0.125m = 6.875px
+        MEDIUM_BALL_COUNT: 4,        // ランダム4発
+        MEDIUM_BALL_FIRE_OFFSETS: [0, 200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800], // 200ms間隔、10回
+        // 無敵終了時のリング弾
+        FINISH_RING_COUNT: 20,       // 20発
+        FINISH_RING_RADIUS: 0.5 * 55, // 半径0.5m = 27.5px（元1.0mの半分）
+        FINISH_RING_SPEED: 3 * 55,   // 弾速3m/s = 165px/s
       },
     },
 

@@ -54,6 +54,8 @@ export class BootScene extends Phaser.Scene {
       frameWidth: 704,   // 1408 / 2
       frameHeight: 800,
     });
+    // ルーミアコマ5（Rスキル無敵用）: 単一画像
+    this.load.image('coma_rumia_rskill', 'img/Rumia/rumia_koma5.png');
 
     // ステージ背景の読み込み
     this.load.image('bg_stage1', 'img/background/stage1.png');

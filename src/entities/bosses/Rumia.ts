@@ -93,13 +93,28 @@ type PhaseSkillsConfig = {
     DAMAGE: { BASE: number; RATIO: number };
     INVINCIBILITY_DURATION: number;
     MOVE_DISTANCE: number;
+    MOVE_SPEED?: number;
     BULLET_FIRE_INTERVAL: number;
     BULLET_SPEED: number;
-    BULLET_SIZE_SMALL: number;
-    BULLET_SIZE_MEDIUM: number;
-    BULLET_SIZE_LARGE: number;
-    BULLETS_RANDOM: number;   // ランダム弾6発（小2、中2、大2）
-    BULLETS_AIMED: number;    // 自機狙い弾3発（小1、中1、大1）
+    // 輪弾RED (ID:9) - 半径0.25m
+    RINDAN_RADIUS?: number;
+    RINDAN_COUNT?: number;
+    RINDAN_SPEED?: number;
+    RINDAN_FIRE_OFFSETS?: readonly number[];
+    // 黒縁中玉WHITE (ID:8) - 半径0.125m
+    MEDIUM_BALL_RADIUS?: number;
+    MEDIUM_BALL_COUNT?: number;
+    MEDIUM_BALL_FIRE_OFFSETS?: readonly number[];
+    // 終了時リング弾
+    FINISH_RING_COUNT?: number;
+    FINISH_RING_RADIUS?: number;
+    FINISH_RING_SPEED?: number;
+    // 旧パラメータ（互換性用）
+    BULLET_SIZE_SMALL?: number;
+    BULLET_SIZE_MEDIUM?: number;
+    BULLET_SIZE_LARGE?: number;
+    BULLETS_RANDOM?: number;
+    BULLETS_AIMED?: number;
   };
 };
 
@@ -159,10 +174,10 @@ export class Rumia extends Boss {
 
   // Rスキル用（ダークサイドオブザムーン）
   private rSkillMoveDirection: number = 0;          // 移動方向（ラジアン）
-  private rSkillMoveStartPos: { x: number; y: number } = { x: 0, y: 0 }; // 移動開始位置
   private rSkillMoveProgress: number = 0;           // 移動進捗（0〜1）
   private rSkillBulletFireTimer: number = 0;        // 弾発射タイマー
   private rSkillInvincibilityRemaining: number = 0; // 無敵残り時間
+  private rSkillDirectionChangeTimer: number = 0;   // 方向変更タイマー
 
   // スペルカード用Wスキル（トリプルバースト - Q3連射）
   private spellWSkillBurstsFired: number = 0;       // 発射済み回数
@@ -229,13 +244,7 @@ export class Rumia extends Boss {
       this.currentSkillConfig = CONFIG.PHASE_1_SKILLS as PhaseSkillsConfig;
     }
 
-    // スペルカードフェーズなら色を変える
-    const phase = this.getCurrentPhase();
-    if (phase?.type === BossPhaseType.SPELL_CARD) {
-      this.setTint(0x990099); // より明るい紫
-    } else {
-      this.setTint(0x660066);
-    }
+    this.clearTint();
   }
 
   /**
@@ -374,6 +383,11 @@ export class Rumia extends Boss {
     const wSkill = this.skills.get(BossSkillSlot.W);
     const eSkill = this.skills.get(BossSkillSlot.E);
     const rSkill = this.skills.get(BossSkillSlot.R);
+
+    // Rスキル実行中は黒球スプライトを維持するため、アニメーション更新をスキップ
+    if (rSkill?.state === BossSkillState.EXECUTING) {
+      return;
+    }
 
     // Eスキル移動フェーズかどうか
     const isESkillMoving = eSkill?.state === BossSkillState.EXECUTING && this.eSkillPhase === 'moving';
@@ -581,41 +595,21 @@ export class Rumia extends Boss {
 
   /**
    * 闇符「ダークサイドオブザムーン」専用AI
-   * プレイヤーに近づきながらQ + E + Rを使用
+   * 現在はRスキルのみ使用（Q/W/Eはリメイク中）
    */
   private updateDarkSideOfTheMoonAI(time: number, delta: number): void {
-    const qSkill = this.skills.get(BossSkillSlot.Q);
-    const wSkill = this.skills.get(BossSkillSlot.W);
-    const eSkill = this.skills.get(BossSkillSlot.E);
     const rSkill = this.skills.get(BossSkillSlot.R);
-    if (!qSkill || !wSkill || !eSkill || !rSkill) return;
+    if (!rSkill) return;
 
-    // Rスキル実行中は他のスキルを使用しない
+    // Rスキル実行中フラグ
     const isRSkillActive =
       rSkill.state === BossSkillState.CASTING ||
       rSkill.state === BossSkillState.EXECUTING;
 
-    // Qスキル実行中はR/E/Wを使用しない
-    const isQSkillActive =
-      qSkill.state === BossSkillState.CASTING ||
-      qSkill.state === BossSkillState.EXECUTING;
-
-    // Wスキル実行中はR/Qを使用しない
-    const isWSkillActive =
-      wSkill.state === BossSkillState.CASTING ||
-      wSkill.state === BossSkillState.EXECUTING;
-
-    // Eスキル実行中はR/Q/Wを使用しない
-    const isESkillActive =
-      eSkill.state === BossSkillState.CASTING ||
-      eSkill.state === BossSkillState.EXECUTING;
-
-    // Rスキルの処理（優先度最高）
+    // Rスキルの処理（現在は唯一の有効スキル）
     switch (rSkill.state) {
       case BossSkillState.READY:
-        if (!isQSkillActive && !isESkillActive) {
-          this.tryUseRSkill();
-        }
+        this.tryUseRSkill();
         break;
 
       case BossSkillState.CASTING:
@@ -625,56 +619,9 @@ export class Rumia extends Boss {
       case BossSkillState.EXECUTING:
         this.updateRSkillExecution(time, delta);
         break;
-    }
 
-    // Eスキルの処理（螺旋弾幕）- Rより優先度低い
-    switch (eSkill.state) {
-      case BossSkillState.READY:
-        if (!isRSkillActive && !isQSkillActive && !isWSkillActive) {
-          this.tryUseSpellCardESkill();
-        }
-        break;
-
-      case BossSkillState.CASTING:
-        this.updateSpellCardESkillCasting(delta);
-        break;
-
-      case BossSkillState.EXECUTING:
-        this.updateSpellCardESkillExecution(time, delta);
-        break;
-    }
-
-    // Wスキルの処理（リング弾幕）- E/Rより優先度低い
-    switch (wSkill.state) {
-      case BossSkillState.READY:
-        if (!isRSkillActive && !isQSkillActive && !isESkillActive) {
-          this.tryUseSpellCardWSkill();
-        }
-        break;
-
-      case BossSkillState.CASTING:
-        this.updateSpellCardWSkillCasting(delta);
-        break;
-
-      case BossSkillState.EXECUTING:
-        this.updateSpellCardWSkillExecution(time, delta);
-        break;
-    }
-
-    // Qスキルの処理（12方向弾）- E/R/Wと並行して使用可能
-    switch (qSkill.state) {
-      case BossSkillState.READY:
-        if (!isRSkillActive) {
-          this.tryUseSpellCardQSkill();
-        }
-        break;
-
-      case BossSkillState.CASTING:
-        this.updateSpellCardQSkillCasting(delta);
-        break;
-
-      case BossSkillState.EXECUTING:
-        this.updateSpellCardQSkillExecution(time, delta);
+      case BossSkillState.COOLDOWN:
+        // クールダウン中は何もしない（Boss.tsで自動的にREADYに戻る）
         break;
     }
 
@@ -1597,22 +1544,18 @@ export class Rumia extends Boss {
       this.rSkillMoveDirection = Math.random() * Math.PI * 2;
     }
 
-    this.rSkillMoveStartPos = { x: this.x, y: this.y };
     this.rSkillMoveProgress = 0;
     this.rSkillBulletFireTimer = 0;
     this.rSkillInvincibilityRemaining = rConfig.INVINCIBILITY_DURATION;
+    this.rSkillDirectionChangeTimer = 0;
 
-    // プレイエリア内に収まるように移動方向を調整
-    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
-    const margin = this.stats.hitboxRadius + 20;
-    const targetX = this.x + Math.cos(this.rSkillMoveDirection) * rConfig.MOVE_DISTANCE;
-    const targetY = this.y + Math.sin(this.rSkillMoveDirection) * rConfig.MOVE_DISTANCE;
-
-    // 移動先がエリア外なら方向を反転
-    if (targetX < X + margin || targetX > X + WIDTH - margin ||
-        targetY < Y + margin || targetY > Y + HEIGHT - margin) {
-      this.rSkillMoveDirection += Math.PI; // 180度反転
-    }
+    // 無敵時間中は黒球スプライトに変更（1m x 1m = 55px x 55px）
+    this.anims.stop();
+    this.setTexture('coma_rumia_rskill');
+    this.clearTint(); // 紫色を解除
+    // 画像サイズに応じてスケール調整（元画像が約390pxなので、55px / 390px ≈ 0.14）
+    this.setScale(55 / 390);
+    console.log('Rumia: 黒球スプライトに変更', this.texture.key);
   }
 
   /**
@@ -1624,40 +1567,79 @@ export class Rumia extends Boss {
     if (!rSkill || !rConfig) return;
 
     // 無敵時間管理
+    const wasInvincible = this.rSkillInvincibilityRemaining > 0;
     if (this.rSkillInvincibilityRemaining > 0) {
       this.rSkillInvincibilityRemaining -= delta;
     }
 
-    // 移動処理
-    const moveDuration = rConfig.INVINCIBILITY_DURATION; // 無敵時間中に移動完了
+    // 移動処理（プレイヤー追尾）
+    const moveSpeed = rConfig.MOVE_SPEED ?? 92; // 1.67m/s
+
+    // プレイヤー方向を常に更新（追尾）
+    if (this.playerPosition) {
+      this.rSkillMoveDirection = Phaser.Math.Angle.Between(
+        this.x, this.y,
+        this.playerPosition.x, this.playerPosition.y
+      );
+    }
+
+    // 移動量を計算
+    const moveAmount = moveSpeed * (delta / 1000);
+    let newX = this.x + Math.cos(this.rSkillMoveDirection) * moveAmount;
+    let newY = this.y + Math.sin(this.rSkillMoveDirection) * moveAmount;
+
+    // エリア境界チェック（境界で停止）
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const margin = 50;
+    newX = Math.max(X + margin, Math.min(X + WIDTH - margin, newX));
+    newY = Math.max(Y + margin, Math.min(Y + HEIGHT - margin, newY));
+
+    this.setPosition(newX, newY);
+
+    // 移動進捗を更新（無敵時間ベース）
+    const moveDuration = rConfig.INVINCIBILITY_DURATION;
     this.rSkillMoveProgress += delta / moveDuration;
     this.rSkillMoveProgress = Math.min(this.rSkillMoveProgress, 1);
 
-    // 位置を更新（イージング付き）
-    const easeProgress = this.easeOutQuad(this.rSkillMoveProgress);
-    const newX = this.rSkillMoveStartPos.x + Math.cos(this.rSkillMoveDirection) * rConfig.MOVE_DISTANCE * easeProgress;
-    const newY = this.rSkillMoveStartPos.y + Math.sin(this.rSkillMoveDirection) * rConfig.MOVE_DISTANCE * easeProgress;
-    this.setPosition(newX, newY);
-
-    // 弾発射タイマー
-    this.rSkillBulletFireTimer += delta;
-    if (this.rSkillBulletFireTimer >= rConfig.BULLET_FIRE_INTERVAL) {
-      this.fireRSkillBullets();
-      this.rSkillBulletFireTimer = 0;
+    // 弾発射タイマー（移動中のみ発射）
+    if (this.rSkillMoveProgress < 1) {
+      this.rSkillBulletFireTimer += delta;
+      if (this.rSkillBulletFireTimer >= rConfig.BULLET_FIRE_INTERVAL) {
+        this.fireRSkillBullets();
+        this.rSkillBulletFireTimer = 0;
+      }
     }
 
-    // 実行完了判定（移動完了）
+    // 無敵終了時にリング弾を発射
+    if (wasInvincible && this.rSkillInvincibilityRemaining <= 0) {
+      this.fireRSkillFinishRing();
+    }
+
+    // 実行完了判定（無敵時間終了）
     if (this.rSkillMoveProgress >= 1) {
+      // 元のスプライトに戻す
+      this.restoreNormalSprite();
       this.completeSkill(BossSkillSlot.R, rConfig.COOLDOWN);
       console.log('Rumia: Rスキル完了');
     }
   }
 
   /**
+   * 通常スプライトに戻す
+   */
+  private restoreNormalSprite(): void {
+    // 待機アニメーションに戻す（ノーマル状態と同じスケール: 0.16）
+    this.setTexture('coma_rumia_idle', 0);
+    this.setScale(0.16);
+    this.play('rumia_idle');
+    this.clearTint();
+  }
+
+  /**
    * Rスキルの弾を発射
-   * ランダム弾: 小2、中2、大2 = 6発
-   * 自機狙い弾: 小2、中2、大2 = 6発
-   * kShotの小丸弾/大丸弾/大玉弾を使用
+   * 輪弾RED (ID:9) - ランダム4発 - 半径0.25m
+   * 黒縁中玉WHITE (ID:8) - ランダム4発 - 半径0.125m
+   * 200ms間隔で呼ばれる（BULLET_FIRE_INTERVALで制御）
    */
   private fireRSkillBullets(): void {
     if (!this.bulletPool) return;
@@ -1666,101 +1648,114 @@ export class Rumia extends Boss {
 
     const damage = rConfig.DAMAGE.BASE + this.stats.attackPower * rConfig.DAMAGE.RATIO;
 
-    // サイズごとのkShotフレームID
-    const sizeToKshot = {
-      small: KSHOT.MEDIUM_BALL.MAGENTA,
-      medium: KSHOT.MEDIUM_BALL.MAGENTA,
-      large: KSHOT.MEDIUM_BALL.MAGENTA,
-    };
+    // 弾数
+    const rindanCount = rConfig.RINDAN_COUNT ?? 4;
+    const mediumBallCount = rConfig.MEDIUM_BALL_COUNT ?? 4;
 
-    // ランダム弾6発（小2、中2、大2）
-    const randomBulletConfigs = [
-      { kshot: sizeToKshot.small },
-      { kshot: sizeToKshot.small },
-      { kshot: sizeToKshot.medium },
-      { kshot: sizeToKshot.medium },
-      { kshot: sizeToKshot.large },
-      { kshot: sizeToKshot.large },
-    ];
+    // 弾速（輪弾は黒縁中玉の2倍）
+    const rindanSpeed = rConfig.RINDAN_SPEED ?? rConfig.BULLET_SPEED * 2;
+    const mediumBallSpeed = rConfig.BULLET_SPEED;
 
-    for (const config of randomBulletConfigs) {
+    // 表示スケール計算
+    // 輪弾RED: 半径0.25m = 13.75px → 直径27.5px / 278px ≈ 0.1
+    const rindanScale = 0.1;
+    // 黒縁中玉WHITE: 半径0.125m = 6.875px → 直径13.75px / 512px ≈ 0.027
+    const mediumBallScale = 0.027;
+
+    // 当たり判定半径（スケール前の元画像サイズ基準）
+    // スケールを適用すると当たり判定も縮小されるので、スケール前の値で設定
+    // 輪弾: 278px * 0.1 = 27.8px表示、当たり判定は表示全体をカバー
+    const rindanHitboxRadius = 278 / 2; // 元画像の半径
+    // 黒縁中玉: 512px * 0.027 = 13.8px表示、当たり判定は表示全体をカバー
+    const mediumBallHitboxRadius = 512 / 2; // 元画像の半径
+
+    // 輪弾RED - ランダム4発を即時発射
+    for (let i = 0; i < rindanCount; i++) {
       const bullet = this.bulletPool.acquire();
       if (!bullet) continue;
 
-      // ランダムな方向
       const angle = Math.random() * Math.PI * 2;
       const targetX = this.x + Math.cos(angle) * 1000;
       const targetY = this.y + Math.sin(angle) * 1000;
 
-      bullet.fire(
-        this.x,
-        this.y,
-        targetX,
-        targetY,
-        BulletType.ENEMY_NORMAL,
-        damage,
-        null,
-        false,
-        config.kshot
-      );
+      bullet.fire(this.x, this.y, targetX, targetY, BulletType.ENEMY_NORMAL, damage, null, false, KSHOT.RINDAN.RED);
+      bullet.setScale(rindanScale);
 
-      // 弾速を設定
       const body = bullet.body as Phaser.Physics.Arcade.Body;
       if (body) {
-        body.setVelocity(
-          Math.cos(angle) * rConfig.BULLET_SPEED,
-          Math.sin(angle) * rConfig.BULLET_SPEED
-        );
+        // 当たり判定を画像中央に配置（オフセット不要、円の中心が画像中心）
+        body.setCircle(rindanHitboxRadius, 0, 0);
+        body.setVelocity(Math.cos(angle) * rindanSpeed, Math.sin(angle) * rindanSpeed);
       }
     }
 
-    // 自機狙い弾6発（小2、中2、大2）
-    if (this.playerPosition) {
-      const angleToPlayer = Phaser.Math.Angle.Between(
-        this.x,
-        this.y,
-        this.playerPosition.x,
-        this.playerPosition.y
+    // 黒縁中玉WHITE - ランダム4発を即時発射
+    for (let i = 0; i < mediumBallCount; i++) {
+      const bullet = this.bulletPool.acquire();
+      if (!bullet) continue;
+
+      const angle = Math.random() * Math.PI * 2;
+      const targetX = this.x + Math.cos(angle) * 1000;
+      const targetY = this.y + Math.sin(angle) * 1000;
+
+      bullet.fire(this.x, this.y, targetX, targetY, BulletType.ENEMY_NORMAL, damage, null, false, KSHOT.MEDIUM_BALL.WHITE);
+      bullet.setScale(mediumBallScale);
+
+      const body = bullet.body as Phaser.Physics.Arcade.Body;
+      if (body) {
+        // 当たり判定を画像中央に配置
+        body.setCircle(mediumBallHitboxRadius, 0, 0);
+        body.setVelocity(Math.cos(angle) * mediumBallSpeed, Math.sin(angle) * mediumBallSpeed);
+      }
+    }
+  }
+
+  /**
+   * Rスキル終了時のリング弾を発射
+   * 20発の黒縁中玉YELLOW (ID:3) - 半径1.0m - 弾速3m/s
+   */
+  private fireRSkillFinishRing(): void {
+    if (!this.bulletPool) return;
+    const rConfig = this.currentSkillConfig.R;
+    if (!rConfig) return;
+
+    const damage = rConfig.DAMAGE.BASE + this.stats.attackPower * rConfig.DAMAGE.RATIO;
+    const bulletCount = rConfig.FINISH_RING_COUNT ?? 20;
+    const ringSpeed = rConfig.FINISH_RING_SPEED ?? 165; // 3m/s = 165px/s
+    const angleStep = (Math.PI * 2) / bulletCount;
+
+    // 黒縁中玉YELLOW: 半径0.5m = 27.5px → 直径55px / 512px ≈ 0.107（元の半分）
+    const finishRingScale = 0.107;
+    // 当たり判定半径（スケール前の元画像サイズ基準）
+    const finishRingHitboxRadius = 512 / 2; // 元画像の半径
+
+    for (let i = 0; i < bulletCount; i++) {
+      const bullet = this.bulletPool.acquire();
+      if (!bullet) continue;
+
+      const angle = angleStep * i;
+      const targetX = this.x + Math.cos(angle) * 1000;
+      const targetY = this.y + Math.sin(angle) * 1000;
+
+      bullet.fire(
+        this.x, this.y, targetX, targetY,
+        BulletType.ENEMY_NORMAL, damage, null, false,
+        KSHOT.MEDIUM_BALL.YELLOW
       );
+      bullet.setScale(finishRingScale);
 
-      const aimedBulletConfigs = [
-        { kshot: sizeToKshot.small },
-        { kshot: sizeToKshot.small },
-        { kshot: sizeToKshot.medium },
-        { kshot: sizeToKshot.medium },
-        { kshot: sizeToKshot.large },
-        { kshot: sizeToKshot.large },
-      ];
-
-      for (const config of aimedBulletConfigs) {
-        const bullet = this.bulletPool.acquire();
-        if (!bullet) continue;
-
-        const targetX = this.x + Math.cos(angleToPlayer) * 1000;
-        const targetY = this.y + Math.sin(angleToPlayer) * 1000;
-
-        bullet.fire(
-          this.x,
-          this.y,
-          targetX,
-          targetY,
-          BulletType.ENEMY_NORMAL,
-          damage,
-          null,
-          false,
-          config.kshot
+      const body = bullet.body as Phaser.Physics.Arcade.Body;
+      if (body) {
+        // 当たり判定を画像中央に配置
+        body.setCircle(finishRingHitboxRadius, 0, 0);
+        body.setVelocity(
+          Math.cos(angle) * ringSpeed,
+          Math.sin(angle) * ringSpeed
         );
-
-        // 弾速を設定
-        const body = bullet.body as Phaser.Physics.Arcade.Body;
-        if (body) {
-          body.setVelocity(
-            Math.cos(angleToPlayer) * rConfig.BULLET_SPEED,
-            Math.sin(angleToPlayer) * rConfig.BULLET_SPEED
-          );
-        }
       }
     }
+
+    console.log('Rumia: Rスキル終了リング弾発射');
   }
 
   /**
@@ -2305,7 +2300,6 @@ export class Rumia extends Boss {
     this.setTint(0xff0000); // 赤くフラッシュ
     this.scene.time.delayedCall(100, () => {
       if (this.isActive) {
-        // コマアニメーションを使用しているのでTintをクリア
         this.clearTint();
       }
     });

@@ -213,6 +213,61 @@ if (this.hasEnteredPlayArea && !isInsidePlayArea && !isProtected) {
 
 ---
 
+## 2024年 - Rスキル中のスプライト変更が反映されない問題
+
+### 問題の症状
+
+ルーミアのRスキル（ダークサイドオブザムーン）で、無敵時間中に黒球スプライト（rumia_koma5.png）に変更しても、スプライトが変わらずサイズだけが小さくなった。
+
+### 原因
+
+**`updateAnimation()`が毎フレーム呼ばれてアニメーションを上書きしていた**のが原因。
+
+1. `initializeRSkillExecution()`で`setTexture('coma_rumia_rskill')`を呼び出してスプライトを変更
+2. 同フレーム内で`update()` → `updateAnimation()`が呼ばれる
+3. `updateAnimation()`内の条件分岐で`play('rumia_idle')`や`play('rumia_move')`が呼ばれてテクスチャが上書きされる
+4. 結果としてスプライトは元に戻り、スケール変更のみが残る
+
+```typescript
+// 問題のあったコード（updateAnimation内）
+// Rスキル実行中のチェックがなかった
+} else if (!isCasting && !isESkillMoving && !isMoving && this.currentAnimState !== 'idle') {
+  this.play('rumia_idle');  // ここでテクスチャが上書きされる
+  this.currentAnimState = 'idle';
+}
+```
+
+### 解決策
+
+`updateAnimation()`の先頭でRスキルが実行中かどうかをチェックし、実行中は早期リターンする。
+
+```typescript
+private updateAnimation(): void {
+  const rSkill = this.skills.get(BossSkillSlot.R);
+
+  // Rスキル実行中は黒球スプライトを維持するため、アニメーション更新をスキップ
+  if (rSkill?.state === BossSkillState.EXECUTING) {
+    return;
+  }
+
+  // 以降の通常アニメーション処理...
+}
+```
+
+### 修正箇所
+
+1. `src/entities/bosses/Rumia.ts`
+   - `updateAnimation()`メソッドの先頭にRスキル実行中チェックを追加
+
+### 教訓
+
+- Phaserでスプライトを変更する場合、毎フレーム呼ばれるアニメーション更新処理に注意
+- `setTexture()`は一瞬で上書きされる可能性がある
+- 特殊状態中はアニメーション更新をスキップするガード条件を入れる
+- デバッグ時は`console.log(this.texture.key)`で実際のテクスチャを確認する
+
+---
+
 ## テンプレート
 
 ### 問題の症状

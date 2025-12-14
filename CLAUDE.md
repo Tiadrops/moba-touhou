@@ -47,7 +47,10 @@ rm old_file.ts
   - `rumia_koma1.png`（詠唱）: 2816x800px, 横4フレーム, 1.5fps
   - `rumia_koma2.png`（待機）: 2816x800px, 横4フレーム, 1.5fps
   - `rumia_koma3.png`（移動）: 1408x800px, 横2フレーム, 4fps
+  - `rumia_koma4.png`（移動詠唱）: 1408x800px, 横2フレーム, 4fps
+  - `rumia_koma5.png`（Rスキル無敵用黒球）: 約390x390px, 単一画像
   - 待機・詠唱のフレーム順: 1→3→2→4
+  - Rスキル中のスケール: 55px / 390px ≈ 0.14（1m x 1mサイズ）
 
 ### ステージ背景
 - 背景画像: `img/background/stage1.png`
