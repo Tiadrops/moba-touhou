@@ -211,7 +211,7 @@ export class EnemyZone extends Phaser.GameObjects.Container {
    * デバッグ用ステータス表示を作成
    */
   private createDebugStatsDisplay(): void {
-    // スキルバーの下に配置
+    // スキルバーの下に配置（デバッグ用 - 通常は非表示）
     const skillBarLayout = UI_LAYOUT.ENEMY_ZONE.BOSS_SKILL_BAR;
     this.debugStatsText = this.scene.add.text(
       skillBarLayout.X,
@@ -220,11 +220,10 @@ export class EnemyZone extends Phaser.GameObjects.Container {
       {
         font: '14px monospace',
         color: '#00ffff',
-        backgroundColor: '#000000aa',
-        padding: { x: 8, y: 4 },
       }
     );
     this.debugStatsText.setOrigin(0.5, 0);
+    this.debugStatsText.setVisible(false); // デバッグ用なので非表示
     this.add(this.debugStatsText);
   }
 
@@ -451,11 +450,10 @@ export class EnemyZone extends Phaser.GameObjects.Container {
     const buffEffects: { type: string; remainingTime: number; totalDuration?: number }[] = [];
     const msBuffMultiplier = this.currentBoss.getMoveSpeedBuffMultiplier();
     if (msBuffMultiplier > 1.0) {
-      // MSバフがアクティブ
-      const buffPercent = Math.round((msBuffMultiplier - 1) * 100);
+      // MSバフがアクティブ - BuffType.MOVE_SPEEDを使用してアイコン表示
       buffEffects.push({
-        type: `MS+${buffPercent}%`,
-        remainingTime: buffPercent * 50, // 残り時間の概算（2%=100ms）
+        type: 'move_speed', // BuffType.MOVE_SPEEDに対応
+        remainingTime: 2000, // 概算残り時間
         totalDuration: 2000, // 最大2秒
       });
     }
@@ -467,26 +465,8 @@ export class EnemyZone extends Phaser.GameObjects.Container {
    * デバッグ用ステータス表示を更新
    */
   private updateDebugStats(): void {
-    if (!this.currentBoss) {
-      this.debugStatsText.setText('');
-      return;
-    }
-
-    const baseMS = this.currentBoss.getBaseMoveSpeed();
-    const effectiveMS = this.currentBoss.getEffectiveMoveSpeed();
-    const msBuffMult = this.currentBoss.getMoveSpeedBuffMultiplier();
-    const msBuffPercent = Math.round((msBuffMult - 1) * 100);
-
-    // m/s単位に変換（55px = 1m）
-    const baseMSInMeters = (baseMS / 55).toFixed(1);
-    const effectiveMSInMeters = (effectiveMS / 55).toFixed(1);
-
-    let debugText = `MS: ${effectiveMSInMeters}m/s (base: ${baseMSInMeters}m/s)`;
-    if (msBuffPercent !== 0) {
-      debugText += ` [Buff: +${msBuffPercent}%]`;
-    }
-
-    this.debugStatsText.setText(debugText);
+    // デバッグ表示を無効化
+    this.debugStatsText.setText('');
   }
 
   /**

@@ -107,6 +107,13 @@ type PhaseSkillsConfig = {
     BULLET_FIRE_INTERVAL?: number;
     BULLET_SPEED?: number;
     ROTATION_SPEED?: number;
+    // スペルカードPhase1用（カーチスクロス）
+    ENABLED?: boolean;                 // スキル有効フラグ
+    DASH_DISTANCE?: number;            // 突進距離（px）
+    DASH_SPEED?: number;               // 突進速度（px/s）
+    CROSS_BULLET_RADIUS?: number;      // 十字架弾の半径（px）
+    CROSS_BULLET_SPACING?: number;     // 弾の間隔（px）
+    BULLET_CONTINUES_AFTER_DASH?: boolean; // 弾が突進後も継続するか
   };
   R?: {
     NAME: string;
@@ -226,6 +233,15 @@ export class Rumia extends Boss {
     return this._wSkillInterrupted;
   }
 
+  // Phase1 Eスキル用（カーチスクロス）
+  private curtisCrossDashDirection: number = 0;          // 突進方向（ラジアン）
+  private curtisCrossDashProgress: number = 0;           // 突進進捗（0〜1）
+  private curtisCrossDashStartPos: { x: number; y: number } = { x: 0, y: 0 };  // 突進開始位置
+  private curtisCrossDashTargetPos: { x: number; y: number } = { x: 0, y: 0 }; // 突進目標位置
+  private curtisCrossBullets: Phaser.Physics.Arcade.Sprite[] = []; // 十字架弾幕の配列
+  private curtisCrossBulletOffsets: { x: number; y: number }[] = []; // 各弾のルーミアからのオフセット
+  private curtisCrossDashComplete: boolean = false;      // 突進完了フラグ
+
   // スペルカード用Eスキル（闘争の潮汐）- 将来用・コメントアウト
   // private spellESkillStartTime: number = 0;         // スキル開始時間
   // private spellESkillBulletTimer: number = 0;       // 弾発射タイマー
@@ -234,6 +250,10 @@ export class Rumia extends Boss {
   // スキル硬直時間（W/E使用後の硬直）
   private skillRecoveryTime: number = 0;            // 残り硬直時間（ms）
   private static readonly SKILL_RECOVERY_DURATION = 200; // 硬直時間（0.2秒）
+
+  // Phase1用スキル硬直時間（各スキル使用後の硬直）
+  private phase1SkillRecoveryTime: number = 0;      // 残り硬直時間（ms）
+  private static readonly PHASE1_SKILL_RECOVERY_DURATION = 500; // 硬直時間（0.5秒）
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     // 最初のフェーズのHPを使用
@@ -362,7 +382,7 @@ export class Rumia extends Boss {
    * 全スキルを中断（ブレイク時などに呼ばれる）
    * W スキルの予告線もクリアする
    * Eスキル移動中（EXECUTING状態でINTERRUPTIBLE）もBreak判定
-   * Wスキル黄色フェーズ中（EXECUTING状態でINTERRUPTIBLE）もBreak判定
+   * Wスキルフィールド展開中（EXECUTING状態でINTERRUPTIBLE、黄色・赤両方）もBreak判定
    */
   protected interruptAllSkills(): void {
     // EスキルがEXECUTING状態で移動中の場合、Break判定を行う
@@ -372,12 +392,12 @@ export class Rumia extends Boss {
       this.currentSkillConfig.E.INTERRUPTIBLE &&
       (this.eSkillPhase === 'moving' || this.eSkillPhase === 'before_move' || this.eSkillPhase === 'after_move');
 
-    // WスキルがEXECUTING状態で黄色フェーズ中の場合、Break判定を行う
+    // WスキルがEXECUTING状態でフィールド展開中の場合、Break判定を行う（黄色・赤両方）
     const wSkill = this.skills.get(BossSkillSlot.W);
     const isWSkillInterruptible = wSkill &&
       wSkill.state === BossSkillState.EXECUTING &&
       this.currentSkillConfig.W.INTERRUPTIBLE &&
-      this.foxfireFieldPhase === 'yellow';
+      this.foxfireFieldActive;
 
     // 親クラスの処理を呼び出し（CASTING状態のBreak判定含む）
     super.interruptAllSkills();
@@ -389,13 +409,13 @@ export class Rumia extends Boss {
       console.log('Rumia: Eスキル移動中にBreak!');
     }
 
-    // Wスキル黄色フェーズ中の中断はここでBreak演出を追加
+    // Wスキルフィールド展開中の中断はここでBreak演出を追加（黄色・赤両方）
     if (isWSkillInterruptible) {
       this._wSkillInterrupted = true;
       this.hideFoxfireField();
       this.showBreakText();
       AudioManager.getInstance().playSe('se_break');
-      console.log('Rumia: Wスキル黄色フェーズ中にBreak!');
+      console.log('Rumia: Wスキルフィールド展開中にBreak!');
     }
 
     // W スキルの予告線をクリア
@@ -416,11 +436,34 @@ export class Rumia extends Boss {
       this.updateNormalPhaseAI(time, delta);
     }
 
+    // プレイエリア内に位置をクランプ（境界外への移動を防止）
+    this.clampToPlayArea();
+
     // アニメーション状態を更新
     this.updateAnimation();
 
     // 当たり判定を描画
     this.drawHitbox();
+  }
+
+  /**
+   * プレイエリア内に位置をクランプ
+   */
+  private clampToPlayArea(): void {
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const margin = this.stats.hitboxRadius;
+
+    const minX = X + margin;
+    const maxX = X + WIDTH - margin;
+    const minY = Y + margin;
+    const maxY = Y + HEIGHT - margin;
+
+    const clampedX = Phaser.Math.Clamp(this.x, minX, maxX);
+    const clampedY = Phaser.Math.Clamp(this.y, minY, maxY);
+
+    if (this.x !== clampedX || this.y !== clampedY) {
+      this.setPosition(clampedX, clampedY);
+    }
   }
 
   /**
@@ -664,7 +707,7 @@ export class Rumia extends Boss {
   }
 
   /**
-   * 闇符「ダークサイドオブザムーン」専用AI
+   * 闘符「ダークサイドオブザムーン」専用AI
    * RスキルとQスキル（フォレストフォックス）を使用
    */
   private updateDarkSideOfTheMoonAI(time: number, delta: number): void {
@@ -673,28 +716,42 @@ export class Rumia extends Boss {
     const wSkill = this.skills.get(BossSkillSlot.W);
     if (!rSkill) return;
 
-    // Rスキル実行中フラグ
-    const isRSkillActive =
+    // Phase1スキル硬直時間を更新
+    if (this.phase1SkillRecoveryTime > 0) {
+      this.phase1SkillRecoveryTime -= delta;
+    }
+
+    // 硬直中フラグを取得する関数（スキル完了後に再評価するため）
+    const isInRecovery = () => this.phase1SkillRecoveryTime > 0;
+
+    // スキル実行中フラグを取得する関数（スキル開始後に再評価するため）
+    const isRSkillActive = () =>
       rSkill.state === BossSkillState.CASTING ||
       rSkill.state === BossSkillState.EXECUTING;
 
-    // Qスキル実行中フラグ
-    const isQSkillActive = qSkill && (
+    const isQSkillActive = () => qSkill && (
       qSkill.state === BossSkillState.CASTING ||
       qSkill.state === BossSkillState.EXECUTING
     );
 
-    // Wスキル実行中フラグ
-    const isWSkillActive = wSkill && (
+    const isWSkillActive = () => wSkill && (
       wSkill.state === BossSkillState.CASTING ||
       wSkill.state === BossSkillState.EXECUTING
     );
 
+    const isESkillActive = () => {
+      const eSkill = this.skills.get(BossSkillSlot.E);
+      return eSkill && (
+        eSkill.state === BossSkillState.CASTING ||
+        eSkill.state === BossSkillState.EXECUTING
+      );
+    };
+
     // Rスキルの処理（最優先）
     switch (rSkill.state) {
       case BossSkillState.READY:
-        // Qスキル・Wスキルが実行中でなければRスキルを使用
-        if (!isQSkillActive && !isWSkillActive) {
+        // Qスキル・Wスキルが実行中でなく、硬直中でなければRスキルを使用
+        if (!isQSkillActive() && !isWSkillActive() && !isInRecovery()) {
           this.tryUseRSkill();
         }
         break;
@@ -713,13 +770,16 @@ export class Rumia extends Boss {
     }
 
     // Qスキル（オーブオブディセプション）の処理（Rスキルが実行中でなければ）
-    if (qSkill && !isRSkillActive) {
+    if (qSkill && !isRSkillActive()) {
       const qConfig = this.currentSkillConfig.Q;
       // ENABLEDフラグがtrueの場合のみ処理
       if (qConfig.ENABLED) {
         switch (qSkill.state) {
           case BossSkillState.READY:
-            this.tryUseForestFoxSkill();
+            // 硬直中でなければ発動
+            if (!isInRecovery()) {
+              this.tryUseForestFoxSkill();
+            }
             break;
 
           case BossSkillState.CASTING:
@@ -740,15 +800,15 @@ export class Rumia extends Boss {
       if (wConfig.ENABLED) {
         switch (wSkill.state) {
           case BossSkillState.READY:
-            // 新規発動はR/Qスキルが実行中でなければ
-            if (!isRSkillActive && !isQSkillActive) {
+            // 新規発動はR/Qスキルが実行中でなく、硬直中でなければ
+            if (!isRSkillActive() && !isQSkillActive() && !isInRecovery()) {
               this.tryUseArrangedFoxfireSkill();
             }
             break;
 
           case BossSkillState.CASTING:
             // 詠唱更新（Rスキル実行中は中断される可能性あり）
-            if (!isRSkillActive) {
+            if (!isRSkillActive()) {
               this.updateArrangedFoxfireCasting(delta);
             }
             break;
@@ -767,8 +827,38 @@ export class Rumia extends Boss {
     // MSバフの減衰処理（スキル状態に関係なく常に更新）
     this.updateFoxfireMsBuff(delta);
 
-    // 移動AI（Rスキル・Qスキル・Wスキル実行中以外はプレイヤーに近づく）
-    if (!isRSkillActive && !isQSkillActive) {
+    // Eスキル（カーチスクロス）の処理
+    const eSkill = this.skills.get(BossSkillSlot.E);
+
+    if (eSkill) {
+      const eConfig = this.currentSkillConfig.E;
+      // ENABLEDフラグがtrueの場合のみ処理
+      if (eConfig.ENABLED) {
+        switch (eSkill.state) {
+          case BossSkillState.READY:
+            // 新規発動はR/Q/Wスキルが実行中でなく、硬直中でなければ
+            if (!isRSkillActive() && !isQSkillActive() && !isWSkillActive() && !isInRecovery()) {
+              this.tryUseCurtisCrossSkill();
+            }
+            break;
+
+          case BossSkillState.CASTING:
+            // 詠唱更新
+            if (!isRSkillActive()) {
+              this.updateCurtisCrossCasting(delta);
+            }
+            break;
+
+          case BossSkillState.EXECUTING:
+            // 実行更新
+            this.updateCurtisCrossExecution(time, delta);
+            break;
+        }
+      }
+    }
+
+    // 移動AI（Rスキル・Qスキル・Eスキル実行中以外はプレイヤーに近づく）
+    if (!isRSkillActive() && !isQSkillActive() && !isESkillActive()) {
       this.updateApproachPlayerMovement();
     }
   }
@@ -2084,6 +2174,7 @@ export class Rumia extends Boss {
       const qSkill = this.skills.get(BossSkillSlot.Q);
       if (qSkill) {
         this.completeSkill(BossSkillSlot.Q, qConfig.COOLDOWN);
+        this.phase1SkillRecoveryTime = Rumia.PHASE1_SKILL_RECOVERY_DURATION;
       }
       return;
     }
@@ -2104,6 +2195,7 @@ export class Rumia extends Boss {
     if (!qSkill || this.orbBullets.length === 0) {
       if (qSkill) {
         this.completeSkill(BossSkillSlot.Q, qConfig.COOLDOWN);
+        this.phase1SkillRecoveryTime = Rumia.PHASE1_SKILL_RECOVERY_DURATION;
         console.log('Rumia: Qスキル終了（全弾消滅）');
       }
       return;
@@ -2544,7 +2636,7 @@ export class Rumia extends Boss {
    * アレンジドフォックスファイア実行更新
    * 新仕様:
    * - 黄色フェーズ（0.6秒）: キャスト扱い、CCでBreak可能
-   * - 赤フェーズ（残り1.4秒）: プレイヤーが入ったら即追尾弾発射して終了
+   * - 赤フェーズ（残り1.4秒）: キャスト扱い、CCでBreak可能、プレイヤーが入ったら即追尾弾発射して終了
    */
   private updateArrangedFoxfireExecution(_time: number, delta: number): void {
     const wSkill = this.skills.get(BossSkillSlot.W);
@@ -2553,6 +2645,16 @@ export class Rumia extends Boss {
     const wConfig = this.currentSkillConfig.W;
     const yellowDuration = wConfig.FIELD_YELLOW_DURATION ?? 600;
     const fieldRadius = wConfig.FIELD_RADIUS ?? 247.5;
+
+    // CC中断チェック（黄色・赤フェーズ両方でBreak可能）
+    if (wConfig.INTERRUPTIBLE && this.hasStatusEffect(StatusEffectType.STUN)) {
+      this._wSkillInterrupted = true;
+      this.hideFoxfireField();
+      this.completeSkill(BossSkillSlot.W, wConfig.COOLDOWN);
+      this.phase1SkillRecoveryTime = Rumia.PHASE1_SKILL_RECOVERY_DURATION;
+      console.log('Rumia: アレンジドフォックスファイア中断（CC）');
+      return;
+    }
 
     // フィールドタイマー更新
     this.foxfireFieldTimer += delta;
@@ -2579,6 +2681,7 @@ export class Rumia extends Boss {
           this.fireFoxfireHomingBullets();
           this.hideFoxfireField();
           this.completeSkill(BossSkillSlot.W, wConfig.COOLDOWN);
+          this.phase1SkillRecoveryTime = Rumia.PHASE1_SKILL_RECOVERY_DURATION;
           return;
         }
       }
@@ -2591,6 +2694,7 @@ export class Rumia extends Boss {
     if (wSkill.executionTimeRemaining <= 0) {
       this.hideFoxfireField();
       this.completeSkill(BossSkillSlot.W, wConfig.COOLDOWN);
+      this.phase1SkillRecoveryTime = Rumia.PHASE1_SKILL_RECOVERY_DURATION;
       console.log('Rumia: アレンジドフォックスファイア終了（プレイヤー未侵入）');
     }
   }
@@ -2756,6 +2860,263 @@ export class Rumia extends Boss {
       this.moveSpeedBuffMultiplier = 1.0;
       console.log('Rumia: MSバフ終了');
     }
+  }
+
+  // ========================================
+  // Phase1 Eスキル「カーチスクロス」関連メソッド
+  // ========================================
+
+  /**
+   * カーチスクロスの使用を試みる
+   * プレイヤー方向に十字架弾幕を纏って突進
+   */
+  private tryUseCurtisCrossSkill(): void {
+    if (!this.playerPosition) return;
+
+    const eConfig = this.currentSkillConfig.E;
+    const castTime = eConfig.CAST_TIME;
+
+    // プレイヤー方向を計算
+    const angleToPlayer = Phaser.Math.Angle.Between(
+      this.x, this.y,
+      this.playerPosition.x, this.playerPosition.y
+    );
+
+    if (this.startSkill(BossSkillSlot.E, castTime, angleToPlayer)) {
+      // 初期化
+      this.curtisCrossDashDirection = angleToPlayer;
+      this.curtisCrossDashProgress = 0;
+      this.curtisCrossDashComplete = false;
+      this.curtisCrossBullets = [];
+      this.curtisCrossBulletOffsets = [];
+
+      console.log(`Rumia: Eスキル詠唱開始 - ${eConfig.NAME}`);
+    }
+  }
+
+  /**
+   * カーチスクロスの詠唱更新
+   */
+  private updateCurtisCrossCasting(delta: number): void {
+    const eSkill = this.skills.get(BossSkillSlot.E);
+    if (!eSkill) return;
+
+    // 詠唱時間を減少
+    eSkill.castTimeRemaining -= delta;
+
+    if (eSkill.castTimeRemaining <= 0) {
+      // 詠唱完了 → 実行開始
+      eSkill.state = BossSkillState.EXECUTING;
+      this.startCurtisCrossDash();
+      console.log('Rumia: カーチスクロス実行開始!');
+    }
+  }
+
+  /**
+   * カーチスクロスの突進開始
+   */
+  private startCurtisCrossDash(): void {
+    if (!this.playerPosition || !this.bulletPool) return;
+
+    const eConfig = this.currentSkillConfig.E;
+    const dashDistance = eConfig.DASH_DISTANCE ?? 385;
+    const spacing = eConfig.CROSS_BULLET_SPACING ?? 55;
+
+    // 突進開始位置と目標位置を設定
+    this.curtisCrossDashStartPos = { x: this.x, y: this.y };
+
+    // プレイヤー方向に向けて突進目標を計算
+    const targetX = this.x + Math.cos(this.curtisCrossDashDirection) * dashDistance;
+    const targetY = this.y + Math.sin(this.curtisCrossDashDirection) * dashDistance;
+
+    // プレイエリア内に制限
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const margin = this.stats.hitboxRadius;
+    this.curtisCrossDashTargetPos = {
+      x: Phaser.Math.Clamp(targetX, X + margin, X + WIDTH - margin),
+      y: Phaser.Math.Clamp(targetY, Y + margin, Y + HEIGHT - margin),
+    };
+
+    // 十字架の弾オフセットを計算（突進方向を基準に回転）
+    // 十字架配置（上が先頭 = 進行方向）:
+    //     ◯      ← 先頭1個 (0, -1) → 進行方向
+    //   ◯◯◯    ← 横3個 (-1,0), (0,0), (1,0)
+    //     ◯      ← 後方1個 (0, 1)
+    //     ◯      ← 後方2個目 (0, 2)
+    const crossPattern = [
+      { x: 0, y: -1 },  // 先頭（進行方向）
+      { x: -1, y: 0 },  // 左
+      { x: 0, y: 0 },   // 中央
+      { x: 1, y: 0 },   // 右
+      { x: 0, y: 1 },   // 後方1
+      { x: 0, y: 2 },   // 後方2
+    ];
+
+    // 突進方向に合わせてオフセットを回転
+    // 「上」(0, -1) を進行方向に向けるため、角度を +90度オフセット
+    const rotationAngle = this.curtisCrossDashDirection + Math.PI / 2;
+    const cos = Math.cos(rotationAngle);
+    const sin = Math.sin(rotationAngle);
+
+    this.curtisCrossBulletOffsets = crossPattern.map(p => ({
+      x: (p.x * cos - p.y * sin) * spacing,
+      y: (p.x * sin + p.y * cos) * spacing,
+    }));
+
+    // 弾を生成
+    const bulletRadius = eConfig.CROSS_BULLET_RADIUS ?? 27.5;
+    const bulletScale = eConfig.BULLET_DISPLAY_SCALE ?? 0.11;
+    const bulletColor = eConfig.BULLET_COLOR ?? 3;
+    const bulletDamage = eConfig.DAMAGE.BASE + this.stats.attackPower * eConfig.DAMAGE.RATIO;
+
+    for (const offset of this.curtisCrossBulletOffsets) {
+      const bulletX = this.x + offset.x;
+      const bulletY = this.y + offset.y;
+
+      const bullet = this.bulletPool.acquire();
+      if (!bullet) continue;
+
+      // 弾を初期化（速度0で位置に配置）
+      bullet.fire(
+        bulletX, bulletY,
+        bulletX, bulletY,  // ターゲット位置も同じ（動かない）
+        BulletType.ENEMY_NORMAL,
+        bulletDamage,
+        null,
+        false,
+        bulletColor
+      );
+
+      // 弾のサイズと当たり判定を設定
+      bullet.setScale(bulletScale);
+      const body = bullet.body as Phaser.Physics.Arcade.Body;
+      if (body) {
+        body.setCircle(bulletRadius / bulletScale);
+        body.setVelocity(0, 0); // 初期速度0（ルーミアに追従）
+      }
+
+      this.curtisCrossBullets.push(bullet);
+    }
+
+    // SE再生
+    AudioManager.getInstance().playSe('se_shot1_multi');
+  }
+
+  /**
+   * カーチスクロスの実行更新
+   */
+  private updateCurtisCrossExecution(_time: number, delta: number): void {
+    const eSkill = this.skills.get(BossSkillSlot.E);
+    if (!eSkill) return;
+
+    const eConfig = this.currentSkillConfig.E;
+    const dashSpeed = eConfig.DASH_SPEED ?? 770;
+
+    // CC中断チェック（Break時は弾を消す）
+    if (this.hasStatusEffect(StatusEffectType.STUN)) {
+      this.cancelCurtisCrossBullets();
+      this.curtisCrossDashComplete = true;
+      this.setVelocity(0, 0);
+      this.completeSkill(BossSkillSlot.E, eConfig.COOLDOWN);
+      this.phase1SkillRecoveryTime = Rumia.PHASE1_SKILL_RECOVERY_DURATION;
+      console.log('Rumia: カーチスクロス中断（CC）');
+      return;
+    }
+
+    if (!this.curtisCrossDashComplete) {
+      // 突進中
+      const dx = this.curtisCrossDashTargetPos.x - this.curtisCrossDashStartPos.x;
+      const dy = this.curtisCrossDashTargetPos.y - this.curtisCrossDashStartPos.y;
+      const totalDistance = Math.sqrt(dx * dx + dy * dy);
+
+      if (totalDistance > 0) {
+        // 進捗を更新
+        const moveAmount = (dashSpeed * delta) / 1000;
+        this.curtisCrossDashProgress += moveAmount / totalDistance;
+
+        if (this.curtisCrossDashProgress >= 1) {
+          // 突進完了
+          this.curtisCrossDashProgress = 1;
+          this.curtisCrossDashComplete = true;
+          this.setPosition(this.curtisCrossDashTargetPos.x, this.curtisCrossDashTargetPos.y);
+          this.setVelocity(0, 0);
+
+          // 弾を解放して同速度で継続させる
+          this.releaseCurtisCrossBullets();
+
+          // スキル完了
+          this.completeSkill(BossSkillSlot.E, eConfig.COOLDOWN);
+          this.phase1SkillRecoveryTime = Rumia.PHASE1_SKILL_RECOVERY_DURATION;
+          console.log('Rumia: カーチスクロス完了');
+        } else {
+          // 突進中の位置を更新
+          const newX = this.curtisCrossDashStartPos.x + dx * this.curtisCrossDashProgress;
+          const newY = this.curtisCrossDashStartPos.y + dy * this.curtisCrossDashProgress;
+          this.setPosition(newX, newY);
+
+          // 弾もルーミアに追従
+          this.updateCurtisCrossBulletPositions();
+        }
+      } else {
+        // 移動距離が0の場合は即完了
+        this.curtisCrossDashComplete = true;
+        this.releaseCurtisCrossBullets();
+        this.completeSkill(BossSkillSlot.E, eConfig.COOLDOWN);
+        this.phase1SkillRecoveryTime = Rumia.PHASE1_SKILL_RECOVERY_DURATION;
+      }
+    }
+  }
+
+  /**
+   * 十字架弾幕の位置をルーミアに追従させる
+   */
+  private updateCurtisCrossBulletPositions(): void {
+    for (let i = 0; i < this.curtisCrossBullets.length; i++) {
+      const bullet = this.curtisCrossBullets[i];
+      const offset = this.curtisCrossBulletOffsets[i];
+      if (bullet && bullet.active && offset) {
+        bullet.setPosition(this.x + offset.x, this.y + offset.y);
+      }
+    }
+  }
+
+  /**
+   * 突進完了時に弾を解放して同方向・同速度で飛ばす
+   */
+  private releaseCurtisCrossBullets(): void {
+    const eConfig = this.currentSkillConfig.E;
+    const dashSpeed = eConfig.DASH_SPEED ?? 770;
+
+    const vx = Math.cos(this.curtisCrossDashDirection) * dashSpeed;
+    const vy = Math.sin(this.curtisCrossDashDirection) * dashSpeed;
+
+    for (const bullet of this.curtisCrossBullets) {
+      if (bullet && bullet.active) {
+        // 弾に速度を設定して飛ばす
+        const body = bullet.body as Phaser.Physics.Arcade.Body;
+        if (body) {
+          body.setVelocity(vx, vy);
+        }
+      }
+    }
+
+    // 配列をクリア（弾自体は飛んでいく）
+    this.curtisCrossBullets = [];
+    this.curtisCrossBulletOffsets = [];
+  }
+
+  /**
+   * 十字架弾幕をキャンセル（Break時に弾を消す）
+   */
+  private cancelCurtisCrossBullets(): void {
+    for (const bullet of this.curtisCrossBullets) {
+      if (bullet && bullet.active) {
+        bullet.setActive(false);
+        bullet.setVisible(false);
+      }
+    }
+    this.curtisCrossBullets = [];
+    this.curtisCrossBulletOffsets = [];
   }
 
   /**

@@ -334,7 +334,7 @@ export const BOSS_CONFIG = {
       W: {
         NAME: 'アレンジドフォックスファイア',
         CAST_TIME: 100,                  // 初期詠唱時間0.1秒
-        COOLDOWN: 6000,                  // クールダウン6秒
+        COOLDOWN: 8000,                  // クールダウン8秒
         DAMAGE: {
           BASE: 35,
           RATIO: 0.5,
@@ -357,13 +357,26 @@ export const BOSS_CONFIG = {
         MS_BUFF_AMOUNT: 0.40,            // MSバフ量（+40%）
         MS_BUFF_DURATION: 2000,          // バフ持続時間（2秒）
       },
-      // Eスキル: 無効化（リメイク予定）
+      // Eスキル「カーチスクロス」- 十字架弾幕を纏って突進
       E: {
-        NAME: '（無効）',
-        CAST_TIME: 99999999,
-        COOLDOWN: 99999999,
-        DAMAGE: { BASE: 0, RATIO: 0 },
-        ENABLED: false,
+        NAME: 'カーチスクロス',
+        CAST_TIME: 400,                  // キャスト時間0.4秒
+        COOLDOWN: 6000,                  // クールダウン6秒
+        DAMAGE: {
+          BASE: 40,
+          RATIO: 0.5,
+        },
+        ENABLED: true,
+        // 突進パラメータ
+        DASH_DISTANCE: 7 * 55,           // 突進距離7m = 385px
+        DASH_SPEED: 14 * 55,             // 突進速度14m/s = 770px/s
+        // 十字架弾幕パラメータ（ルーミアを中心に配置）
+        CROSS_BULLET_RADIUS: 0.3 * 55,   // 弾の半径0.3m = 16.5px
+        CROSS_BULLET_SPACING: 1 * 55,    // 弾の間隔1m = 55px（直径分）
+        BULLET_DISPLAY_SCALE: 0.11,      // 中玉（512px）の表示スケール
+        BULLET_COLOR: 8,                 // 中玉 ID 8
+        // 弾は突進後も同速度で画面外まで継続
+        BULLET_CONTINUES_AFTER_DASH: true,
       },
       // Rスキル「闇符・ダークサイドオブザムーン」
       R: {
