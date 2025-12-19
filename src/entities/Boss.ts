@@ -38,6 +38,9 @@ export abstract class Boss extends Phaser.Physics.Arcade.Sprite {
   // 状態異常
   protected statusEffects: StatusEffect[] = [];
 
+  // バフシステム（移動速度倍率）
+  protected moveSpeedBuffMultiplier: number = 1.0;
+
   // グラフィックス（予告線など）
   protected warningGraphics: Phaser.GameObjects.Graphics | null = null;
 
@@ -376,13 +379,33 @@ export abstract class Boss extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * スロウ効果を考慮した実効移動速度を取得
+   * バフ・デバフを考慮した実効移動速度を取得
+   * 計算順序: 基本値 × バフ倍率 × デバフ倍率（バフ→デバフの順）
    */
   getEffectiveMoveSpeed(): number {
+    // 1. 基本値にバフを適用
+    let speed = this.stats.moveSpeed * this.moveSpeedBuffMultiplier;
+
+    // 2. デバフ（スロウ）を最後に適用
     const slowEffect = this.statusEffects.find(e => e.type === StatusEffectType.SLOW);
     if (slowEffect && slowEffect.value) {
-      return this.stats.moveSpeed * (1 - slowEffect.value);
+      speed *= (1 - slowEffect.value);
     }
+
+    return speed;
+  }
+
+  /**
+   * 現在のMSバフ倍率を取得（1.0 = バフなし）
+   */
+  getMoveSpeedBuffMultiplier(): number {
+    return this.moveSpeedBuffMultiplier;
+  }
+
+  /**
+   * 基本移動速度を取得
+   */
+  getBaseMoveSpeed(): number {
     return this.stats.moveSpeed;
   }
 

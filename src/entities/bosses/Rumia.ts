@@ -66,6 +66,20 @@ type PhaseSkillsConfig = {
     BURST_COUNT?: number;
     BURST_INTERVAL?: number;
     BULLET_SPEED?: number;  // W専用の弾速（Qより速い）
+    // スペルカードPhase1用（アレンジドフォックスファイア）
+    ENABLED?: boolean;                 // スキル有効フラグ
+    INTERRUPTIBLE?: boolean;           // CC中断可能フラグ（Breakシステム用）
+    FIELD_RADIUS?: number;             // フィールド半径
+    FIELD_TOTAL_DURATION?: number;     // フィールド総持続時間（2秒）
+    FIELD_YELLOW_DURATION?: number;    // 黄色フェーズ持続時間（0.6秒、キャスト扱い）
+    HOMING_BULLET_COUNT?: number;      // 追尾弾数
+    HOMING_BULLET_RADIUS?: number;     // 追尾弾半径
+    HOMING_BULLET_SPEED?: number;      // 追尾弾速度
+    HOMING_TURN_RATE?: number;         // 追尾弾旋回速度
+    HOMING_DURATION?: number;          // 追尾弾持続時間
+    // MSバフパラメータ
+    MS_BUFF_AMOUNT?: number;           // MSバフ量
+    MS_BUFF_DURATION?: number;         // バフ持続時間（ms）
   };
   E: {
     NAME: string;
@@ -195,9 +209,22 @@ export class Rumia extends Boss {
   private orbTargetPositions: { x: number; y: number }[] = []; // 各弾の最大射程位置
   private orbReturnSpeeds: number[] = [];              // 各弾の帰り速度（加速中）
 
-  // スペルカード用Wスキル（トリプルバースト - Q3連射）- 将来用・コメントアウト
-  // private spellWSkillBurstsFired: number = 0;       // 発射済み回数
-  // private spellWSkillBurstTimer: number = 0;        // 発射間隔タイマー
+  // Phase1 Wスキル用（アレンジドフォックスファイア）
+  private foxfireFieldGraphics: Phaser.GameObjects.Graphics | null = null;  // フィールド表示用
+  private foxfireFieldTimer: number = 0;                  // フィールド展開タイマー
+  private foxfireFieldActive: boolean = false;            // フィールドアクティブ状態
+  private foxfireFieldPhase: 'yellow' | 'red' | 'none' = 'none';  // フィールドフェーズ
+  private foxfireHomingBullets: Phaser.Physics.Arcade.Sprite[] = []; // 追尾弾の配列
+  private foxfireHomingAngles: number[] = [];             // 各追尾弾の現在角度
+  private foxfireHomingTimers: number[] = [];             // 各追尾弾の残り時間
+  private foxfireMsBuffAmount: number = 0;                // 現在のMSバフ量
+  private foxfireMsBuffRemainingTime: number = 0;         // バフ残り時間（ms）
+  private _wSkillInterrupted: boolean = false;            // Wスキルが中断されたか（Breakシステム用）
+
+  /** Wスキルが中断されたかどうか（Breakシステム用） */
+  get wSkillWasInterrupted(): boolean {
+    return this._wSkillInterrupted;
+  }
 
   // スペルカード用Eスキル（闘争の潮汐）- 将来用・コメントアウト
   // private spellESkillStartTime: number = 0;         // スキル開始時間
@@ -335,6 +362,7 @@ export class Rumia extends Boss {
    * 全スキルを中断（ブレイク時などに呼ばれる）
    * W スキルの予告線もクリアする
    * Eスキル移動中（EXECUTING状態でINTERRUPTIBLE）もBreak判定
+   * Wスキル黄色フェーズ中（EXECUTING状態でINTERRUPTIBLE）もBreak判定
    */
   protected interruptAllSkills(): void {
     // EスキルがEXECUTING状態で移動中の場合、Break判定を行う
@@ -344,6 +372,13 @@ export class Rumia extends Boss {
       this.currentSkillConfig.E.INTERRUPTIBLE &&
       (this.eSkillPhase === 'moving' || this.eSkillPhase === 'before_move' || this.eSkillPhase === 'after_move');
 
+    // WスキルがEXECUTING状態で黄色フェーズ中の場合、Break判定を行う
+    const wSkill = this.skills.get(BossSkillSlot.W);
+    const isWSkillInterruptible = wSkill &&
+      wSkill.state === BossSkillState.EXECUTING &&
+      this.currentSkillConfig.W.INTERRUPTIBLE &&
+      this.foxfireFieldPhase === 'yellow';
+
     // 親クラスの処理を呼び出し（CASTING状態のBreak判定含む）
     super.interruptAllSkills();
 
@@ -352,6 +387,15 @@ export class Rumia extends Boss {
       this.showBreakText();
       AudioManager.getInstance().playSe('se_break');
       console.log('Rumia: Eスキル移動中にBreak!');
+    }
+
+    // Wスキル黄色フェーズ中の中断はここでBreak演出を追加
+    if (isWSkillInterruptible) {
+      this._wSkillInterrupted = true;
+      this.hideFoxfireField();
+      this.showBreakText();
+      AudioManager.getInstance().playSe('se_break');
+      console.log('Rumia: Wスキル黄色フェーズ中にBreak!');
     }
 
     // W スキルの予告線をクリア
@@ -626,6 +670,7 @@ export class Rumia extends Boss {
   private updateDarkSideOfTheMoonAI(time: number, delta: number): void {
     const rSkill = this.skills.get(BossSkillSlot.R);
     const qSkill = this.skills.get(BossSkillSlot.Q);
+    const wSkill = this.skills.get(BossSkillSlot.W);
     if (!rSkill) return;
 
     // Rスキル実行中フラグ
@@ -639,11 +684,17 @@ export class Rumia extends Boss {
       qSkill.state === BossSkillState.EXECUTING
     );
 
+    // Wスキル実行中フラグ
+    const isWSkillActive = wSkill && (
+      wSkill.state === BossSkillState.CASTING ||
+      wSkill.state === BossSkillState.EXECUTING
+    );
+
     // Rスキルの処理（最優先）
     switch (rSkill.state) {
       case BossSkillState.READY:
-        // Qスキルが実行中でなければRスキルを使用
-        if (!isQSkillActive) {
+        // Qスキル・Wスキルが実行中でなければRスキルを使用
+        if (!isQSkillActive && !isWSkillActive) {
           this.tryUseRSkill();
         }
         break;
@@ -661,7 +712,7 @@ export class Rumia extends Boss {
         break;
     }
 
-    // Qスキル（フォレストフォックス）の処理（Rスキルが実行中でなければ）
+    // Qスキル（オーブオブディセプション）の処理（Rスキルが実行中でなければ）
     if (qSkill && !isRSkillActive) {
       const qConfig = this.currentSkillConfig.Q;
       // ENABLEDフラグがtrueの場合のみ処理
@@ -682,7 +733,41 @@ export class Rumia extends Boss {
       }
     }
 
-    // 移動AI（Rスキル・Qスキル実行中以外はプレイヤーに近づく）
+    // Wスキル（アレンジドフォックスファイア）の処理
+    if (wSkill) {
+      const wConfig = this.currentSkillConfig.W;
+      // ENABLEDフラグがtrueの場合のみ処理
+      if (wConfig.ENABLED) {
+        switch (wSkill.state) {
+          case BossSkillState.READY:
+            // 新規発動はR/Qスキルが実行中でなければ
+            if (!isRSkillActive && !isQSkillActive) {
+              this.tryUseArrangedFoxfireSkill();
+            }
+            break;
+
+          case BossSkillState.CASTING:
+            // 詠唱更新（Rスキル実行中は中断される可能性あり）
+            if (!isRSkillActive) {
+              this.updateArrangedFoxfireCasting(delta);
+            }
+            break;
+
+          case BossSkillState.EXECUTING:
+            // 実行更新（フィールド追従のため常に更新）
+            this.updateArrangedFoxfireExecution(time, delta);
+            break;
+        }
+      }
+    }
+
+    // 追尾弾の更新（スキル状態に関係なく常に更新）
+    this.updateFoxfireHomingBullets(delta);
+
+    // MSバフの減衰処理（スキル状態に関係なく常に更新）
+    this.updateFoxfireMsBuff(delta);
+
+    // 移動AI（Rスキル・Qスキル・Wスキル実行中以外はプレイヤーに近づく）
     if (!isRSkillActive && !isQSkillActive) {
       this.updateApproachPlayerMovement();
     }
@@ -2350,6 +2435,328 @@ export class Rumia extends Boss {
     console.log(`Rumia W(Spell): バースト${this.spellWSkillBurstsFired + 1}発射 (弾速: ${bulletSpeed})`);
   }
   */
+
+  // ========================================
+  // Phase1 Wスキル「アレンジドフォックスファイア」
+  // ========================================
+
+  /**
+   * アレンジドフォックスファイアを使用
+   */
+  private tryUseArrangedFoxfireSkill(): void {
+    const wConfig = this.currentSkillConfig.W;
+    if (!wConfig.ENABLED) return;
+
+    if (this.startSkill(BossSkillSlot.W, wConfig.CAST_TIME, 0)) {
+      console.log(`Rumia: アレンジドフォックスファイア詠唱開始`);
+    }
+  }
+
+  /**
+   * アレンジドフォックスファイア詠唱更新（初期詠唱0.1秒）
+   */
+  private updateArrangedFoxfireCasting(delta: number): void {
+    const wSkill = this.skills.get(BossSkillSlot.W);
+    if (!wSkill) return;
+
+    wSkill.castTimeRemaining -= delta;
+
+    if (wSkill.castTimeRemaining <= 0) {
+      // 初期詠唱完了 → 実行状態へ（黄色フェーズ開始）
+      wSkill.state = BossSkillState.EXECUTING;
+      const wConfig = this.currentSkillConfig.W;
+      const totalDuration = wConfig.FIELD_TOTAL_DURATION ?? 2000;
+      wSkill.executionTimeRemaining = totalDuration;
+
+      // フィールド展開開始（黄色フェーズ）
+      this.foxfireFieldActive = true;
+      this.foxfireFieldTimer = 0;
+      this.foxfireFieldPhase = 'yellow';
+      this._wSkillInterrupted = false;
+      this.showFoxfireField();
+
+      // MSバフを適用（+40%、2秒間）
+      const msBuffAmount = wConfig.MS_BUFF_AMOUNT ?? 0.40;
+      const msBuffDuration = wConfig.MS_BUFF_DURATION ?? 2000;
+      this.foxfireMsBuffAmount = msBuffAmount;
+      this.foxfireMsBuffRemainingTime = msBuffDuration;
+      this.moveSpeedBuffMultiplier = 1 + this.foxfireMsBuffAmount;
+      console.log(`Rumia: アレンジドフォックスファイア発動! (MS +${Math.round(msBuffAmount * 100)}% / ${msBuffDuration / 1000}秒)`);
+    }
+  }
+
+  /**
+   * フォックスファイアフィールドを表示
+   */
+  private showFoxfireField(): void {
+    if (!this.foxfireFieldGraphics) {
+      this.foxfireFieldGraphics = this.scene.add.graphics();
+      this.foxfireFieldGraphics.setDepth(DEPTH.EFFECTS - 1);
+    }
+    this.updateFoxfireFieldGraphics();
+  }
+
+  /**
+   * フォックスファイアフィールドのグラフィックを更新
+   */
+  private updateFoxfireFieldGraphics(): void {
+    if (!this.foxfireFieldGraphics) return;
+
+    const wConfig = this.currentSkillConfig.W;
+    const radius = wConfig.FIELD_RADIUS ?? 247.5;
+
+    this.foxfireFieldGraphics.clear();
+
+    // フェーズに応じて色を変更
+    let strokeColor: number;
+    let fillColor: number;
+    if (this.foxfireFieldPhase === 'yellow') {
+      // 黄色フェーズ（0.6秒間、キャスト扱い）
+      strokeColor = 0xffcc00;
+      fillColor = 0xffcc00;
+    } else {
+      // 赤フェーズ（残り時間、プレイヤーが入ったら発射）
+      strokeColor = 0xff3300;
+      fillColor = 0xff3300;
+    }
+
+    // 外円（半透明）
+    this.foxfireFieldGraphics.lineStyle(3, strokeColor, 0.8);
+    this.foxfireFieldGraphics.strokeCircle(this.x, this.y, radius);
+
+    // 内部（非常に薄い）
+    this.foxfireFieldGraphics.fillStyle(fillColor, 0.15);
+    this.foxfireFieldGraphics.fillCircle(this.x, this.y, radius);
+  }
+
+  /**
+   * フォックスファイアフィールドを非表示
+   */
+  private hideFoxfireField(): void {
+    if (this.foxfireFieldGraphics) {
+      this.foxfireFieldGraphics.clear();
+    }
+    this.foxfireFieldActive = false;
+    this.foxfireFieldPhase = 'none';
+  }
+
+  /**
+   * アレンジドフォックスファイア実行更新
+   * 新仕様:
+   * - 黄色フェーズ（0.6秒）: キャスト扱い、CCでBreak可能
+   * - 赤フェーズ（残り1.4秒）: プレイヤーが入ったら即追尾弾発射して終了
+   */
+  private updateArrangedFoxfireExecution(_time: number, delta: number): void {
+    const wSkill = this.skills.get(BossSkillSlot.W);
+    if (!wSkill) return;
+
+    const wConfig = this.currentSkillConfig.W;
+    const yellowDuration = wConfig.FIELD_YELLOW_DURATION ?? 600;
+    const fieldRadius = wConfig.FIELD_RADIUS ?? 247.5;
+
+    // フィールドタイマー更新
+    this.foxfireFieldTimer += delta;
+
+    // フィールドグラフィック更新（位置追従）
+    if (this.foxfireFieldActive) {
+      // 黄色フェーズから赤フェーズへの移行
+      if (this.foxfireFieldPhase === 'yellow' && this.foxfireFieldTimer >= yellowDuration) {
+        this.foxfireFieldPhase = 'red';
+        console.log('Rumia: フォックスファイア 赤フェーズ開始');
+      }
+
+      this.updateFoxfireFieldGraphics();
+
+      // 赤フェーズ中のみプレイヤー判定
+      if (this.foxfireFieldPhase === 'red' && this.playerPosition) {
+        const dx = this.playerPosition.x - this.x;
+        const dy = this.playerPosition.y - this.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance <= fieldRadius) {
+          // プレイヤーが赤エリア内に入った！追尾弾発射してスキル終了
+          console.log('Rumia: プレイヤーが赤エリアに侵入！追尾弾発射');
+          this.fireFoxfireHomingBullets();
+          this.hideFoxfireField();
+          this.completeSkill(BossSkillSlot.W, wConfig.COOLDOWN);
+          return;
+        }
+      }
+    }
+
+    // スキル実行時間更新
+    wSkill.executionTimeRemaining -= delta;
+
+    // フィールド持続時間終了（プレイヤーが入らなかった場合）
+    if (wSkill.executionTimeRemaining <= 0) {
+      this.hideFoxfireField();
+      this.completeSkill(BossSkillSlot.W, wConfig.COOLDOWN);
+      console.log('Rumia: アレンジドフォックスファイア終了（プレイヤー未侵入）');
+    }
+  }
+
+  /**
+   * 追尾弾を発射
+   */
+  private fireFoxfireHomingBullets(): void {
+    if (!this.bulletPool || !this.playerPosition) return;
+
+    const wConfig = this.currentSkillConfig.W;
+    const bulletCount = wConfig.HOMING_BULLET_COUNT ?? 3;
+    const bulletRadius = wConfig.HOMING_BULLET_RADIUS ?? 27.5;
+    const bulletSpeed = wConfig.HOMING_BULLET_SPEED ?? 330;
+    const homingDuration = wConfig.HOMING_DURATION ?? 3000;
+    const bulletScale = wConfig.BULLET_DISPLAY_SCALE ?? 0.11;
+    const bulletColor = wConfig.BULLET_COLOR ?? 22; // LARGE_BALL.ORANGE
+
+    // プレイヤー方向に向けて発射（少し角度をずらす）
+    const baseAngle = Math.atan2(
+      this.playerPosition.y - this.y,
+      this.playerPosition.x - this.x
+    );
+
+    for (let i = 0; i < bulletCount; i++) {
+      const bullet = this.bulletPool.acquire();
+      if (!bullet) continue;
+
+      // 弾の角度（-30度、0度、30度の3方向）
+      const angleOffset = (i - (bulletCount - 1) / 2) * (Math.PI / 6);
+      const angle = baseAngle + angleOffset;
+
+      // ダメージ計算
+      const damage = wConfig.DAMAGE.BASE + this.stats.attackPower * wConfig.DAMAGE.RATIO;
+
+      // 弾を発射（初期方向に向かって）
+      const targetX = this.x + Math.cos(angle) * 1000;
+      const targetY = this.y + Math.sin(angle) * 1000;
+
+      bullet.fire(
+        this.x, this.y,
+        targetX, targetY,
+        BulletType.ENEMY_NORMAL,
+        damage,
+        null,
+        false,
+        bulletColor
+      );
+
+      // 弾のサイズと当たり判定を設定
+      bullet.setScale(bulletScale);
+      const body = bullet.body as Phaser.Physics.Arcade.Body;
+      if (body) {
+        body.setCircle(bulletRadius / bulletScale);
+        body.setVelocity(
+          Math.cos(angle) * bulletSpeed,
+          Math.sin(angle) * bulletSpeed
+        );
+      }
+
+      // 追尾弾として登録
+      this.foxfireHomingBullets.push(bullet);
+      this.foxfireHomingAngles.push(angle);
+      this.foxfireHomingTimers.push(homingDuration);
+    }
+
+    // SE再生
+    AudioManager.getInstance().playSe('se_shot1');
+    console.log(`Rumia: 追尾弾${bulletCount}発発射!`);
+  }
+
+  /**
+   * 追尾弾の更新
+   */
+  private updateFoxfireHomingBullets(delta: number): void {
+    if (this.foxfireHomingBullets.length === 0) return;
+    if (!this.playerPosition) return;
+
+    const wConfig = this.currentSkillConfig.W;
+    const bulletSpeed = wConfig.HOMING_BULLET_SPEED ?? 330;
+    const turnRate = wConfig.HOMING_TURN_RATE ?? (Math.PI * 2);  // ラジアン/秒
+
+    const bulletsToRemove: number[] = [];
+
+    for (let i = 0; i < this.foxfireHomingBullets.length; i++) {
+      const bullet = this.foxfireHomingBullets[i];
+
+      // 弾が無効化されている場合はスキップ
+      if (!bullet.active) {
+        bulletsToRemove.push(i);
+        continue;
+      }
+
+      // 追尾時間を減少
+      this.foxfireHomingTimers[i] -= delta;
+
+      // 追尾時間が終了した場合、直進に切り替え
+      if (this.foxfireHomingTimers[i] <= 0) {
+        bulletsToRemove.push(i);
+        continue;
+      }
+
+      // プレイヤー方向への目標角度を計算
+      const targetAngle = Math.atan2(
+        this.playerPosition.y - bullet.y,
+        this.playerPosition.x - bullet.x
+      );
+
+      // 現在の角度との差分を計算
+      let angleDiff = targetAngle - this.foxfireHomingAngles[i];
+
+      // 角度差を-πからπの範囲に正規化
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+      // 旋回速度に基づいて角度を更新
+      const maxTurn = turnRate * (delta / 1000);
+      if (Math.abs(angleDiff) <= maxTurn) {
+        this.foxfireHomingAngles[i] = targetAngle;
+      } else if (angleDiff > 0) {
+        this.foxfireHomingAngles[i] += maxTurn;
+      } else {
+        this.foxfireHomingAngles[i] -= maxTurn;
+      }
+
+      // 速度を更新
+      const body = bullet.body as Phaser.Physics.Arcade.Body;
+      if (body) {
+        body.setVelocity(
+          Math.cos(this.foxfireHomingAngles[i]) * bulletSpeed,
+          Math.sin(this.foxfireHomingAngles[i]) * bulletSpeed
+        );
+      }
+
+      // スプライトの回転を更新（弾の向きを速度方向に）
+      bullet.setRotation(this.foxfireHomingAngles[i] + Math.PI / 2);
+    }
+
+    // 終了した追尾弾をリストから削除（逆順で削除）
+    for (let i = bulletsToRemove.length - 1; i >= 0; i--) {
+      const index = bulletsToRemove[i];
+      this.foxfireHomingBullets.splice(index, 1);
+      this.foxfireHomingAngles.splice(index, 1);
+      this.foxfireHomingTimers.splice(index, 1);
+    }
+  }
+
+  /**
+   * MSバフの持続時間処理
+   * 固定時間（2秒）後にバフが終了
+   */
+  private updateFoxfireMsBuff(delta: number): void {
+    // バフがない場合はスキップ
+    if (this.foxfireMsBuffAmount <= 0) return;
+
+    // 残り時間を減少
+    this.foxfireMsBuffRemainingTime -= delta;
+
+    // 時間切れでバフ終了
+    if (this.foxfireMsBuffRemainingTime <= 0) {
+      this.foxfireMsBuffAmount = 0;
+      this.foxfireMsBuffRemainingTime = 0;
+      this.moveSpeedBuffMultiplier = 1.0;
+      console.log('Rumia: MSバフ終了');
+    }
+  }
 
   /**
    * 線をプレイエリア内にクリップ（Cohen-Sutherland風）

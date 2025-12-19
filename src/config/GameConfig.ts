@@ -330,13 +330,32 @@ export const BOSS_CONFIG = {
         BULLET_DISPLAY_SCALE: 0.172,
         BULLET_COLOR: 21,            // 大玉CYAN（シアン）
       },
-      // Wスキル: 無効化（リメイク予定）
+      // Wスキル「アレンジドフォックスファイア」
       W: {
-        NAME: '（無効）',
-        CAST_TIME: 99999999,
-        COOLDOWN: 99999999,
-        DAMAGE: { BASE: 0, RATIO: 0 },
-        ENABLED: false,
+        NAME: 'アレンジドフォックスファイア',
+        CAST_TIME: 100,                  // 初期詠唱時間0.1秒
+        COOLDOWN: 6000,                  // クールダウン6秒
+        DAMAGE: {
+          BASE: 35,
+          RATIO: 0.5,
+        },
+        ENABLED: true,
+        INTERRUPTIBLE: true,             // CC中断可能（Breakシステム対応）
+        // フィールドパラメータ
+        FIELD_RADIUS: 4.5 * 55,          // フィールド半径4.5m = 247.5px
+        FIELD_TOTAL_DURATION: 2000,      // フィールド総持続時間2秒
+        FIELD_YELLOW_DURATION: 600,      // 黄色フェーズ0.6秒（キャスト扱い）
+        // 追尾弾パラメータ
+        HOMING_BULLET_COUNT: 3,          // 追尾弾数3発
+        HOMING_BULLET_RADIUS: 0.5 * 55,  // 弾半径0.5m = 27.5px
+        HOMING_BULLET_SPEED: 12 * 55,    // 弾速12m/s = 660px/s
+        HOMING_TURN_RATE: Math.PI * 2,   // 旋回速度360度/秒
+        HOMING_DURATION: 3000,           // 追尾時間3秒
+        BULLET_DISPLAY_SCALE: 0.11,      // 大玉（512px）の表示スケール
+        BULLET_COLOR: 22,                // 大玉ORANGE（オレンジ）
+        // MSバフパラメータ
+        MS_BUFF_AMOUNT: 0.40,            // MSバフ量（+40%）
+        MS_BUFF_DURATION: 2000,          // バフ持続時間（2秒）
       },
       // Eスキル: 無効化（リメイク予定）
       E: {
