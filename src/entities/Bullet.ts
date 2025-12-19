@@ -12,6 +12,10 @@ import { DEPTH, GAME_CONFIG } from '@/config/GameConfig';
  * 輪弾 (rindan_*.png): 各278x278px × 8色
  * - 各色別ファイル = ID 9-16
  * - 当たり判定: 275x275px (円形、半径137.5px)
+ *
+ * 大玉 (kshot_large_ball.png): 4096x512px
+ * - 各弾512x512px × 8色 = ID 17-24
+ * - 当たり判定: 440x440px (円形、半径220px)
  */
 export const KSHOT = {
   // 黒縁中玉 (ID 1-8) - 512x512px
@@ -36,6 +40,17 @@ export const KSHOT = {
     PURPLE: 15,
     BLUE: 16,
   },
+  // 大玉 (ID 17-24) - 512x512px
+  LARGE_BALL: {
+    RED: 17,
+    ORANGE: 18,
+    YELLOW: 19,
+    GREEN: 20,
+    CYAN: 21,
+    BLUE: 22,
+    MAGENTA: 23,
+    WHITE: 24,
+  },
 } as const;
 
 /**
@@ -53,6 +68,7 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
   private kshotFrameId: number | null = null; // kShotフレームID（使用時）
   private hasEnteredPlayArea: boolean = false; // プレイエリアに入ったことがあるか
   private fireTime: number = 0; // 発射時刻（猶予時間用）
+  private persistOutsidePlayArea: boolean = false; // プレイエリア外でも維持するフラグ（戻り弾用）
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'bullet_player');
@@ -101,6 +117,7 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     this.kshotFrameId = kshotFrameId;
     this.hasEnteredPlayArea = false; // プレイエリア入場フラグをリセット
     this.fireTime = this.scene.time.now; // 発射時刻を記録
+    this.persistOutsidePlayArea = false; // プレイエリア外維持フラグをリセット
 
     // 発射開始位置を記録
     this.startX = x;
@@ -126,7 +143,11 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
       // 輪弾(ID 9-16)は個別テクスチャなのでフレーム指定なし
       if (kshotFrameId >= 9 && kshotFrameId <= 16) {
         this.setTexture(textureName);
+      } else if (kshotFrameId >= 17 && kshotFrameId <= 24) {
+        // 大玉(ID 17-24)はスプライトシートのフレームを指定
+        this.setTexture(textureName, `kshot_${kshotFrameId}`);
       } else {
+        // 黒縁中玉(ID 1-8)はスプライトシートのフレームを指定
         this.setTexture(textureName, `kshot_${kshotFrameId}`);
       }
       this.clearTint();
@@ -265,7 +286,8 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
 
     // プレイエリアに一度入った後に出たら非アクティブ化
     // ただし、弾が発射位置から一定距離を移動するまでは消さない
-    if (this.hasEnteredPlayArea && !isInsidePlayArea && !isProtected) {
+    // persistOutsidePlayAreaフラグが立っている場合は消さない（戻り弾用）
+    if (this.hasEnteredPlayArea && !isInsidePlayArea && !isProtected && !this.persistOutsidePlayArea) {
       this.deactivate();
     }
 
@@ -341,6 +363,20 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
+   * プレイエリア外でも維持するフラグを設定（戻り弾用）
+   */
+  setPersistOutsidePlayArea(value: boolean): void {
+    this.persistOutsidePlayArea = value;
+  }
+
+  /**
+   * プレイエリア外でも維持するフラグを取得
+   */
+  getPersistOutsidePlayArea(): boolean {
+    return this.persistOutsidePlayArea;
+  }
+
+  /**
    * フレームIDに対応するテクスチャ名を取得
    */
   private getTextureNameForFrameId(frameId: number): string {
@@ -348,6 +384,8 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     if (frameId >= 1 && frameId <= 8) return 'kshot_medium_ball';
     // 輪弾 (ID 9-16)
     if (frameId >= 9 && frameId <= 16) return `rindan_${frameId}`;
+    // 大玉 (ID 17-24)
+    if (frameId >= 17 && frameId <= 24) return 'kshot_large_ball';
     // デフォルト
     return 'kshot_medium_ball';
   }
@@ -361,6 +399,8 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     if (frameId >= 1 && frameId <= 8) return 220;
     // 輪弾 (ID 9-16): 278x278px → 当たり判定275x275px → 半径137.5px
     if (frameId >= 9 && frameId <= 16) return 137.5;
+    // 大玉 (ID 17-24): 512x512px → 当たり判定440x440px → 半径220px
+    if (frameId >= 17 && frameId <= 24) return 220;
     // デフォルト
     return 4;
   }

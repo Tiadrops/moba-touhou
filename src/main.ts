@@ -71,6 +71,15 @@ window.addEventListener('load', () => {
   }
 });
 
+// ゲームコンテナ内でのコンテキストメニュー（右クリックメニュー）を無効化
+const gameContainer = document.getElementById('game-container');
+if (gameContainer) {
+  gameContainer.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    return false;
+  });
+}
+
 // グローバルにゲームインスタンスを公開（デバッグ用）
 if (GAME_CONFIG.DEBUG) {
   (window as any).game = game;

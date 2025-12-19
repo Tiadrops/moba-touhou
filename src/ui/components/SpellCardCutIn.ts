@@ -174,7 +174,7 @@ export class SpellCardCutIn {
    * 登場アニメーション
    */
   private startEnterAnimation(): void {
-    const { WIDTH, HEIGHT } = GAME_CONFIG;
+    const { WIDTH } = GAME_CONFIG;
 
     // コンテナを表示
     this.container.setVisible(true);

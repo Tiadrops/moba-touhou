@@ -66,6 +66,8 @@ export class BootScene extends Phaser.Scene {
     // 弾幕スプライトシートの読み込み
     // 黒縁中玉: 4096x512px (512x512 × 8色)
     this.load.image('kshot_medium_ball', 'img/bullets/kshot_medium_ball.png');
+    // 大玉: 4096x512px (512x512 × 8色)
+    this.load.image('kshot_large_ball', 'img/bullets/kshot_large_ball.png');
 
     // 輪弾: 各278x278px × 8色（個別ファイル）
     this.load.image('rindan_9', 'img/bullets/rindan_red.png');
@@ -189,6 +191,8 @@ export class BootScene extends Phaser.Scene {
    *
    * 黒縁中玉 (kshot_medium_ball.png): 4096x512px
    * - 各弾512x512px × 8色 = ID 1-8
+   * 大玉 (kshot_large_ball.png): 4096x512px
+   * - 各弾512x512px × 8色 = ID 17-24
    */
   private createBulletTextures(): void {
     const mediumBallTexture = this.textures.get('kshot_medium_ball');
@@ -205,7 +209,19 @@ export class BootScene extends Phaser.Scene {
       mediumBallTexture.add(`kshot_${frameId}`, 0, x, 0, 512, 512);
     }
 
-    console.log('Bullet textures created: 8 frames (黒縁中玉), 8 rindan textures (輪弾)');
+    // 大玉: 8色 (512x512px × 8 = 4096x512px)
+    const largeBallTexture = this.textures.get('kshot_large_ball');
+    if (largeBallTexture && largeBallTexture.key !== '__MISSING') {
+      for (let col = 0; col < 8; col++) {
+        const x = col * 512;
+        const frameId = col + 17; // ID 17-24
+        largeBallTexture.add(`kshot_${frameId}`, 0, x, 0, 512, 512);
+      }
+    } else {
+      console.warn('kshot_large_ball not loaded');
+    }
+
+    console.log('Bullet textures created: 8 frames (黒縁中玉), 8 frames (大玉), 8 rindan textures (輪弾)');
   }
 
   /**

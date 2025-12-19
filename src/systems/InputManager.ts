@@ -106,6 +106,7 @@ export class InputManager {
 
   /**
    * プレイヤー位置から指定角度でプレイエリアの境界との交点を計算
+   * 画面端にいる場合、移動可能な軸だけでも移動できるようにする
    */
   private calculatePlayAreaEdgePoint(
     startX: number,
@@ -123,7 +124,60 @@ export class InputManager {
     // プレイヤーの当たり判定サイズ分のマージン
     const margin = 12; // プレイヤーのhitboxRadius
 
-    // 各境界との交点を計算し、最も近いものを選択
+    // クリック方向の判定（斜め移動の判定に使用）
+    const wantsToMoveLeft = dx < -0.1;
+    const wantsToMoveRight = dx > 0.1;
+    const wantsToMoveUp = dy < -0.1;
+    const wantsToMoveDown = dy > 0.1;
+
+    // 各境界までの距離を計算
+    const distToLeft = startX - (areaX + margin);
+    const distToRight = (areaRight - margin) - startX;
+    const distToTop = startY - (areaY + margin);
+    const distToBottom = (areaBottom - margin) - startY;
+
+    // 端に近い閾値（この距離以下なら「端にいる」と判定）
+    const EDGE_THRESHOLD = 30;
+
+    // 端に近いかつクリック方向が外側の場合、軸移動を優先
+    const nearLeftAndClickingLeft = distToLeft < EDGE_THRESHOLD && wantsToMoveLeft;
+    const nearRightAndClickingRight = distToRight < EDGE_THRESHOLD && wantsToMoveRight;
+    const nearTopAndClickingUp = distToTop < EDGE_THRESHOLD && wantsToMoveUp;
+    const nearBottomAndClickingDown = distToBottom < EDGE_THRESHOLD && wantsToMoveDown;
+
+    // X軸方向が制限されている（端に近くて外側にクリック）
+    const xAxisBlocked = nearLeftAndClickingLeft || nearRightAndClickingRight;
+    // Y軸方向が制限されている（端に近くて外側にクリック）
+    const yAxisBlocked = nearTopAndClickingUp || nearBottomAndClickingDown;
+
+    // 両軸ともブロックされている場合（角にいる） → 移動しない
+    if (xAxisBlocked && yAxisBlocked) {
+      return { x: startX, y: startY };
+    }
+
+    // X軸がブロックされている場合 → Y軸のみ移動（Y軸方向への意図がある場合）
+    if (xAxisBlocked) {
+      if (wantsToMoveDown) {
+        return { x: startX, y: areaBottom - margin };
+      } else if (wantsToMoveUp) {
+        return { x: startX, y: areaY + margin };
+      }
+      // Y軸方向への意図がない場合は移動しない
+      return { x: startX, y: startY };
+    }
+
+    // Y軸がブロックされている場合 → X軸のみ移動（X軸方向への意図がある場合）
+    if (yAxisBlocked) {
+      if (wantsToMoveRight) {
+        return { x: areaRight - margin, y: startY };
+      } else if (wantsToMoveLeft) {
+        return { x: areaX + margin, y: startY };
+      }
+      // X軸方向への意図がない場合は移動しない
+      return { x: startX, y: startY };
+    }
+
+    // 通常の交点計算（端に近くない、または内側方向へのクリック）
     let minT = Infinity;
 
     // 右境界との交点
@@ -172,13 +226,43 @@ export class InputManager {
 
     // 交点が見つかった場合
     if (minT !== Infinity) {
-      return {
-        x: startX + dx * minT,
-        y: startY + dy * minT,
-      };
+      const targetX = startX + dx * minT;
+      const targetY = startY + dy * minT;
+
+      // 移動距離を計算
+      const moveDistance = Math.sqrt(
+        Math.pow(targetX - startX, 2) + Math.pow(targetY - startY, 2)
+      );
+
+      // 移動距離が短すぎる場合（端に近い状態で斜めクリック）
+      // 軸単独移動にフォールバック
+      const MIN_MOVE_DISTANCE = 50;
+      if (moveDistance < MIN_MOVE_DISTANCE) {
+        // より移動意図が強い軸を優先
+        const absX = Math.abs(dx);
+        const absY = Math.abs(dy);
+
+        if (absY > absX) {
+          // Y軸移動を優先
+          if (wantsToMoveDown) {
+            return { x: startX, y: areaBottom - margin };
+          } else if (wantsToMoveUp) {
+            return { x: startX, y: areaY + margin };
+          }
+        } else {
+          // X軸移動を優先
+          if (wantsToMoveRight) {
+            return { x: areaRight - margin, y: startY };
+          } else if (wantsToMoveLeft) {
+            return { x: areaX + margin, y: startY };
+          }
+        }
+      }
+
+      return { x: targetX, y: targetY };
     }
 
-    // 交点が見つからない場合（現在位置を返す）
+    // 交点が見つからない場合は現在位置を返す
     return { x: startX, y: startY };
   }
 

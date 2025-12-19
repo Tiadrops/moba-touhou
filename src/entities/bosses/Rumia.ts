@@ -37,8 +37,16 @@ type PhaseSkillsConfig = {
     BULLET_INTERVAL?: number;
     WARNING_LINE_LENGTH?: number;
     WAY_DELAY?: number;
+    // スペルカードPhase1用（オーブオブディセプション）
+    ENABLED?: boolean;                 // スキル有効フラグ
+    BULLET_COUNT?: number;             // 弾数
+    BULLET_RANGE?: number;             // 射程（px）
+    BULLET_SPEED_OUTGOING?: number;    // 行き弾速（px/s）
+    BULLET_SPEED_RETURN_INITIAL?: number; // 帰り初速（px/s）
+    BULLET_SPEED_RETURN_ACCEL?: number;   // 帰り加速度（px/s²）
+    BULLET_SPEED_RETURN_MAX?: number;     // 帰り最大速度（px/s）
     // 共通
-    BULLET_SPEED: number;
+    BULLET_SPEED?: number;             // 従来の弾速（オプション）
     BULLET_RADIUS?: number;
     BULLET_COLOR?: number;  // 弾の色（オプション）
   };
@@ -177,16 +185,24 @@ export class Rumia extends Boss {
   private rSkillMoveProgress: number = 0;           // 移動進捗（0〜1）
   private rSkillBulletFireTimer: number = 0;        // 弾発射タイマー
   private rSkillInvincibilityRemaining: number = 0; // 無敵残り時間
-  private rSkillDirectionChangeTimer: number = 0;   // 方向変更タイマー
+  private rSkillInvincibilityText: Phaser.GameObjects.Text | null = null; // 無敵テキスト表示
+  // private rSkillDirectionChangeTimer: number = 0;   // 方向変更タイマー（将来用）
 
-  // スペルカード用Wスキル（トリプルバースト - Q3連射）
-  private spellWSkillBurstsFired: number = 0;       // 発射済み回数
-  private spellWSkillBurstTimer: number = 0;        // 発射間隔タイマー
+  // Phase1 Qスキル用（オーブオブディセプション）
+  private orbBullets: Phaser.Physics.Arcade.Sprite[] = []; // 発射した弾の配列
+  private orbPhases: ('outgoing' | 'returning')[] = [];    // 各弾のフェーズ（行き/帰り）
+  private orbStartPos: { x: number; y: number } = { x: 0, y: 0 }; // 発射位置
+  private orbTargetPositions: { x: number; y: number }[] = []; // 各弾の最大射程位置
+  private orbReturnSpeeds: number[] = [];              // 各弾の帰り速度（加速中）
 
-  // スペルカード用Eスキル（闘争の潮汐）
-  private spellESkillStartTime: number = 0;         // スキル開始時間
-  private spellESkillBulletTimer: number = 0;       // 弾発射タイマー
-  private spellESkillBaseAngle: number = 0;         // 螺旋の基準角度
+  // スペルカード用Wスキル（トリプルバースト - Q3連射）- 将来用・コメントアウト
+  // private spellWSkillBurstsFired: number = 0;       // 発射済み回数
+  // private spellWSkillBurstTimer: number = 0;        // 発射間隔タイマー
+
+  // スペルカード用Eスキル（闘争の潮汐）- 将来用・コメントアウト
+  // private spellESkillStartTime: number = 0;         // スキル開始時間
+  // private spellESkillBulletTimer: number = 0;       // 弾発射タイマー
+  // private spellESkillBaseAngle: number = 0;         // 螺旋の基準角度
 
   // スキル硬直時間（W/E使用後の硬直）
   private skillRecoveryTime: number = 0;            // 残り硬直時間（ms）
@@ -242,6 +258,16 @@ export class Rumia extends Boss {
       this.currentSkillConfig = CONFIG.PHASE_0_SKILLS as PhaseSkillsConfig;
     } else if (phaseIndex === 1) {
       this.currentSkillConfig = CONFIG.PHASE_1_SKILLS as PhaseSkillsConfig;
+    }
+
+    // 前フェーズの予告線をクリア
+    this.qSkillWarningLines = [];
+    this.qSkillWarningLineCount = 0;
+    this.qSkillNextWarningTime = 0;
+
+    // Wスキルの予告線もクリア
+    if (this.wSkillWarningGraphics) {
+      this.wSkillWarningGraphics.clear();
     }
 
     this.clearTint();
@@ -595,10 +621,11 @@ export class Rumia extends Boss {
 
   /**
    * 闇符「ダークサイドオブザムーン」専用AI
-   * 現在はRスキルのみ使用（Q/W/Eはリメイク中）
+   * RスキルとQスキル（フォレストフォックス）を使用
    */
   private updateDarkSideOfTheMoonAI(time: number, delta: number): void {
     const rSkill = this.skills.get(BossSkillSlot.R);
+    const qSkill = this.skills.get(BossSkillSlot.Q);
     if (!rSkill) return;
 
     // Rスキル実行中フラグ
@@ -606,10 +633,19 @@ export class Rumia extends Boss {
       rSkill.state === BossSkillState.CASTING ||
       rSkill.state === BossSkillState.EXECUTING;
 
-    // Rスキルの処理（現在は唯一の有効スキル）
+    // Qスキル実行中フラグ
+    const isQSkillActive = qSkill && (
+      qSkill.state === BossSkillState.CASTING ||
+      qSkill.state === BossSkillState.EXECUTING
+    );
+
+    // Rスキルの処理（最優先）
     switch (rSkill.state) {
       case BossSkillState.READY:
-        this.tryUseRSkill();
+        // Qスキルが実行中でなければRスキルを使用
+        if (!isQSkillActive) {
+          this.tryUseRSkill();
+        }
         break;
 
       case BossSkillState.CASTING:
@@ -625,8 +661,29 @@ export class Rumia extends Boss {
         break;
     }
 
-    // 移動AI（Rスキル実行中以外はプレイヤーに近づく）
-    if (!isRSkillActive) {
+    // Qスキル（フォレストフォックス）の処理（Rスキルが実行中でなければ）
+    if (qSkill && !isRSkillActive) {
+      const qConfig = this.currentSkillConfig.Q;
+      // ENABLEDフラグがtrueの場合のみ処理
+      if (qConfig.ENABLED) {
+        switch (qSkill.state) {
+          case BossSkillState.READY:
+            this.tryUseForestFoxSkill();
+            break;
+
+          case BossSkillState.CASTING:
+            this.updateForestFoxCasting(delta);
+            break;
+
+          case BossSkillState.EXECUTING:
+            this.updateForestFoxExecution(time, delta);
+            break;
+        }
+      }
+    }
+
+    // 移動AI（Rスキル・Qスキル実行中以外はプレイヤーに近づく）
+    if (!isRSkillActive && !isQSkillActive) {
       this.updateApproachPlayerMovement();
     }
   }
@@ -884,7 +941,7 @@ export class Rumia extends Boss {
     const cols = this.getQSkillBulletColumns(lineIndex);
     const rowSpacing = config.BULLET_ROW_SPACING ?? 40;
     const colSpacing = config.BULLET_COL_SPACING ?? 30;
-    const bulletSpeed = config.BULLET_SPEED;
+    const bulletSpeed = config.BULLET_SPEED ?? 1100; // デフォルト20m/s
     const bulletColor = config.BULLET_COLOR ?? 1;
     const displayScale = config.BULLET_DISPLAY_SCALE ?? 0.12;
     const damage = config.DAMAGE.BASE + this.stats.attackPower * config.DAMAGE.RATIO;
@@ -968,11 +1025,11 @@ export class Rumia extends Boss {
 
   /**
    * 色IDからKSHOT番号を取得
-   * 1=赤, 2=橙, 3=黄, 4=緑, 5=シアン, 6=青, 7=マゼンタ, 8=白
+   * 黒縁中玉: 1-8, 輪弾: 9-16, 大玉: 17-24
    */
   private getKshotFrameByColor(colorId: number): number {
-    // colorIdはKSHOT.MEDIUM_BALLの値と一致（1-8）
-    if (colorId >= 1 && colorId <= 8) {
+    // colorIdはKSHOT定数の値と一致（1-24）
+    if (colorId >= 1 && colorId <= 24) {
       return colorId;
     }
     return KSHOT.MEDIUM_BALL.RED; // デフォルトは赤
@@ -1547,7 +1604,7 @@ export class Rumia extends Boss {
     this.rSkillMoveProgress = 0;
     this.rSkillBulletFireTimer = 0;
     this.rSkillInvincibilityRemaining = rConfig.INVINCIBILITY_DURATION;
-    this.rSkillDirectionChangeTimer = 0;
+    // this.rSkillDirectionChangeTimer = 0;
 
     // 無敵時間中は黒球スプライトに変更（1m x 1m = 55px x 55px）
     this.anims.stop();
@@ -1556,6 +1613,9 @@ export class Rumia extends Boss {
     // 画像サイズに応じてスケール調整（元画像が約390pxなので、55px / 390px ≈ 0.14）
     this.setScale(55 / 390);
     console.log('Rumia: 黒球スプライトに変更', this.texture.key);
+
+    // 無敵テキストを表示
+    this.showInvincibilityText();
   }
 
   /**
@@ -1596,6 +1656,11 @@ export class Rumia extends Boss {
 
     this.setPosition(newX, newY);
 
+    // 無敵テキストの位置を更新
+    if (this.rSkillInvincibilityText) {
+      this.rSkillInvincibilityText.setPosition(newX, newY - 50);
+    }
+
     // 移動進捗を更新（無敵時間ベース）
     const moveDuration = rConfig.INVINCIBILITY_DURATION;
     this.rSkillMoveProgress += delta / moveDuration;
@@ -1633,6 +1698,38 @@ export class Rumia extends Boss {
     this.setScale(0.16);
     this.play('rumia_idle');
     this.clearTint();
+
+    // 無敵テキストを非表示
+    this.hideInvincibilityText();
+  }
+
+  /**
+   * 無敵テキストを表示
+   */
+  private showInvincibilityText(): void {
+    // 既存のテキストがあれば削除
+    this.hideInvincibilityText();
+
+    // 「無敵」テキストを作成（キャラの上に表示）
+    this.rSkillInvincibilityText = this.scene.add.text(this.x, this.y - 50, '無敵', {
+      fontSize: '16px',
+      fontFamily: 'SawarabiMincho, sans-serif',
+      color: '#ffff00',
+      stroke: '#000000',
+      strokeThickness: 3,
+    });
+    this.rSkillInvincibilityText.setOrigin(0.5, 1);
+    this.rSkillInvincibilityText.setDepth(DEPTH.UI);
+  }
+
+  /**
+   * 無敵テキストを非表示
+   */
+  private hideInvincibilityText(): void {
+    if (this.rSkillInvincibilityText) {
+      this.rSkillInvincibilityText.destroy();
+      this.rSkillInvincibilityText = null;
+    }
   }
 
   /**
@@ -1758,18 +1855,268 @@ export class Rumia extends Boss {
     console.log('Rumia: Rスキル終了リング弾発射');
   }
 
-  /**
-   * イージング関数（減速）
-   */
-  private easeOutQuad(t: number): number {
-    return t * (2 - t);
-  }
+  // /**
+  //  * イージング関数（減速）- 将来用
+  //  */
+  // private easeOutQuad(t: number): number {
+  //   return t * (2 - t);
+  // }
 
   /**
    * Rスキル中の無敵判定
    */
   isInvincible(): boolean {
     return this.rSkillInvincibilityRemaining > 0;
+  }
+
+  // ========================================
+  // Phase1 Qスキル「フォレストフォックス」
+  // ========================================
+
+  /**
+   * Qスキル「フォレストフォックス」使用を試みる
+   */
+  private tryUseForestFoxSkill(): void {
+    const qConfig = this.currentSkillConfig.Q;
+    if (!qConfig.ENABLED) return;
+
+    if (this.startSkill(BossSkillSlot.Q, qConfig.CAST_TIME, 0)) {
+      console.log(`Rumia: Qスキル詠唱開始 - ${qConfig.NAME}`);
+    }
+  }
+
+  /**
+   * Qスキル「フォレストフォックス」詠唱更新
+   */
+  private updateForestFoxCasting(delta: number): void {
+    const qSkill = this.skills.get(BossSkillSlot.Q);
+    if (!qSkill) return;
+
+    qSkill.castTimeRemaining -= delta;
+
+    // スタン中は詠唱失敗（不発+CD）
+    if (this.hasStatusEffect(StatusEffectType.STUN)) {
+      const qConfig = this.currentSkillConfig.Q;
+      this.completeSkill(BossSkillSlot.Q, qConfig.COOLDOWN);
+      console.log('Rumia: Qスキル不発（スタン中）');
+      return;
+    }
+
+    if (qSkill.castTimeRemaining <= 0) {
+      // 詠唱完了 → 実行開始
+      qSkill.state = BossSkillState.EXECUTING;
+      this.initializeForestFoxExecution();
+      console.log('Rumia: Qスキル発動!');
+    }
+  }
+
+  /**
+   * Qスキル「オーブオブディセプション」実行初期化
+   */
+  private initializeForestFoxExecution(): void {
+    const qConfig = this.currentSkillConfig.Q;
+    if (!this.bulletPool || !this.playerPosition) return;
+
+    const bulletCount = qConfig.BULLET_COUNT ?? 9;
+    const range = qConfig.BULLET_RANGE ?? 495;
+    const radius = qConfig.BULLET_RADIUS ?? 44;
+    const speedOutgoing = qConfig.BULLET_SPEED_OUTGOING ?? 825;
+    const displayScale = qConfig.BULLET_DISPLAY_SCALE ?? 0.172;
+    const bulletColor = qConfig.BULLET_COLOR ?? 7;
+    const returnInitial = qConfig.BULLET_SPEED_RETURN_INITIAL ?? 33;
+    const damage = qConfig.DAMAGE.BASE + this.stats.attackPower * qConfig.DAMAGE.RATIO;
+
+    // プレイヤー方向を計算
+    const centerAngle = Phaser.Math.Angle.Between(
+      this.x, this.y,
+      this.playerPosition.x, this.playerPosition.y
+    );
+
+    // 発射位置を記録
+    this.orbStartPos = { x: this.x, y: this.y };
+
+    // 配列をリセット
+    this.orbBullets = [];
+    this.orbPhases = [];
+    this.orbTargetPositions = [];
+    this.orbReturnSpeeds = [];
+
+    // kShotフレームを取得
+    const kshotFrame = this.getKshotFrameByColor(bulletColor);
+
+    // 弾を円状に360度均等配置
+    // 9発の場合: 40度間隔（360/9=40度）
+    const angleStep = (Math.PI * 2) / bulletCount;
+
+    for (let i = 0; i < bulletCount; i++) {
+      // プレイヤー方向を基準に円状に配置
+      const angle = centerAngle + i * angleStep;
+
+      // 各弾のターゲット位置を計算
+      const targetPos = {
+        x: this.x + Math.cos(angle) * range,
+        y: this.y + Math.sin(angle) * range
+      };
+      this.orbTargetPositions.push(targetPos);
+      this.orbPhases.push('outgoing');
+      this.orbReturnSpeeds.push(returnInitial);
+
+      // 弾を取得
+      const bullet = this.bulletPool.acquire();
+      if (!bullet) {
+        console.log(`Rumia: Qスキル弾${i + 1}取得失敗`);
+        continue;
+      }
+
+      bullet.fire(
+        this.x, this.y,
+        targetPos.x, targetPos.y,
+        BulletType.ENEMY_NORMAL, damage, null, false,
+        kshotFrame
+      );
+      bullet.setScale(displayScale);
+
+      // 当たり判定を設定
+      const body = bullet.body as Phaser.Physics.Arcade.Body;
+      if (body) {
+        const hitboxRadius = radius / displayScale;
+        body.setCircle(hitboxRadius, 0, 0);
+        body.setVelocity(
+          Math.cos(angle) * speedOutgoing,
+          Math.sin(angle) * speedOutgoing
+        );
+      }
+
+      // 弾がプレイエリア外でも消えないようにフラグを設定（戻り弾用）
+      bullet.setPersistOutsidePlayArea(true);
+
+      this.orbBullets.push(bullet);
+    }
+
+    // 弾が1発も取得できなかった場合はスキル終了
+    if (this.orbBullets.length === 0) {
+      console.log('Rumia: Qスキル弾全て取得失敗');
+      const qSkill = this.skills.get(BossSkillSlot.Q);
+      if (qSkill) {
+        this.completeSkill(BossSkillSlot.Q, qConfig.COOLDOWN);
+      }
+      return;
+    }
+
+    // SE再生
+    AudioManager.getInstance().playSe('se_shot1');
+    console.log(`Rumia: Qスキル発射完了（${this.orbBullets.length}発）`);
+  }
+
+  /**
+   * Qスキル「オーブオブディセプション」実行更新
+   */
+  private updateForestFoxExecution(_time: number, delta: number): void {
+    const qSkill = this.skills.get(BossSkillSlot.Q);
+    const qConfig = this.currentSkillConfig.Q;
+
+    // 弾がなくなった（すべて消滅した）場合はスキル終了
+    if (!qSkill || this.orbBullets.length === 0) {
+      if (qSkill) {
+        this.completeSkill(BossSkillSlot.Q, qConfig.COOLDOWN);
+        console.log('Rumia: Qスキル終了（全弾消滅）');
+      }
+      return;
+    }
+
+    const range = qConfig.BULLET_RANGE ?? 495;
+    const returnInitial = qConfig.BULLET_SPEED_RETURN_INITIAL ?? 33;
+    const returnAccel = qConfig.BULLET_SPEED_RETURN_ACCEL ?? 1045;
+    const returnMax = qConfig.BULLET_SPEED_RETURN_MAX ?? 1430;
+
+    // 画面外判定用
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const margin = 50;
+
+    // 回収済みの弾を追跡
+    const bulletsToRemove: number[] = [];
+
+    // 各弾を更新
+    for (let i = 0; i < this.orbBullets.length; i++) {
+      const bullet = this.orbBullets[i];
+      const body = bullet.body as Phaser.Physics.Arcade.Body;
+
+      // 弾が非アクティブになった場合は削除対象に追加
+      if (!bullet.active || !body) {
+        bulletsToRemove.push(i);
+        continue;
+      }
+
+      if (this.orbPhases[i] === 'outgoing') {
+        // 行きフェーズ: 最大射程に到達したか、または画面外に出たか確認
+        const dx = bullet.x - this.orbStartPos.x;
+        const dy = bullet.y - this.orbStartPos.y;
+        const distanceTraveled = Math.sqrt(dx * dx + dy * dy);
+
+        const isOutOfBounds =
+          bullet.x < X - margin ||
+          bullet.x > X + WIDTH + margin ||
+          bullet.y < Y - margin ||
+          bullet.y > Y + HEIGHT + margin;
+
+        if (distanceTraveled >= range || isOutOfBounds) {
+          // 最大射程到達 or 画面外 → 帰りフェーズへ
+          this.orbPhases[i] = 'returning';
+          this.orbReturnSpeeds[i] = returnInitial;
+        }
+      }
+
+      if (this.orbPhases[i] === 'returning') {
+        // 帰りフェーズ: ルーミアを追尾しながら戻る
+
+        // 加速度で速度を増加
+        this.orbReturnSpeeds[i] += returnAccel * (delta / 1000);
+        if (this.orbReturnSpeeds[i] > returnMax) {
+          this.orbReturnSpeeds[i] = returnMax;
+        }
+
+        // ルーミアの現在位置への方向を計算
+        const angleToRumia = Phaser.Math.Angle.Between(
+          bullet.x, bullet.y,
+          this.x, this.y
+        );
+
+        // 速度を設定
+        body.setVelocity(
+          Math.cos(angleToRumia) * this.orbReturnSpeeds[i],
+          Math.sin(angleToRumia) * this.orbReturnSpeeds[i]
+        );
+
+        // ルーミアに到達したか確認
+        const dxToRumia = this.x - bullet.x;
+        const dyToRumia = this.y - bullet.y;
+        const distanceToRumia = Math.sqrt(dxToRumia * dxToRumia + dyToRumia * dyToRumia);
+
+        // ルーミアに接触したら弾を消去
+        if (distanceToRumia < 30) {
+          bullet.setActive(false);
+          bullet.setVisible(false);
+          body.setVelocity(0, 0);
+          bullet.setPosition(-1000, -1000);
+          bulletsToRemove.push(i);
+        }
+      }
+    }
+
+    // 回収済みの弾を配列から削除（逆順で削除）
+    for (let i = bulletsToRemove.length - 1; i >= 0; i--) {
+      const idx = bulletsToRemove[i];
+      this.orbBullets.splice(idx, 1);
+      this.orbPhases.splice(idx, 1);
+      this.orbTargetPositions.splice(idx, 1);
+      this.orbReturnSpeeds.splice(idx, 1);
+    }
+
+    // すべての弾が回収されたらスキル終了
+    if (this.orbBullets.length === 0) {
+      this.completeSkill(BossSkillSlot.Q, qConfig.COOLDOWN);
+      console.log('Rumia: Qスキル完了（全弾回収）');
+    }
   }
 
   // ========================================
@@ -1854,11 +2201,12 @@ export class Rumia extends Boss {
       );
 
       // 弾速を設定
+      const bulletSpeed = qConfig.BULLET_SPEED ?? 550; // デフォルト10m/s
       const body = bullet.body as Phaser.Physics.Arcade.Body;
       if (body) {
         body.setVelocity(
-          Math.cos(angle) * qConfig.BULLET_SPEED,
-          Math.sin(angle) * qConfig.BULLET_SPEED
+          Math.cos(angle) * bulletSpeed,
+          Math.sin(angle) * bulletSpeed
         );
       }
     }
@@ -1867,237 +2215,141 @@ export class Rumia extends Boss {
   }
 
   // ========================================
-  // スペルカード用Eスキル「闇の潮汐」
+  // スペルカード用Eスキル「闇の潮汐」（将来用・コメントアウト）
   // ========================================
-
-  /**
-   * スペルカード用Eスキル使用を試みる
-   */
+  /*
   private tryUseSpellCardESkill(): void {
     const eConfig = this.currentSkillConfig.E;
-
     if (this.startSkill(BossSkillSlot.E, eConfig.CAST_TIME, 0)) {
       console.log(`Rumia: スペルカードEスキル詠唱開始 - ${eConfig.NAME}`);
     }
   }
 
-  /**
-   * スペルカード用Eスキル詠唱更新
-   */
   private updateSpellCardESkillCasting(delta: number): void {
     const eSkill = this.skills.get(BossSkillSlot.E);
     if (!eSkill) return;
-
     eSkill.castTimeRemaining -= delta;
-
     if (eSkill.castTimeRemaining <= 0) {
-      // 詠唱完了 → 実行開始
       eSkill.state = BossSkillState.EXECUTING;
       const spiralDuration = this.currentSkillConfig.E.SPIRAL_DURATION ?? 2000;
       eSkill.executionTimeRemaining = spiralDuration;
       this.spellESkillStartTime = this.scene.time.now;
       this.spellESkillBulletTimer = 0;
-      this.spellESkillBaseAngle = Math.random() * Math.PI * 2; // ランダムな開始角度
+      this.spellESkillBaseAngle = Math.random() * Math.PI * 2;
       console.log('Rumia: スペルカードEスキル発動!');
     }
   }
 
-  /**
-   * スペルカード用Eスキル実行更新（螺旋弾幕）
-   */
   private updateSpellCardESkillExecution(time: number, delta: number): void {
     const eSkill = this.skills.get(BossSkillSlot.E);
     if (!eSkill) return;
-
     const eConfig = this.currentSkillConfig.E;
     const bulletInterval = eConfig.BULLET_FIRE_INTERVAL ?? 150;
-
-    // 弾発射タイマー
     this.spellESkillBulletTimer += delta;
     if (this.spellESkillBulletTimer >= bulletInterval) {
       this.fireSpellCardESkillBullets(time);
       this.spellESkillBulletTimer = 0;
     }
-
-    // 実行時間更新
     eSkill.executionTimeRemaining -= delta;
-
     if (eSkill.executionTimeRemaining <= 0) {
       this.completeSkill(BossSkillSlot.E, eConfig.COOLDOWN);
       console.log('Rumia: スペルカードEスキル完了');
     }
   }
 
-  /**
-   * スペルカード用Eスキルの弾発射（8方向スパイラル）
-   * kShotのVIOLET小丸弾を使用
-   */
   private fireSpellCardESkillBullets(time: number): void {
     if (!this.bulletPool) return;
-
     const eConfig = this.currentSkillConfig.E;
     const spiralArms = eConfig.SPIRAL_ARMS ?? 8;
     const bulletSpeed = eConfig.BULLET_SPEED ?? 165;
     const rotationSpeed = eConfig.ROTATION_SPEED ?? 1.5;
     const damage = eConfig.DAMAGE.BASE + this.stats.attackPower * eConfig.DAMAGE.RATIO;
-
-    // 経過時間から回転角度を計算
     const elapsed = time - this.spellESkillStartTime;
     const elapsedSec = elapsed / 1000;
     const rotationAngle = this.spellESkillBaseAngle + (rotationSpeed * elapsedSec);
-
-    // 8方向に発射
     for (let i = 0; i < spiralArms; i++) {
       const bullet = this.bulletPool.acquire();
       if (!bullet) continue;
-
-      // 各腕の角度（360度を8分割 + 回転角度）
       const angle = (i / spiralArms) * Math.PI * 2 + rotationAngle;
       const targetX = this.x + Math.cos(angle) * 1000;
       const targetY = this.y + Math.sin(angle) * 1000;
-
-      // kShotのVIOLET小丸弾を使用
-      bullet.fire(
-        this.x,
-        this.y,
-        targetX,
-        targetY,
-        BulletType.ENEMY_NORMAL,
-        damage,
-        null,
-        false,
-        KSHOT.MEDIUM_BALL.MAGENTA
-      );
-
-      // 弾速を設定
+      bullet.fire(this.x, this.y, targetX, targetY, BulletType.ENEMY_NORMAL, damage, null, false, KSHOT.MEDIUM_BALL.MAGENTA);
       const body = bullet.body as Phaser.Physics.Arcade.Body;
       if (body) {
-        body.setVelocity(
-          Math.cos(angle) * bulletSpeed,
-          Math.sin(angle) * bulletSpeed
-        );
+        body.setVelocity(Math.cos(angle) * bulletSpeed, Math.sin(angle) * bulletSpeed);
       }
     }
   }
+  */
 
   // ========================================
-  // スペルカード用Wスキル「トリプルバースト」
+  // スペルカード用Wスキル「トリプルバースト」（将来用・コメントアウト）
   // ========================================
-
-  /**
-   * スペルカード用Wスキル使用を試みる
-   */
+  /*
   private tryUseSpellCardWSkill(): void {
     const wConfig = this.currentSkillConfig.W;
-
-    // トリプルバースト用設定があるか確認
     if (!wConfig.BURST_COUNT) return;
-
     if (this.startSkill(BossSkillSlot.W, wConfig.CAST_TIME, 0)) {
       console.log(`Rumia: スペルカードWスキル詠唱開始 - ${wConfig.NAME}`);
     }
   }
 
-  /**
-   * スペルカード用Wスキル詠唱更新
-   */
   private updateSpellCardWSkillCasting(delta: number): void {
     const wSkill = this.skills.get(BossSkillSlot.W);
     if (!wSkill) return;
-
     wSkill.castTimeRemaining -= delta;
-
     if (wSkill.castTimeRemaining <= 0) {
-      // 詠唱完了 → 実行開始
       wSkill.state = BossSkillState.EXECUTING;
       const burstCount = this.currentSkillConfig.W.BURST_COUNT ?? 3;
       const burstInterval = this.currentSkillConfig.W.BURST_INTERVAL ?? 300;
       wSkill.executionTimeRemaining = burstCount * burstInterval + 100;
       this.spellWSkillBurstsFired = 0;
-      this.spellWSkillBurstTimer = burstInterval; // すぐに最初の発射
+      this.spellWSkillBurstTimer = burstInterval;
       console.log('Rumia: スペルカードWスキル発動!');
     }
   }
 
-  /**
-   * スペルカード用Wスキル実行更新（Qスキル3連射）
-   */
   private updateSpellCardWSkillExecution(_time: number, delta: number): void {
     const wSkill = this.skills.get(BossSkillSlot.W);
     if (!wSkill) return;
-
     const wConfig = this.currentSkillConfig.W;
     const burstCount = wConfig.BURST_COUNT ?? 3;
     const burstInterval = wConfig.BURST_INTERVAL ?? 300;
-
-    // 発射タイマー更新
     this.spellWSkillBurstTimer += delta;
-
-    // Q弾幕を発射
-    if (this.spellWSkillBurstsFired < burstCount &&
-        this.spellWSkillBurstTimer >= burstInterval) {
+    if (this.spellWSkillBurstsFired < burstCount && this.spellWSkillBurstTimer >= burstInterval) {
       this.fireSpellCardWSkillBurst();
       this.spellWSkillBurstsFired++;
       this.spellWSkillBurstTimer = 0;
     }
-
-    // 実行時間更新
     wSkill.executionTimeRemaining -= delta;
-
     if (wSkill.executionTimeRemaining <= 0) {
       this.completeSkill(BossSkillSlot.W, wConfig.COOLDOWN);
       console.log('Rumia: スペルカードWスキル完了');
     }
   }
 
-  /**
-   * スペルカード用WスキルでQ弾幕を発射（Qより弾速速い）
-   * kShotのPURPLE大丸弾を使用
-   */
   private fireSpellCardWSkillBurst(): void {
     if (!this.bulletPool) return;
-
     const qConfig = this.currentSkillConfig.Q;
     const wConfig = this.currentSkillConfig.W;
     const wayCount = qConfig.WAY_COUNT ?? 12;
     const damage = wConfig.DAMAGE.BASE + this.stats.attackPower * wConfig.DAMAGE.RATIO;
-    // W専用の弾速（設定がなければQの弾速を使用）
-    const bulletSpeed = wConfig.BULLET_SPEED ?? qConfig.BULLET_SPEED;
-
+    const bulletSpeed = wConfig.BULLET_SPEED ?? qConfig.BULLET_SPEED ?? 550;
     for (let i = 0; i < wayCount; i++) {
       const bullet = this.bulletPool.acquire();
       if (!bullet) continue;
-
-      // 360度を12分割
       const angle = (i / wayCount) * Math.PI * 2;
       const targetX = this.x + Math.cos(angle) * 1000;
       const targetY = this.y + Math.sin(angle) * 1000;
-
-      // kShotのPURPLE大丸弾を使用
-      bullet.fire(
-        this.x,
-        this.y,
-        targetX,
-        targetY,
-        BulletType.ENEMY_NORMAL,
-        damage,
-        null,
-        false,
-        KSHOT.MEDIUM_BALL.MAGENTA
-      );
-
-      // 弾速を設定（W専用の弾速を使用）
+      bullet.fire(this.x, this.y, targetX, targetY, BulletType.ENEMY_NORMAL, damage, null, false, KSHOT.MEDIUM_BALL.MAGENTA);
       const body = bullet.body as Phaser.Physics.Arcade.Body;
       if (body) {
-        body.setVelocity(
-          Math.cos(angle) * bulletSpeed,
-          Math.sin(angle) * bulletSpeed
-        );
+        body.setVelocity(Math.cos(angle) * bulletSpeed, Math.sin(angle) * bulletSpeed);
       }
     }
-
     console.log(`Rumia W(Spell): バースト${this.spellWSkillBurstsFired + 1}発射 (弾速: ${bulletSpeed})`);
   }
+  */
 
   /**
    * 線をプレイエリア内にクリップ（Cohen-Sutherland風）

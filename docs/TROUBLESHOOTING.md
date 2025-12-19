@@ -268,6 +268,107 @@ private updateAnimation(): void {
 
 ---
 
+## 2024年 - 画面端での斜め移動が機能しない問題
+
+### 問題の症状
+
+プレイヤーがプレイエリアの端にいる状態で、プレイエリア外を斜め方向にクリックした場合：
+- 一度端で停止してしまい、移動しない
+- もう一度クリックすると移動できる
+- 移動可能な軸（例：左端なら上下方向）にすぐ移動できない
+
+### 原因
+
+**交点計算のロジックが端付近で短い距離を返す**のが原因だった。
+
+1. プレイエリア外クリック時、プレイヤー位置からクリック方向への直線とプレイエリア境界の交点を計算
+2. プレイヤーが端に近い場合、斜め方向のクリックでは近い境界との交点が先に計算される
+3. 結果として移動距離が非常に短くなり（数px）、実質的に移動しない
+
+```typescript
+// 例：左端にいて左下をクリックした場合
+// 左境界との交点が計算され、移動距離はほぼ0になる
+```
+
+### 解決策
+
+1. **端近接判定と方向判定の組み合わせ**
+   - 各境界までの距離を計算（`distToLeft`, `distToRight`など）
+   - `EDGE_THRESHOLD = 30`px以内で外側方向へのクリックを検出
+   - X軸またはY軸がブロックされている場合、もう一方の軸のみで移動
+
+2. **移動距離フォールバック**
+   - 通常の交点計算後、移動距離が50px未満なら軸単独移動にフォールバック
+   - より強い移動意図のある軸（`|dx|` vs `|dy|`）を優先
+
+```typescript
+// 修正後のロジック
+const xAxisBlocked = nearLeftAndClickingLeft || nearRightAndClickingRight;
+const yAxisBlocked = nearTopAndClickingUp || nearBottomAndClickingDown;
+
+if (xAxisBlocked && yAxisBlocked) {
+  return { x: startX, y: startY }; // 角にいる場合は移動しない
+}
+
+if (xAxisBlocked) {
+  // Y軸のみ移動
+  if (wantsToMoveDown) return { x: startX, y: areaBottom - margin };
+  if (wantsToMoveUp) return { x: startX, y: areaY + margin };
+}
+```
+
+### 修正箇所
+
+1. `src/systems/InputManager.ts`
+   - `calculatePlayAreaEdgePoint()`メソッドを大幅に書き換え
+   - 境界距離計算、軸ブロック判定、フォールバックロジックを追加
+
+### 教訓
+
+- 画面端での操作は境界値問題が発生しやすい
+- 交点計算だけでなく、移動距離が十分かどうかのチェックも必要
+- ユーザーの「移動意図」を汲み取る代替ロジックを用意する
+- 斜め移動は両軸の処理が必要なため、片軸のみのフォールバックを考慮する
+
+---
+
+## 2024年 - 右クリックでブラウザのコンテキストメニューが表示される問題
+
+### 問題の症状
+
+ゲーム内で右クリックした際に、Windowsのコンテキストメニュー（「戻る」などのメニュー）が表示されてしまう。
+
+### 原因
+
+Phaserの`disableContextMenu()`だけでは、一部のブラウザや環境で完全にコンテキストメニューを防げない。
+
+### 解決策
+
+HTML要素に直接`contextmenu`イベントリスナーを追加し、`preventDefault()`でイベントをキャンセル。
+
+```typescript
+// main.ts
+const gameContainer = document.getElementById('game-container');
+if (gameContainer) {
+  gameContainer.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    return false;
+  });
+}
+```
+
+### 修正箇所
+
+1. `src/main.ts`
+   - ゲームコンテナへの`contextmenu`イベントリスナーを追加
+
+### 教訓
+
+- Phaserのビルトイン機能だけでなく、DOM APIも併用することで確実な制御が可能
+- ゲームUIでブラウザのデフォルト動作を抑制する場合は複数の方法を組み合わせる
+
+---
+
 ## テンプレート
 
 ### 問題の症状

@@ -49,6 +49,17 @@ export const KSHOT = {
     PURPLE: 15,
     BLUE: 16,
   },
+  // 大玉 (ID 17-24) - 512x512px
+  LARGE_BALL: {
+    RED: 17,
+    ORANGE: 18,
+    YELLOW: 19,
+    GREEN: 20,
+    CYAN: 21,
+    BLUE: 22,
+    MAGENTA: 23,
+    WHITE: 24,
+  },
 } as const;
 ```
 
@@ -73,6 +84,16 @@ export const KSHOT = {
 | ファイル形式 | 各色個別ファイル |
 | 当たり判定 | 275x275 px (円形、半径137.5px) |
 | 用途 | 輪状の弾、リング弾幕 |
+
+### 大玉 (KSHOT.LARGE_BALL)
+
+| プロパティ | 値 |
+|-----------|-----|
+| ID範囲 | 17-24 |
+| 画像サイズ | 512x512 px |
+| スプライトシート | 4096x512 px (8色横並び) |
+| 当たり判定 | 440x440 px (円形、半径220px) |
+| 用途 | 大型弾、ボス弾幕 |
 
 ## 色一覧
 
@@ -102,6 +123,19 @@ export const KSHOT = {
 | PURPLE | 15 | 紫 | 闇系（ルーミア推奨） |
 | BLUE | 16 | 青 | 水、氷系 |
 
+### 大玉の色
+
+| 色名 | ID | 説明 | 推奨キャラ/シーン |
+|------|-----|------|------------------|
+| RED | 17 | 赤 | 霊夢、炎系 |
+| ORANGE | 18 | 橙 | 炎、夕焼け系 |
+| YELLOW | 19 | 黄 | 雷、光系 |
+| GREEN | 20 | 緑 | 自然、毒系 |
+| CYAN | 21 | 水色 | 氷、水系 |
+| BLUE | 22 | 青 | 水、氷系 |
+| MAGENTA | 23 | マゼンタ | 闇系（ルーミア推奨） |
+| WHITE | 24 | 白 | 汎用、神聖系 |
+
 ## 当たり判定について
 
 当たり判定は**画像サイズより小さく**設定されています。
@@ -111,6 +145,7 @@ export const KSHOT = {
 |--------|--------|-----------|---------|---------------|
 | 黒縁中玉 | MEDIUM_BALL | 512x512px | 440x440px | 220px |
 | 輪弾 | RINDAN | 278x278px | 275x275px | 137.5px |
+| 大玉 | LARGE_BALL | 512x512px | 440x440px | 220px |
 
 ## テクスチャの読み込み
 
@@ -144,6 +179,20 @@ this.load.image('rindan_15', 'img/bullets/rindan_purple.png');
 this.load.image('rindan_16', 'img/bullets/rindan_blue.png');
 ```
 
+### 大玉（スプライトシート）
+
+```typescript
+// BootScene.ts での読み込み
+this.load.image('kshot_large_ball', 'img/bullets/kshot_large_ball.png');
+
+// フレーム生成
+for (let col = 0; col < 8; col++) {
+  const x = col * 512;
+  const frameId = col + 17; // ID 17-24
+  largeBallTexture.add(`kshot_${frameId}`, 0, x, 0, 512, 512);
+}
+```
+
 ## ルーミアの弾幕設定
 
 ### 通常フェーズ
@@ -168,6 +217,7 @@ this.load.image('rindan_16', 'img/bullets/rindan_blue.png');
 
 ## 今後の拡張予定
 
-- [ ] 追加弾種の実装（小玉、大玉、レーザー等）
+- [x] 大玉の実装（ID 17-24）
+- [ ] 追加弾種の実装（小玉、レーザー等）
 - [ ] 加算合成レンダリング対応
 - [ ] 回転エフェクト対応

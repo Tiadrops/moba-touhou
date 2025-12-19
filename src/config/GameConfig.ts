@@ -308,14 +308,27 @@ export const BOSS_CONFIG = {
 
     // スペルカードフェーズ1のスキル
     PHASE_1_SKILLS: {
-      // Qスキル: 無効化（リメイク予定）
+      // Qスキル「オーブオブディセプション」
       Q: {
-        NAME: '（無効）',
-        CAST_TIME: 99999999,         // 実質使用不可
-        COOLDOWN: 99999999,
-        DAMAGE: { BASE: 0, RATIO: 0 },
-        BULLET_SPEED: 0,
-        ENABLED: false,
+        NAME: 'オーブオブディセプション',
+        CAST_TIME: 250,              // キャスト時間0.25秒
+        COOLDOWN: 5000,              // クールダウン5秒
+        DAMAGE: {
+          BASE: 50,
+          RATIO: 0.6,
+        },
+        ENABLED: true,
+        // 弾パラメータ
+        BULLET_COUNT: 9,             // 弾数9発
+        BULLET_RANGE: 9 * 55,        // 射程9m = 495px
+        BULLET_RADIUS: 0.8 * 55,     // 弾幕判定半径0.8m = 44px
+        BULLET_SPEED_OUTGOING: 15 * 55, // 行き弾速15m/s = 825px/s
+        BULLET_SPEED_RETURN_INITIAL: 0.6 * 55, // 帰り初速0.6m/s = 33px/s
+        BULLET_SPEED_RETURN_ACCEL: 19 * 55, // 帰り加速度19m/s² = 1045px/s²
+        BULLET_SPEED_RETURN_MAX: 26 * 55, // 帰り最大速度26m/s = 1430px/s
+        // 弾の表示スケール（大玉: 直径1.6m = 88px → 88/512 ≈ 0.172）
+        BULLET_DISPLAY_SCALE: 0.172,
+        BULLET_COLOR: 21,            // 大玉CYAN（シアン）
       },
       // Wスキル: 無効化（リメイク予定）
       W: {
