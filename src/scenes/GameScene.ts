@@ -11,7 +11,8 @@ import { BulletPool } from '@/utils/ObjectPool';
 import { DamageCalculator } from '@/utils/DamageCalculator';
 import { UIManager } from '@/ui/UIManager';
 import { SpellCardCutInV2 } from '@/ui/components/SpellCardCutInV2';
-import { CharacterType, EnemyType, BulletType, BossPhaseType } from '@/types';
+import { CharacterType, EnemyType, BulletType, BossPhaseType, GameMode, Difficulty, GameStartData, StageIntroData } from '@/types';
+import { PauseData } from './PauseScene';
 
 /**
  * GameScene - メインゲームプレイシーン
@@ -42,8 +43,18 @@ export class GameScene extends Phaser.Scene {
   private enemySpawnInterval: number = 2000; // 2秒ごと
   private score: number = 0;
 
+  // ゲーム開始データ（リトライ時に使用）
+  private gameStartData: GameStartData | null = null;
+
   constructor() {
     super({ key: SCENES.GAME });
+  }
+
+  init(data?: GameStartData): void {
+    // ゲーム開始データを保存
+    if (data && Object.keys(data).length > 0) {
+      this.gameStartData = data;
+    }
   }
 
   create(): void {
@@ -392,6 +403,62 @@ export class GameScene extends Phaser.Scene {
 
     // 操作説明を表示
     this.showControls();
+
+    // ポーズ画面の入力設定
+    this.setupPauseInput();
+  }
+
+  /**
+   * ポーズ入力の設定
+   */
+  private setupPauseInput(): void {
+    this.input.keyboard?.on('keydown-SPACE', () => {
+      this.openPauseMenu();
+    });
+
+    this.input.keyboard?.on('keydown-ESC', () => {
+      this.openPauseMenu();
+    });
+  }
+
+  /**
+   * ポーズメニューを開く
+   */
+  private openPauseMenu(): void {
+    // 既にポーズ中なら何もしない
+    if (this.scene.isPaused(SCENES.GAME)) {
+      return;
+    }
+
+    // ポーズSEを鳴らす
+    AudioManager.getInstance().playSe('se_pause');
+
+    // ゲームを一時停止してポーズシーンを起動
+    this.scene.pause();
+
+    // ゲーム開始データからリトライ用データを作成
+    const retryData: StageIntroData = this.gameStartData ? {
+      mode: this.gameStartData.mode,
+      character: this.gameStartData.character,
+      difficulty: this.gameStartData.difficulty,
+      stageNumber: this.gameStartData.stageNumber,
+      continueData: this.gameStartData.continueData,
+      practiceConfig: this.gameStartData.practiceConfig,
+    } : {
+      // デフォルト値（データがない場合）
+      mode: GameMode.ARCADE,
+      character: CharacterType.REIMU,
+      difficulty: Difficulty.NORMAL,
+      stageNumber: 1,
+    };
+
+    const pauseData: PauseData = {
+      retryData,
+      player: this.player,
+      boss: this.rumia,
+    };
+
+    this.scene.launch(SCENES.PAUSE, pauseData);
   }
 
   /**

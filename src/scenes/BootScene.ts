@@ -87,6 +87,7 @@ export class BootScene extends Phaser.Scene {
     this.load.audio('se_select', 'sound/se/select.mp3');
     this.load.audio('se_decision', 'sound/se/decision.mp3');
     this.load.audio('se_cancel', 'sound/se/cancel.mp3');
+    this.load.audio('se_pause', 'sound/se/pause.mp3');
     this.load.audio('se_shot1', 'sound/se/shot1.mp3');
     this.load.audio('se_shot1_multi', 'sound/se/shot1_multi.mp3');
     this.load.audio('se_break', 'sound/se/break.mp3');

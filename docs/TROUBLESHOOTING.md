@@ -369,6 +369,60 @@ if (gameContainer) {
 
 ---
 
+## 2024年 - 確認ダイアログで「はい」を選択しても動作しない問題
+
+### 問題の症状
+
+ポーズメニューの確認ダイアログで「はい」を選択してEnterを押しても、アクション（ステージやり直し、タイトルに戻る等）が実行されず、メインメニューに戻るだけだった。
+
+### 原因
+
+**`closeConfirmDialog()`内で`confirmAction`をnullにしてから、switchで判定していた**のが原因。
+
+```typescript
+// 問題のあったコード
+if (this.confirmSelectedIndex === 0) {
+  this.closeConfirmDialog();  // ここでthis.confirmAction = null
+  switch (this.confirmAction) {  // nullと比較されるため、どのcaseにもマッチしない
+    case ConfirmAction.RESTART_STAGE:
+      this.restartStage();  // 実行されない
+      break;
+    // ...
+  }
+}
+```
+
+### 解決策
+
+アクションをローカル変数に保存してから`closeConfirmDialog()`を呼び、保存した変数でswitchする。
+
+```typescript
+// 修正後のコード
+if (this.confirmSelectedIndex === 0) {
+  const action = this.confirmAction;  // 先にローカル変数に保存
+  this.closeConfirmDialog();
+  switch (action) {  // 保存した値で判定
+    case ConfirmAction.RESTART_STAGE:
+      this.restartStage();
+      break;
+    // ...
+  }
+}
+```
+
+### 修正箇所
+
+1. `src/scenes/PauseScene.ts`
+   - `executeConfirmAction()`メソッド内で、アクションをローカル変数に保存してからダイアログを閉じるように修正
+
+### 教訓
+
+- クロージャやコールバック内でオブジェクトのプロパティを参照する場合、参照タイミングに注意
+- 「先に状態を変更してから参照」というパターンでは、参照時に値が変わっている可能性がある
+- 特にUIの状態管理では、操作の順序が重要
+
+---
+
 ## テンプレート
 
 ### 問題の症状
