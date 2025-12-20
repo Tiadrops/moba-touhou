@@ -1781,6 +1781,13 @@ export class Rumia extends Boss {
     this.rSkillInvincibilityRemaining = rConfig.INVINCIBILITY_DURATION;
     // this.rSkillDirectionChangeTimer = 0;
 
+    // CC無効を付与（無敵中はスタン等を受けない）
+    this.applyStatusEffect({
+      type: StatusEffectType.CC_IMMUNE,
+      remainingTime: rConfig.INVINCIBILITY_DURATION,
+      source: 'rumia_r_skill',
+    });
+
     // 無敵時間中は黒球スプライトに変更（1m x 1m = 55px x 55px）
     this.anims.stop();
     this.setTexture('coma_rumia_rskill');

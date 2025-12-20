@@ -119,6 +119,7 @@ export const SCENES = {
   // デバッグ用シーン
   DEBUG_ROOM: 'DebugRoomScene',
   BULLET_TEST: 'BulletTestScene',
+  CUTIN_TEST: 'CutInTestScene',
 } as const;
 
 /**

@@ -61,9 +61,11 @@ rm old_file.ts
 - 画像サイズに応じて自動スケール（プレイエリア+50%余白）
 
 ### スペルカードカットイン演出
-- 実装: `src/ui/components/SpellCardCutIn.ts`
+- 実装V1: `src/ui/components/SpellCardCutIn.ts`
+- 実装V2: `src/ui/components/SpellCardCutInV2.ts`（現在使用中）
 - 呼び出し: `src/scenes/GameScene.ts` のフェーズ移行処理
 - 立ち絵読み込み: `src/scenes/BootScene.ts`
+- テスト: `src/scenes/debug/CutInTestScene.ts`
 - フォント: `fonts/SawarabiMincho-Regular.ttf`（さわらび明朝）
 - 詳細仕様: `docs/CUTIN_SYSTEM.md`
 
@@ -72,14 +74,23 @@ rm old_file.ts
 |-------|-----|---------|--------|
 | ルーミア | `cutin_rumia` | `img/Rumia/rumia_3.png` | 1920x810px |
 
-#### 演出パラメータ
+#### V2演出パラメータ（現在使用中）
+- フレームスライド: 300ms
+- テキスト流れ: 400ms
+- 瞼開き: 400ms
+- 表示時間: 1500ms
+- 退場: 300ms
+- 暗転濃さ: 60%
+- 色テーマ: 闇紅（borderColor: 0xff3366, bgColor1: 0x220011, bgColor2: 0x110008）
+- SE: `sound/se/spellcard.mp3`
+
+#### V1演出パラメータ（レガシー）
 - 暗転時間: 200ms
 - 登場アニメーション: 400ms
 - 表示時間: 1200ms
 - 退場アニメーション: 300ms
 - 立ち絵透明度: 75%
 - 暗転濃さ: 85%
-- SE: `sound/se/spellcard.mp3`
 
 ### ドキュメント
 - 弾幕仕様: `docs/BULLET_SYSTEM.md`
@@ -116,6 +127,27 @@ rm old_file.ts
 #### 該当コード
 - `Entity.getEffectiveMoveSpeed()`: 移動速度計算
 - 今後追加されるステータス計算も同様のポリシーに従う
+
+### ステータスエフェクト
+
+#### 利用可能なステータスエフェクト
+| タイプ | 説明 |
+|-------|------|
+| STUN | スタン（行動不能） |
+| SLOW | スロウ（移動速度低下） |
+| ROOT | ルート（移動不能） |
+| SILENCE | サイレンス（スキル使用不能） |
+| CC_IMMUNE | CC無効（スタン、スロウ、ルート、サイレンスを無効化） |
+
+#### 無敵とCC無効の分離
+- **無敵（Invincibility）**: ダメージを受けない
+- **CC無効（CC_IMMUNE）**: CCエフェクト（スタン、スロウ等）を受けない
+- 例: ルーミアRスキル中は「無敵 + CC無効」の両方を付与
+
+#### 実装箇所
+- ステータスエフェクト定義: `src/types/index.ts` の `StatusEffectType`
+- CC無効チェック: `src/entities/SkillProjectile.ts` の `isCCImmune()`
+- ルーミアRスキル: `src/entities/bosses/Rumia.ts` の `initializeRSkillExecution()`
 
 ## コーディング規約
 

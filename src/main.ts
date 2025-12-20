@@ -14,6 +14,7 @@ import { CreditScene } from '@/scenes/CreditScene';
 // デバッグ用シーン
 import { DebugRoomScene } from '@/scenes/debug/DebugRoomScene';
 import { BulletTestScene } from '@/scenes/debug/BulletTestScene';
+import { CutInTestScene } from '@/scenes/debug/CutInTestScene';
 import { GAME_CONFIG, PHYSICS_CONFIG, COLORS } from '@/config/GameConfig';
 
 /**
@@ -45,6 +46,7 @@ const config: Phaser.Types.Core.GameConfig = {
     // デバッグ用シーン
     DebugRoomScene,
     BulletTestScene,
+    CutInTestScene,
   ],
   fps: {
     target: GAME_CONFIG.TARGET_FPS,

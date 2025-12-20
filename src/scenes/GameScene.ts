@@ -10,7 +10,7 @@ import { AudioManager } from '@/systems/AudioManager';
 import { BulletPool } from '@/utils/ObjectPool';
 import { DamageCalculator } from '@/utils/DamageCalculator';
 import { UIManager } from '@/ui/UIManager';
-import { SpellCardCutIn } from '@/ui/components/SpellCardCutIn';
+import { SpellCardCutInV2 } from '@/ui/components/SpellCardCutInV2';
 import { CharacterType, EnemyType, BulletType, BossPhaseType } from '@/types';
 
 /**
@@ -35,7 +35,7 @@ export class GameScene extends Phaser.Scene {
   private rumia: Rumia | null = null; // ルーミア（ボス）
   private bulletTrailGraphics!: Phaser.GameObjects.Graphics; // 弾道補助線用
   private uiManager!: UIManager;
-  private spellCardCutIn!: SpellCardCutIn; // スペルカードカットイン演出
+  private spellCardCutIn!: SpellCardCutInV2; // スペルカードカットイン演出
 
   // 敵の生成管理
   private lastEnemySpawnTime: number = 0;
@@ -414,9 +414,11 @@ export class GameScene extends Phaser.Scene {
     const centerX = X + WIDTH / 2;
     const centerY = Y + HEIGHT / 4; // 上から1/4の位置
 
-    // スペルカードカットインを初期化
+    // スペルカードカットインを初期化（V2 + 闇紅テーマ）
     if (!this.spellCardCutIn) {
-      this.spellCardCutIn = new SpellCardCutIn(this);
+      this.spellCardCutIn = new SpellCardCutInV2(this);
+      // 闇紅カラーテーマを適用
+      this.spellCardCutIn.setColorTheme(0xff3366, 0x220011, 0x110008);
     }
 
     // ルーミアを生成

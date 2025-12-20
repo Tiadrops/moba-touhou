@@ -285,6 +285,16 @@ export class SkillProjectile extends Phaser.GameObjects.Container {
   }
 
   /**
+   * 対象がCC無効かどうかをチェック
+   */
+  private isCCImmune(target: Attackable): boolean {
+    if ('hasStatusEffect' in target) {
+      return (target as { hasStatusEffect: (type: StatusEffectType) => boolean }).hasStatusEffect(StatusEffectType.CC_IMMUNE);
+    }
+    return false;
+  }
+
+  /**
    * 対象にヒット（内部処理）
    */
   private onHitTargetInternal(target: Attackable): void {
@@ -295,8 +305,11 @@ export class SkillProjectile extends Phaser.GameObjects.Container {
     const finalDamage = Math.max(1, Math.floor(this.damage * defenseReduction));
     const didBreak = target.takeDamage(finalDamage);
 
-    // スタンを付与（applyStatusEffectがある場合のみ）
-    if (this.stunDuration > 0 && 'applyStatusEffect' in target) {
+    // CC無効チェック
+    const ccImmune = this.isCCImmune(target);
+
+    // スタンを付与（applyStatusEffectがある場合のみ、CC無効でない場合）
+    if (this.stunDuration > 0 && 'applyStatusEffect' in target && !ccImmune) {
       (target as { applyStatusEffect: (effect: { type: StatusEffectType; remainingTime: number; source: string; value?: number }) => void }).applyStatusEffect({
         type: StatusEffectType.STUN,
         remainingTime: this.stunDuration,
@@ -304,8 +317,8 @@ export class SkillProjectile extends Phaser.GameObjects.Container {
       });
     }
 
-    // スロウを付与（applyStatusEffectがある場合のみ）
-    if (this.slowDuration > 0 && this.slowAmount > 0 && 'applyStatusEffect' in target) {
+    // スロウを付与（applyStatusEffectがある場合のみ、CC無効でない場合）
+    if (this.slowDuration > 0 && this.slowAmount > 0 && 'applyStatusEffect' in target && !ccImmune) {
       (target as { applyStatusEffect: (effect: { type: StatusEffectType; remainingTime: number; source: string; value?: number }) => void }).applyStatusEffect({
         type: StatusEffectType.SLOW,
         remainingTime: this.slowDuration,
@@ -319,7 +332,7 @@ export class SkillProjectile extends Phaser.GameObjects.Container {
       this.onHitCallback(target, finalDamage, didBreak);
     }
 
-    console.log(`${this.skillSource} hit! Damage: ${finalDamage}, Stun: ${this.stunDuration}ms, Slow: ${this.slowAmount * 100}% for ${this.slowDuration}ms`);
+    console.log(`${this.skillSource} hit! Damage: ${finalDamage}, Stun: ${this.stunDuration}ms, Slow: ${this.slowAmount * 100}% for ${this.slowDuration}ms${ccImmune ? ' (CC immune)' : ''}`);
   }
 
   /**

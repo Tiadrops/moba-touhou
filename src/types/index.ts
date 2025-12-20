@@ -97,6 +97,7 @@ export enum StatusEffectType {
   SLOW = 'slow',               // スロウ（移動速度低下）
   ROOT = 'root',               // ルート（移動不可、スキル使用可）
   SILENCE = 'silence',         // サイレンス（スキル使用不可）
+  CC_IMMUNE = 'cc_immune',     // CC無効（スタン、スロウ、ルート、サイレンスを無効化）
 }
 
 // 状態異常情報

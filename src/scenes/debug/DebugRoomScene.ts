@@ -80,6 +80,7 @@ export class DebugRoomScene extends Phaser.Scene {
 
     this.menuOptions = [
       { text: '弾幕テスト', scene: SCENES.BULLET_TEST },
+      { text: 'カットインテスト', scene: SCENES.CUTIN_TEST },
       // 今後追加するメニュー
       // { text: 'キャラクターテスト', scene: SCENES.CHARACTER_TEST },
       // { text: 'ボステスト', scene: SCENES.BOSS_TEST },
