@@ -464,3 +464,78 @@ export interface StageInfo {
   hint: string;
   isUnlocked: boolean;
 }
+
+// ========================================
+// 道中Waveシステム関連の型定義
+// ========================================
+
+/**
+ * Wave ID (x-y-z形式)
+ * x: ステージ番号
+ * y: 道中Wave番号
+ * z: Wave内の枝番（サブウェーブ）
+ */
+export interface WaveId {
+  stage: number;      // x: ステージ番号
+  wave: number;       // y: 道中Wave番号
+  subWave: number;    // z: 枝番（サブウェーブ）
+}
+
+/**
+ * Wave報酬の種類
+ */
+export enum WaveRewardType {
+  HP_RECOVER = 'hp_recover',    // HP回復（即時）
+  EXTRA_LIFE = 'extra_life',    // 残機追加
+  SCORE_BONUS = 'score_bonus',  // スコアボーナス
+}
+
+/**
+ * Wave報酬設定
+ */
+export interface WaveReward {
+  type: WaveRewardType;
+  value: number;              // 回復量、残機数、スコア値など
+  displayName: string;        // 表示名
+}
+
+/**
+ * Waveクリア条件
+ */
+export enum WaveClearCondition {
+  FLAG_CARRIER_DEFEATED = 'flag_carrier_defeated',  // フラグ持ち撃破
+  ALL_ENEMIES_DEFEATED = 'all_enemies_defeated',    // 全敵撃破
+  TIME_ELAPSED = 'time_elapsed',                    // 時間経過
+}
+
+/**
+ * Wave実行状態
+ */
+export enum WaveState {
+  WAITING = 'waiting',          // 開始待ち
+  ACTIVE = 'active',            // 実行中
+  CLEARING = 'clearing',        // クリア演出中
+  COMPLETED = 'completed',      // 完了
+}
+
+/**
+ * Wave設定
+ */
+export interface WaveConfig {
+  id: WaveId;
+  clearCondition: WaveClearCondition;
+  rewards: WaveReward[];
+  isFinalWave: boolean;         // 最終Waveかどうか（trueならボス戦へ）
+  clearIntervalMs: number;      // クリア後インターバル（ms）
+}
+
+/**
+ * Wave実行情報
+ */
+export interface WaveExecution {
+  config: WaveConfig;
+  state: WaveState;
+  startTime: number;            // Wave開始時刻
+  clearTime?: number;           // クリア時刻
+  score: number;                // このWaveで獲得したスコア
+}

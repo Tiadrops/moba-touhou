@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SCENES, GAME_CONFIG, COLORS, DEPTH, UNIT } from '@/config/GameConfig';
+import { SCENES, GAME_CONFIG, COLORS, DEPTH, UNIT, WAVE_CONFIG } from '@/config/GameConfig';
 import { Player } from '@/entities/Player';
 import { Bullet } from '@/entities/Bullet';
 import { MobEnemy, MobGroupA, MobGroupB, MobGroupC } from '@/entities/mobs';
@@ -8,7 +8,7 @@ import { AudioManager } from '@/systems/AudioManager';
 import { BulletPool } from '@/utils/ObjectPool';
 import { DamageCalculator } from '@/utils/DamageCalculator';
 import { UIManager } from '@/ui/UIManager';
-import { CharacterType, BulletType, GameMode, Difficulty, GameStartData, StageIntroData } from '@/types';
+import { CharacterType, BulletType, GameMode, Difficulty, GameStartData, StageIntroData, WaveId, WaveState } from '@/types';
 import { PauseData } from './PauseScene';
 
 /**
@@ -42,12 +42,20 @@ export class MidStageScene extends Phaser.Scene {
   private allMobs: MobEnemy[] = [];
   private mobPhysicsGroup!: Phaser.Physics.Arcade.Group;
 
-  // ウェーブ管理
+  // ウェーブ管理（新階層構造）
   private stageStartTime: number = -1;  // -1 = 未初期化
   private score: number = 0;
-  private waveStarted: boolean[] = [];
-  private wave3B1Defeated: boolean = false;  // Wave 1-3のB-1が撃破されたか
-  private wave3B1Mob: MobGroupB | null = null;  // Wave 1-3のB-1の参照
+  private lives: number = 3;            // 残機
+  private currentWaveId: WaveId = { stage: 1, wave: 1, subWave: 0 };  // 現在のWave ID
+  private waveState: WaveState = WaveState.WAITING;
+  private waveStartTime: number = 0;    // 現在のWave開始時刻
+  private waveClearTime: number = 0;    // Waveクリア時刻
+  private waveScore: number = 0;        // 現在のWaveで獲得したスコア
+
+  // サブウェーブ管理（旧waveStarted配列の代替）
+  private subWaveStarted: boolean[] = [];
+  private wave3B1Defeated: boolean = false;  // Wave 1-1-3のB-1が撃破されたか
+  private wave3B1Mob: MobGroupB | null = null;  // Wave 1-1-3のB-1の参照
 
   // Wave弾幕発射管理
   private wave1_1Mobs: MobGroupA[] = [];
@@ -79,6 +87,12 @@ export class MidStageScene extends Phaser.Scene {
   private wave1_6B2DefeatedTime: number = 0;  // B2撃破時刻（0=未撃破）
   private wave1_6CDefeated: boolean = false;  // C撃破フラグ
 
+  // Waveクリア演出用UI
+  private waveClearOverlay: Phaser.GameObjects.Rectangle | null = null;
+  private waveClearText: Phaser.GameObjects.Text | null = null;
+  private waveRewardText: Phaser.GameObjects.Text | null = null;
+  private waveNextText: Phaser.GameObjects.Text | null = null;
+
   // ゲーム開始データ
   private gameStartData: GameStartData | null = null;
 
@@ -94,7 +108,16 @@ export class MidStageScene extends Phaser.Scene {
     // シーン再開始時のリセット
     this.stageStartTime = -1;  // -1 = 未初期化（最初のupdateで設定）
     this.score = 0;
-    this.waveStarted = [];
+    this.lives = data?.continueData?.lives ?? 3;
+
+    // Wave管理の初期化
+    this.currentWaveId = { stage: 1, wave: 1, subWave: 0 };
+    this.waveState = WaveState.WAITING;
+    this.waveStartTime = 0;
+    this.waveClearTime = 0;
+    this.waveScore = 0;
+    this.subWaveStarted = [];
+
     this.wave3B1Defeated = false;
     this.wave3B1Mob = null;
     this.mobsGroupA = [];
@@ -131,6 +154,12 @@ export class MidStageScene extends Phaser.Scene {
     this.wave1_6B1DefeatedTime = 0;
     this.wave1_6B2DefeatedTime = 0;
     this.wave1_6CDefeated = false;
+
+    // クリア演出UI
+    this.waveClearOverlay = null;
+    this.waveClearText = null;
+    this.waveRewardText = null;
+    this.waveNextText = null;
   }
 
   create(): void {
@@ -220,30 +249,59 @@ export class MidStageScene extends Phaser.Scene {
     // 最初のupdateでstageStartTimeを設定（UIのtimeScoreと同期）
     if (this.stageStartTime < 0) {
       this.stageStartTime = time;
+      this.waveStartTime = time;
+      this.waveState = WaveState.ACTIVE;
+      this.currentWaveId = { stage: 1, wave: 1, subWave: 1 };
       console.log(`[MidStageScene] stageStartTime initialized: ${time}ms`);
+      console.log(`[Wave ${this.getWaveIdString()}] 開始!`);
     }
-    const elapsedTime = time - this.stageStartTime;
 
-    // Wave 1-1: 開始1秒後
-    if (!this.waveStarted[0] && elapsedTime >= 1000) {
-      this.waveStarted[0] = true;
+    // Waveクリア演出中はスポーン処理をスキップ
+    if (this.waveState === WaveState.CLEARING) {
+      this.updateWaveClearInterval(time);
+      return;
+    }
+
+    const elapsedTime = time - this.waveStartTime;
+
+    // 現在のWaveに応じたサブウェーブ処理
+    if (this.currentWaveId.wave === 1) {
+      this.updateWave1SubWaves(time, elapsedTime);
+    } else if (this.currentWaveId.wave === 2) {
+      this.updateWave2SubWaves(time, elapsedTime);
+    }
+
+    // Wave弾幕発射の更新
+    this.updateWaveShooting(time);
+  }
+
+  /**
+   * Wave 1-1（サブウェーブ1-1-1〜1-1-6）の処理
+   */
+  private updateWave1SubWaves(time: number, elapsedTime: number): void {
+    // サブウェーブ 1-1-1: 開始1秒後
+    if (!this.subWaveStarted[0] && elapsedTime >= 1000) {
+      this.subWaveStarted[0] = true;
+      console.log(`[SubWave 1-1-1] 開始!`);
       this.spawnWave1_1();
     }
 
-    // Wave 1-2: 開始から7秒後
-    if (!this.waveStarted[1] && elapsedTime >= 7000) {
-      this.waveStarted[1] = true;
+    // サブウェーブ 1-1-2: 開始から7秒後
+    if (!this.subWaveStarted[1] && elapsedTime >= 7000) {
+      this.subWaveStarted[1] = true;
+      console.log(`[SubWave 1-1-2] 開始!`);
       this.spawnWave1_2();
     }
 
-    // Wave 1-3: 開始から20秒後
-    if (!this.waveStarted[2] && elapsedTime >= 20000) {
-      this.waveStarted[2] = true;
+    // サブウェーブ 1-1-3: 開始から20秒後
+    if (!this.subWaveStarted[2] && elapsedTime >= 20000) {
+      this.subWaveStarted[2] = true;
+      console.log(`[SubWave 1-1-3] 開始!`);
       this.spawnWave1_3();
     }
 
-    // Wave 1-4: Wave 1-3のB-1撃破後、または開始から35秒後
-    if (!this.waveStarted[3]) {
+    // サブウェーブ 1-1-4: Wave 1-1-3のB-1撃破後、または開始から35秒後
+    if (!this.subWaveStarted[3]) {
       // B-1が撃破されたかチェック
       if (this.wave3B1Mob && !this.wave3B1Mob.getIsActive() && !this.wave3B1Defeated) {
         this.wave3B1Defeated = true;
@@ -251,22 +309,23 @@ export class MidStageScene extends Phaser.Scene {
 
       // B-1撃破 or 35秒経過
       if (this.wave3B1Defeated || elapsedTime >= 35000) {
-        this.waveStarted[3] = true;
+        this.subWaveStarted[3] = true;
+        console.log(`[SubWave 1-1-4] 開始!`);
         this.spawnWave1_4();
       }
     }
 
-    // Wave 1-5: 開始から45秒後、1秒毎にA-1とA-3を1体ずつ、計20回
-    if (!this.waveStarted[4] && elapsedTime >= 45000) {
-      console.log(`[Wave 1-5] 開始! elapsedTime=${Math.floor(elapsedTime)}ms`);
-      this.waveStarted[4] = true;
+    // サブウェーブ 1-1-5: 開始から45秒後、1秒毎にA-1とA-3を1体ずつ、計20回
+    if (!this.subWaveStarted[4] && elapsedTime >= 45000) {
+      console.log(`[SubWave 1-1-5] 開始! elapsedTime=${Math.floor(elapsedTime)}ms`);
+      this.subWaveStarted[4] = true;
       this.wave1_5SpawnCount = 0;
       this.wave1_5LastSpawnTime = time;
       this.spawnWave1_5Pair();  // 最初の1ペアをすぐにスポーン
     }
 
-    // Wave 1-5の継続スポーン
-    if (this.waveStarted[4] && this.wave1_5SpawnCount < 20) {
+    // サブウェーブ 1-1-5の継続スポーン
+    if (this.subWaveStarted[4] && this.wave1_5SpawnCount < 20) {
       const timeSinceLastSpawn = time - this.wave1_5LastSpawnTime;
       if (timeSinceLastSpawn >= 1000) {  // 1秒毎
         this.wave1_5LastSpawnTime = time;
@@ -274,20 +333,153 @@ export class MidStageScene extends Phaser.Scene {
       }
     }
 
-    // Wave 1-6: 開始から70秒後、B1/B2/Cのフォーメーション
-    if (!this.waveStarted[5] && elapsedTime >= 70000) {
-      console.log(`[Wave 1-6] 開始! elapsedTime=${Math.floor(elapsedTime)}ms`);
-      this.waveStarted[5] = true;
+    // サブウェーブ 1-1-6: 開始から70秒後、B1/B2/Cのフォーメーション（フラグ持ち）
+    if (!this.subWaveStarted[5] && elapsedTime >= 70000) {
+      console.log(`[SubWave 1-1-6] 開始! elapsedTime=${Math.floor(elapsedTime)}ms`);
+      this.subWaveStarted[5] = true;
       this.spawnWave1_6();
     }
 
-    // Wave 1-6の更新（B1/B2リスポーン、C撃破チェック）
-    if (this.waveStarted[5] && !this.wave1_6CDefeated) {
+    // サブウェーブ 1-1-6の更新（B1/B2リスポーン、C撃破チェック）
+    if (this.subWaveStarted[5] && !this.wave1_6CDefeated) {
       this.updateWave1_6(time);
     }
+  }
 
-    // Wave弾幕発射の更新
-    this.updateWaveShooting(time);
+  /**
+   * Wave 1-2（サブウェーブ1-2-1〜）の処理
+   * TODO: Wave 1-2のサブウェーブ実装
+   */
+  private updateWave2SubWaves(time: number, elapsedTime: number): void {
+    // サブウェーブ 1-2-1: 開始1秒後（フラグ持ちを含む暫定実装）
+    if (!this.subWaveStarted[0] && elapsedTime >= 1000) {
+      this.subWaveStarted[0] = true;
+      console.log(`[SubWave 1-2-1] 開始!`);
+      this.spawnWave2_1();
+    }
+
+    // サブウェーブ 1-2-1の更新
+    if (this.subWaveStarted[0] && !this.wave1_6CDefeated) {
+      this.updateWave2_1(time);
+    }
+  }
+
+  /**
+   * Wave 1-2-1: 暫定実装（B1, B2, Cのフォーメーション）
+   */
+  private spawnWave2_1(): void {
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const centerX = X + WIDTH / 2;
+    const startY = Y - 50;
+    const targetY = Y + HEIGHT / 3;
+    const formationSpacing = 80;
+    const descendSpeed = 150;
+    const chaseSpeedB1 = 2 * UNIT.METER_TO_PIXEL;
+    const randomWalkSpeedB2 = 2 * UNIT.METER_TO_PIXEL;
+    const chaseSpeedC = 3.5 * UNIT.METER_TO_PIXEL;
+
+    // B1（左上）- 下降後、追尾移動
+    this.wave1_6MobB1 = this.getOrCreateMobB();
+    this.wave1_6MobB1.spawnDescendThenChaseWithPattern(
+      centerX - formationSpacing,
+      startY - formationSpacing / 2,
+      'B1',
+      targetY - formationSpacing / 2,
+      descendSpeed,
+      chaseSpeedB1
+    );
+
+    // B2（右上）- 下降後、ランダム移動
+    this.wave1_6MobB2 = this.getOrCreateMobB();
+    this.wave1_6MobB2.spawnDescendThenRandomWalkWithPattern(
+      centerX + formationSpacing,
+      startY - formationSpacing / 2,
+      'B2',
+      targetY - formationSpacing / 2,
+      descendSpeed,
+      randomWalkSpeedB2,
+      1200
+    );
+
+    // C（下中央）- 下降後、追尾移動
+    this.wave1_6MobC = this.getOrCreateMobC();
+    this.wave1_6MobC.spawnDescendThenChaseMode(
+      centerX,
+      startY + formationSpacing / 2,
+      targetY + formationSpacing / 2,
+      descendSpeed,
+      chaseSpeedC
+    );
+
+    // 撃破タイムをリセット
+    this.wave1_6B1DefeatedTime = 0;
+    this.wave1_6B2DefeatedTime = 0;
+    this.wave1_6CDefeated = false;
+  }
+
+  /**
+   * Wave 1-2-1の更新処理
+   */
+  private updateWave2_1(time: number): void {
+    // Wave 1-6と同じロジックを再利用
+    this.updateWave1_6(time);
+  }
+
+  /**
+   * Waveクリア後インターバルの更新
+   */
+  private updateWaveClearInterval(time: number): void {
+    const elapsed = time - this.waveClearTime;
+    const intervalMs = WAVE_CONFIG.CLEAR_INTERVAL_MS;
+
+    if (elapsed >= intervalMs) {
+      // インターバル終了、次のWaveへ
+      this.waveState = WaveState.COMPLETED;
+      this.hideWaveClearUI();
+      this.startNextWave(time);
+    }
+  }
+
+  /**
+   * 次のWaveを開始
+   */
+  private startNextWave(time: number): void {
+    const isFinalWave = this.currentWaveId.wave >= WAVE_CONFIG.STAGE_1.TOTAL_WAVES;
+
+    if (isFinalWave) {
+      // 最終Waveクリア → ボス戦へ
+      console.log(`[Wave ${this.getWaveIdString()}] 最終Wave完了! ボス戦へ移行`);
+      this.transitionToBossScene();
+      return;
+    }
+
+    // 次のWaveへ
+    this.currentWaveId = {
+      stage: this.currentWaveId.stage,
+      wave: this.currentWaveId.wave + 1,
+      subWave: 1,
+    };
+    this.waveState = WaveState.ACTIVE;
+    this.waveStartTime = time;
+    this.waveScore = 0;
+    this.subWaveStarted = [];
+
+    // Wave 1-6関連のリセット
+    this.wave1_6MobB1 = null;
+    this.wave1_6MobB2 = null;
+    this.wave1_6MobC = null;
+    this.wave1_6B1DefeatedTime = 0;
+    this.wave1_6B2DefeatedTime = 0;
+    this.wave1_6CDefeated = false;
+
+    console.log(`[Wave ${this.getWaveIdString()}] 開始!`);
+  }
+
+  /**
+   * Wave IDを文字列で取得（例: "1-1-6"）
+   */
+  private getWaveIdString(): string {
+    return `${this.currentWaveId.stage}-${this.currentWaveId.wave}-${this.currentWaveId.subWave}`;
   }
 
   /**
@@ -894,14 +1086,190 @@ export class MidStageScene extends Phaser.Scene {
    * フラグ持ち撃破時の処理
    */
   private onFlagCarrierDefeated(): void {
-    console.log('Flag carrier defeated! Transitioning to boss scene...');
+    const waveStr = `${this.currentWaveId.stage}-${this.currentWaveId.wave}`;
+    console.log(`[Wave ${waveStr}] フラグ持ち撃破! Waveクリア!`);
 
     // スコアを加算
     this.score += 1000;
+    this.waveScore += 1000;
 
-    // 少し待ってからボスシーンへ遷移
-    this.time.delayedCall(1500, () => {
-      this.transitionToBossScene();
+    // Waveクリア処理を開始
+    this.startWaveClear();
+  }
+
+  /**
+   * Waveクリア処理を開始
+   */
+  private startWaveClear(): void {
+    this.waveState = WaveState.CLEARING;
+    this.waveClearTime = this.time.now;
+
+    // 残っている敵弾を消去
+    this.clearAllEnemyBullets();
+
+    // 残っている雑魚敵を消滅
+    this.deactivateAllMobs();
+
+    // 報酬を適用
+    this.applyWaveRewards();
+
+    // クリア演出UIを表示
+    this.showWaveClearUI();
+  }
+
+  /**
+   * 全ての敵弾を消去
+   */
+  private clearAllEnemyBullets(): void {
+    if (!this.bulletPool) return;
+    const activeBullets = this.bulletPool.getActiveBullets();
+    for (const bullet of activeBullets) {
+      if (bullet.getBulletType() !== BulletType.PLAYER_NORMAL) {
+        bullet.deactivate();
+      }
+    }
+  }
+
+  /**
+   * 全ての雑魚敵を消滅
+   */
+  private deactivateAllMobs(): void {
+    for (const mob of this.allMobs) {
+      if (mob.getIsActive()) {
+        mob.deactivate();
+      }
+    }
+  }
+
+  /**
+   * Wave報酬を適用
+   */
+  private applyWaveRewards(): void {
+    const waveNum = this.currentWaveId.wave;
+    const rewards = waveNum === 1 ? WAVE_CONFIG.REWARDS.WAVE_1_1 : WAVE_CONFIG.REWARDS.WAVE_1_2;
+
+    // HP回復（Wave 1-1）
+    if ('HP_RECOVER_PERCENT' in rewards) {
+      const recoverAmount = Math.floor(this.player.getMaxHp() * rewards.HP_RECOVER_PERCENT / 100);
+      this.player.heal(recoverAmount);
+      console.log(`[Wave報酬] HP ${rewards.HP_RECOVER_PERCENT}% 回復 (+${recoverAmount})`);
+    }
+
+    // 残機追加（Wave 1-2）
+    if ('EXTRA_LIFE' in rewards) {
+      this.lives += rewards.EXTRA_LIFE;
+      console.log(`[Wave報酬] 残機 +${rewards.EXTRA_LIFE}`);
+    }
+
+    // スコアボーナス
+    if ('SCORE_BONUS' in rewards) {
+      this.score += rewards.SCORE_BONUS;
+      console.log(`[Wave報酬] スコアボーナス +${rewards.SCORE_BONUS}`);
+    }
+  }
+
+  /**
+   * Waveクリア演出UIを表示
+   */
+  private showWaveClearUI(): void {
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const centerX = X + WIDTH / 2;
+    const centerY = Y + HEIGHT / 2;
+
+    // 半透明オーバーレイ
+    this.waveClearOverlay = this.add.rectangle(
+      centerX,
+      centerY,
+      WIDTH,
+      HEIGHT,
+      0x000000,
+      0.5
+    );
+    this.waveClearOverlay.setDepth(DEPTH.UI - 10);
+
+    // Waveクリアテキスト
+    const waveStr = `${this.currentWaveId.stage}-${this.currentWaveId.wave}`;
+    this.waveClearText = this.add.text(centerX, centerY - 60, `Wave ${waveStr} クリア!`, {
+      font: 'bold 48px sans-serif',
+      color: '#ffff00',
+      stroke: '#000000',
+      strokeThickness: 4,
+    });
+    this.waveClearText.setOrigin(0.5);
+    this.waveClearText.setDepth(DEPTH.UI);
+
+    // 報酬テキスト
+    const waveNum = this.currentWaveId.wave;
+    const rewards = waveNum === 1 ? WAVE_CONFIG.REWARDS.WAVE_1_1 : WAVE_CONFIG.REWARDS.WAVE_1_2;
+    let rewardText = '';
+    if ('HP_RECOVER_PERCENT' in rewards) {
+      rewardText = `HP ${rewards.HP_RECOVER_PERCENT}% 回復!`;
+    } else if ('EXTRA_LIFE' in rewards) {
+      rewardText = `残機 +${rewards.EXTRA_LIFE}!`;
+    }
+
+    this.waveRewardText = this.add.text(centerX, centerY, rewardText, {
+      font: 'bold 36px sans-serif',
+      color: '#00ff00',
+      stroke: '#000000',
+      strokeThickness: 3,
+    });
+    this.waveRewardText.setOrigin(0.5);
+    this.waveRewardText.setDepth(DEPTH.UI);
+
+    // 次へ進むテキスト
+    const isFinalWave = this.currentWaveId.wave >= WAVE_CONFIG.STAGE_1.TOTAL_WAVES;
+    const nextText = isFinalWave ? 'ボス戦へ...' : `Wave ${this.currentWaveId.stage}-${this.currentWaveId.wave + 1} へ...`;
+    this.waveNextText = this.add.text(centerX, centerY + 60, nextText, {
+      font: '24px sans-serif',
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 2,
+    });
+    this.waveNextText.setOrigin(0.5);
+    this.waveNextText.setDepth(DEPTH.UI);
+
+    // フェードインアニメーション
+    this.waveClearOverlay.setAlpha(0);
+    this.waveClearText.setAlpha(0);
+    this.waveRewardText.setAlpha(0);
+    this.waveNextText.setAlpha(0);
+
+    this.tweens.add({
+      targets: [this.waveClearOverlay, this.waveClearText, this.waveRewardText, this.waveNextText],
+      alpha: 1,
+      duration: 500,
+      ease: 'Power2',
+    });
+
+    // SE再生
+    AudioManager.getInstance().playSe('se_spellcard');
+  }
+
+  /**
+   * Waveクリア演出UIを非表示
+   */
+  private hideWaveClearUI(): void {
+    const targets = [this.waveClearOverlay, this.waveClearText, this.waveRewardText, this.waveNextText]
+      .filter(t => t !== null);
+
+    if (targets.length === 0) return;
+
+    this.tweens.add({
+      targets,
+      alpha: 0,
+      duration: 300,
+      ease: 'Power2',
+      onComplete: () => {
+        this.waveClearOverlay?.destroy();
+        this.waveClearText?.destroy();
+        this.waveRewardText?.destroy();
+        this.waveNextText?.destroy();
+        this.waveClearOverlay = null;
+        this.waveClearText = null;
+        this.waveRewardText = null;
+        this.waveNextText = null;
+      }
     });
   }
 
@@ -1115,7 +1483,7 @@ export class MidStageScene extends Phaser.Scene {
     });
 
     // ウェーブ管理の初期化（stageStartTimeはupdateMobSpawningで最初のupdate時に設定）
-    this.waveStarted = [false, false, false, false, false, false];  // Wave 1-1 ~ 1-6
+    this.subWaveStarted = [false, false, false, false, false, false];  // SubWave 1-1-1 ~ 1-1-6
     this.wave3B1Defeated = false;
     this.wave3B1Mob = null;
 
@@ -1431,15 +1799,18 @@ export class MidStageScene extends Phaser.Scene {
       ? Math.floor((this.time.now - this.stageStartTime) / 1000)
       : 0;
 
+    const waveIdStr = this.getWaveIdString();
     this.debugText.setText([
       `Character: ${config.name}`,
       `HP: ${this.player.getCurrentHp()}/${this.player.getMaxHp()}`,
+      `Lives: ${this.lives}`,
       `Score: ${this.score}`,
       `Position: (${Math.round(this.player.x)}, ${Math.round(this.player.y)})`,
       `Bullets: ${bulletStats?.active || 0}/${bulletStats?.total || 0}`,
       `Active Mobs: ${activeMobs}`,
       `Elapsed: ${elapsedTime}s`,
-      `Wave: ${this.waveStarted.filter(w => w).length}/${this.waveStarted.length}`,
+      `Wave: ${waveIdStr} (${this.waveState})`,
+      `SubWaves: ${this.subWaveStarted.filter(w => w).length}/${this.subWaveStarted.length}`,
     ]);
   }
 
@@ -1452,7 +1823,7 @@ export class MidStageScene extends Phaser.Scene {
 
     const controlsText = this.add.text(centerX, y, [
       '【道中シーン】',
-      'フラグ持ち（ピンク色の敵）を撃破するとボス戦へ',
+      'フラグ持ち（ピンク色の敵）を撃破してWaveをクリアしよう!',
       '',
       '右クリック: 移動 / 左クリック: 攻撃',
       'Q/W/E/R: スキル',

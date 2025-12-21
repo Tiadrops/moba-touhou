@@ -97,27 +97,40 @@ rm old_file.ts
 - 雑魚敵クラス: `src/entities/mobs/`
   - 基底クラス: `MobEnemy.ts`
   - グループA: `MobGroupA.ts`（A1: 5way弾、A2: 11way×2列、A3: 狙い弾）
-  - グループB: `MobGroupB.ts`（B1: オーブ弾、B2: レーザー）
+  - グループB: `MobGroupB.ts`（B1: オーブ弾、B2: レーザー、B3: ラプチャー/スクリーム、B4: 固定射撃/ムービング/恐怖弾）
   - グループC: `MobGroupC.ts`（スキルA/B、フラグ持ち）
-- 設定: `src/config/GameConfig.ts` の `MOB_GROUP_CONFIG`, `MID_STAGE_CONFIG`
-- 型定義: `src/types/index.ts` の `MobGroupType`, `MobStats`
+- 設定: `src/config/GameConfig.ts` の `MOB_GROUP_CONFIG`, `MID_STAGE_CONFIG`, `WAVE_CONFIG`
+- 型定義: `src/types/index.ts` の `MobGroupType`, `MobStats`, `WaveId`, `WaveState`
+- 詳細仕様: `docs/MID_STAGE_SYSTEM.md`
+
+#### Wave管理システム（x-y-z形式）
+| 要素 | 説明 | 例 |
+|-----|------|-----|
+| x | ステージ番号 | 1 |
+| y | 道中Wave番号 | 1, 2 |
+| z | サブウェーブ番号 | 1〜6 |
+
+例: `1-1-6` = ステージ1、Wave1、サブウェーブ6
+
+#### ステージ1のWave構成
+| Wave | 内容 | フラグ持ち | クリア報酬 |
+|------|------|-----------|-----------|
+| Wave 1-1 | サブウェーブ6個 (1-1-1〜1-1-6) | 1-1-6にC | HP30%回復、スコア+5000 |
+| Wave 1-2 | サブウェーブ1個 (1-2-1) | 1-2-1にC | 残機+1、スコア+10000 |
 
 #### 雑魚グループステータス
 | グループ | HP | DEF | ATK | 生存時間 | 特徴 |
 |---------|-----|-----|-----|---------|------|
 | GROUP_A | 200 | 0 | 100 | 15秒 | A1(5way 8m/s), A2(11way×2 4m/s), A3(狙い弾) |
-| GROUP_B | 500 | 0 | 100 | 無制限 | B1(オーブ弾), B2(予告線→レーザー) |
-| GROUP_C | 1500 | 0 | 100 | 無制限 | フラグ持ち（撃破でボス移行）|
+| GROUP_B | 500 | 0 | 100 | 無制限 | B1(オーブ弾), B2(レーザー), B3(ラプチャー/スクリーム), B4(固定射撃/ムービング/恐怖弾) |
+| GROUP_C | 1500 | 0 | 100 | 無制限 | フラグ持ち（撃破でWaveクリア）|
 
-#### Wave構成（ステージ1道中）
-| Wave | 開始時間 | 内容 |
-|------|---------|------|
-| 1-1 | 1秒 | A-1×10（左上から、カーブ退場） |
-| 1-2 | 12秒 | A-2×10（右上から、カーブ退場） |
-| 1-3 | 22秒 | A-2×5 + B-1×1（中央フォーメーション） |
-| 1-4 | 35秒 | A-2×5 + B-2×1（中央フォーメーション） |
-| 1-5 | 45秒 | A-1+A-3を1秒毎×20（下降→発射→上昇） |
-| 1-6 | 70秒 | B1+B2+C（下降→追尾/ランダム移動、Cがフラグ持ち） |
+#### Waveクリアフロー
+1. フラグ持ち（C）撃破
+2. 残りの敵弾・雑魚敵を消去
+3. クリア演出UI表示（5秒間）
+4. 報酬適用（HP回復 or 残機追加）
+5. 次Wave開始 or ボス戦へ
 
 #### 移動パターン
 | パターン | 説明 |
@@ -136,9 +149,13 @@ rm old_file.ts
 
 #### シーン遷移フロー
 ```
-StageIntroScene → MidStageScene → GameScene（ボス戦）
-                ↑
-                └── 練習モード「ボスのみ」の場合は直接GameSceneへ
+StageIntroScene → MidStageScene（道中）
+                    ↓ Wave 1-1 クリア → 5秒インターバル
+                    ↓ Wave 1-2 クリア（最終Wave）
+                    ↓
+                  GameScene（ボス戦）
+                    ↑
+練習モード「ボスのみ」の場合は直接GameSceneへ
 ```
 
 ### ドキュメント
@@ -146,6 +163,7 @@ StageIntroScene → MidStageScene → GameScene（ボス戦）
 - ボスシステム: `docs/BOSS_SYSTEM.md`
 - ルーミアスキル: `docs/RUMIA_SKILLS.md`
 - カットイン演出: `docs/CUTIN_SYSTEM.md`
+- 道中システム: `docs/MID_STAGE_SYSTEM.md`
 - トラブルシューティング: `docs/TROUBLESHOOTING.md`
 
 ## ゲームバランス設計

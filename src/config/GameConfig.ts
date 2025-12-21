@@ -121,6 +121,7 @@ export const SCENES = {
   DEBUG_ROOM: 'DebugRoomScene',
   BULLET_TEST: 'BulletTestScene',
   CUTIN_TEST: 'CutInTestScene',
+  MOB_TEST: 'MobTestScene',
 } as const;
 
 /**
@@ -482,6 +483,50 @@ export const MID_STAGE_CONFIG = {
     MAX_MOBS: 15,
     // フェードアウト時間（ms）
     FADE_OUT_DURATION: 1000,
+  },
+} as const;
+
+/**
+ * Wave設定（道中の階層構造）
+ * Wave ID形式: x-y-z
+ *   x: ステージ番号
+ *   y: 道中Wave番号
+ *   z: Wave内の枝番（サブウェーブ）
+ */
+export const WAVE_CONFIG = {
+  // Wave間インターバル（ms）
+  CLEAR_INTERVAL_MS: 5000,
+
+  // Wave報酬設定
+  REWARDS: {
+    // Wave 1-1クリア報酬（HP回復）
+    WAVE_1_1: {
+      HP_RECOVER_PERCENT: 30,      // HP30%回復
+      SCORE_BONUS: 5000,           // スコアボーナス
+    },
+    // Wave 1-2クリア報酬（残機+1）
+    WAVE_1_2: {
+      EXTRA_LIFE: 1,               // 残機+1
+      SCORE_BONUS: 10000,          // スコアボーナス
+    },
+  },
+
+  // ステージ1のWave構成
+  STAGE_1: {
+    // Wave 1-1: サブウェーブ1-1-1〜1-1-6
+    WAVE_1: {
+      SUB_WAVES: 6,                 // サブウェーブ数
+      FINAL_SUB_WAVE: 6,            // フラグ持ちがいるサブウェーブ
+      IS_FINAL_WAVE: false,         // 最終Waveではない
+    },
+    // Wave 1-2: サブウェーブ1-2-1〜（今後追加）
+    WAVE_2: {
+      SUB_WAVES: 1,                 // サブウェーブ数（暫定）
+      FINAL_SUB_WAVE: 1,            // フラグ持ちがいるサブウェーブ
+      IS_FINAL_WAVE: true,          // 最終Wave（クリアでボス戦へ）
+    },
+    // 総Wave数
+    TOTAL_WAVES: 2,
   },
 } as const;
 

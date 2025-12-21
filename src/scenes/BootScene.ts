@@ -84,11 +84,15 @@ export class BootScene extends Phaser.Scene {
     this.load.spritesheet('fairy_a1', 'img/fairy/zakoC1.png', { frameWidth: 850, frameHeight: 1100 });
     this.load.spritesheet('fairy_a2', 'img/fairy/zakoC2.png', { frameWidth: 850, frameHeight: 1100 });
     this.load.spritesheet('fairy_a3', 'img/fairy/zakoC3.png', { frameWidth: 850, frameHeight: 1100 });
-    // GROUP_B用（パターンB-1, B-2）
+    // GROUP_B用（パターンB-1, B-2, B-3, B-4）
     this.load.spritesheet('fairy_b1', 'img/fairy/zakoB1.png', { frameWidth: 1584, frameHeight: 1344 });
     this.load.spritesheet('fairy_b2', 'img/fairy/zakoB2.png', { frameWidth: 1584, frameHeight: 1344 });
+    this.load.spritesheet('fairy_b3', 'img/fairy/zakoA1.png', { frameWidth: 1488, frameHeight: 1440 });
+    this.load.spritesheet('fairy_b4', 'img/fairy/zakoB1.png', { frameWidth: 1584, frameHeight: 1344 });
     // GROUP_C用（フラグ持ち）
     this.load.spritesheet('fairy_c', 'img/fairy/zakoA1.png', { frameWidth: 1488, frameHeight: 1440 });
+    // GROUP_C2用（Hisui）
+    this.load.spritesheet('fairy_c2', 'img/fairy/zakoA1.png', { frameWidth: 1488, frameHeight: 1440 });
 
     // BGM読み込み
     this.load.audio('bgm_title', 'sound/bgm/赤より紅い夢.mp3');
@@ -322,7 +326,7 @@ export class BootScene extends Phaser.Scene {
       frameRate: 2,
       repeat: -1,
     });
-    // GROUP_B用（パターンB-1, B-2）
+    // GROUP_B用（パターンB-1, B-2, B-3, B-4）
     this.anims.create({
       key: 'fairy_b1_idle',
       frames: this.anims.generateFrameNumbers('fairy_b1', { frames: [0, 1] }),
@@ -335,6 +339,18 @@ export class BootScene extends Phaser.Scene {
       frameRate: 2,
       repeat: -1,
     });
+    this.anims.create({
+      key: 'fairy_b3_idle',
+      frames: this.anims.generateFrameNumbers('fairy_b3', { frames: [0, 1] }),
+      frameRate: 2,
+      repeat: -1,
+    });
+    this.anims.create({
+      key: 'fairy_b4_idle',
+      frames: this.anims.generateFrameNumbers('fairy_b4', { frames: [0, 1] }),
+      frameRate: 2,
+      repeat: -1,
+    });
     // GROUP_C用（フラグ持ち）
     this.anims.create({
       key: 'fairy_c_idle',
@@ -342,7 +358,14 @@ export class BootScene extends Phaser.Scene {
       frameRate: 2,
       repeat: -1,
     });
+    // GROUP_C2用（Hisui）
+    this.anims.create({
+      key: 'fairy_c2_idle',
+      frames: this.anims.generateFrameNumbers('fairy_c2', { frames: [0, 1] }),
+      frameRate: 2,
+      repeat: -1,
+    });
 
-    console.log('Character animations created: reimu_idle, reimu_move, rumia_idle, rumia_cast, rumia_move, rumia_move_cast, fairy_a1-a3, fairy_b1-b2, fairy_c');
+    console.log('Character animations created: reimu_idle, reimu_move, rumia_idle, rumia_cast, rumia_move, rumia_move_cast, fairy_a1-a3, fairy_b1-b4, fairy_c, fairy_c2');
   }
 }
