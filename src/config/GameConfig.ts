@@ -122,6 +122,7 @@ export const SCENES = {
   BULLET_TEST: 'BulletTestScene',
   CUTIN_TEST: 'CutInTestScene',
   MOB_TEST: 'MobTestScene',
+  RESULT_TEST: 'ResultTestScene',
 } as const;
 
 /**
@@ -502,13 +503,33 @@ export const WAVE_CONFIG = {
     // Wave 1-1クリア報酬（HP回復）
     WAVE_1_1: {
       HP_RECOVER_PERCENT: 30,      // HP30%回復
-      SCORE_BONUS: 5000,           // スコアボーナス
+      SCORE_BONUS: 5000,           // スコアボーナス（基本報酬、リザルトには表示しない）
     },
     // Wave 1-2クリア報酬（残機+1）
     WAVE_1_2: {
       EXTRA_LIFE: 1,               // 残機+1
-      SCORE_BONUS: 10000,          // スコアボーナス
+      SCORE_BONUS: 10000,          // スコアボーナス（基本報酬、リザルトには表示しない）
     },
+  },
+
+  // Waveリザルト設定
+  RESULT: {
+    // タイムボーナス設定
+    TIME_BONUS: {
+      POINTS_PER_SECOND: 100,      // 1秒あたりのボーナスポイント
+      // 想定クリア時間（秒）- この時間より早いとボーナス
+      EXPECTED_CLEAR_TIME: {
+        WAVE_1_1: 90,              // Wave 1-1: 90秒（1-1-6が70秒で出現）
+        WAVE_1_2: 30,              // Wave 1-2: 30秒（暫定）
+      },
+    },
+    // ノーダメージボーナス設定
+    NO_DAMAGE_BONUS: {
+      WAVE_1_1: 5000,              // Wave 1-1: 5000点
+      WAVE_1_2: 10000,             // Wave 1-2: 10000点
+    },
+    // 表示時間（ms）
+    DISPLAY_DURATION: 5000,
   },
 
   // ステージ1のWave構成

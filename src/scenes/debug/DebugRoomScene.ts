@@ -82,6 +82,7 @@ export class DebugRoomScene extends Phaser.Scene {
       { text: '弾幕テスト', scene: SCENES.BULLET_TEST },
       { text: 'カットインテスト', scene: SCENES.CUTIN_TEST },
       { text: '雑魚弾幕テスト', scene: SCENES.MOB_TEST },
+      { text: 'リザルトテスト', scene: SCENES.RESULT_TEST },
       // 今後追加するメニュー
       // { text: 'キャラクターテスト', scene: SCENES.CHARACTER_TEST },
       // { text: 'ボステスト', scene: SCENES.BOSS_TEST },

@@ -52,6 +52,10 @@ export class MidStageScene extends Phaser.Scene {
   private waveClearTime: number = 0;    // Waveクリア時刻
   private waveScore: number = 0;        // 現在のWaveで獲得したスコア
 
+  // Wave統計（リザルト表示用）
+  private waveKillCount: number = 0;           // Wave中の撃破数
+  private waveDamageTaken: number = 0;         // Wave中の被ダメージ
+
   // サブウェーブ管理（旧waveStarted配列の代替）
   private subWaveStarted: boolean[] = [];
   private wave3B1Defeated: boolean = false;  // Wave 1-1-3のB-1が撃破されたか
@@ -92,6 +96,7 @@ export class MidStageScene extends Phaser.Scene {
   private waveClearText: Phaser.GameObjects.Text | null = null;
   private waveRewardText: Phaser.GameObjects.Text | null = null;
   private waveNextText: Phaser.GameObjects.Text | null = null;
+  private waveResultContainer: Phaser.GameObjects.Container | null = null;
 
   // ゲーム開始データ
   private gameStartData: GameStartData | null = null;
@@ -117,6 +122,10 @@ export class MidStageScene extends Phaser.Scene {
     this.waveClearTime = 0;
     this.waveScore = 0;
     this.subWaveStarted = [];
+
+    // Wave統計の初期化
+    this.waveKillCount = 0;
+    this.waveDamageTaken = 0;
 
     this.wave3B1Defeated = false;
     this.wave3B1Mob = null;
@@ -160,6 +169,7 @@ export class MidStageScene extends Phaser.Scene {
     this.waveClearText = null;
     this.waveRewardText = null;
     this.waveNextText = null;
+    this.waveResultContainer = null;
   }
 
   create(): void {
@@ -252,6 +262,9 @@ export class MidStageScene extends Phaser.Scene {
       this.waveStartTime = time;
       this.waveState = WaveState.ACTIVE;
       this.currentWaveId = { stage: 1, wave: 1, subWave: 1 };
+      // Wave統計の初期化
+      this.waveKillCount = 0;
+      this.waveDamageTaken = 0;
       console.log(`[MidStageScene] stageStartTime initialized: ${time}ms`);
       console.log(`[Wave ${this.getWaveIdString()}] 開始!`);
     }
@@ -463,6 +476,10 @@ export class MidStageScene extends Phaser.Scene {
     this.waveStartTime = time;
     this.waveScore = 0;
     this.subWaveStarted = [];
+
+    // Wave統計のリセット
+    this.waveKillCount = 0;
+    this.waveDamageTaken = 0;
 
     // Wave 1-6関連のリセット
     this.wave1_6MobB1 = null;
@@ -1176,6 +1193,9 @@ export class MidStageScene extends Phaser.Scene {
     const centerX = X + WIDTH / 2;
     const centerY = Y + HEIGHT / 2;
 
+    // スコア計算
+    const resultScores = this.calculateWaveResultScores();
+
     // 半透明オーバーレイ
     this.waveClearOverlay = this.add.rectangle(
       centerX,
@@ -1183,60 +1203,190 @@ export class MidStageScene extends Phaser.Scene {
       WIDTH,
       HEIGHT,
       0x000000,
-      0.5
+      0.7
     );
     this.waveClearOverlay.setDepth(DEPTH.UI - 10);
 
+    // コンテナを作成
+    this.waveResultContainer = this.add.container(centerX, centerY);
+    this.waveResultContainer.setDepth(DEPTH.UI);
+
+    // 上部の装飾ライン
+    const topLine = this.add.rectangle(0, -200, 600, 4, 0xffcc00);
+    this.waveResultContainer.add(topLine);
+
     // Waveクリアテキスト
     const waveStr = `${this.currentWaveId.stage}-${this.currentWaveId.wave}`;
-    this.waveClearText = this.add.text(centerX, centerY - 60, `Wave ${waveStr} クリア!`, {
-      font: 'bold 48px sans-serif',
+    this.waveClearText = this.add.text(0, -170, `Wave ${waveStr} クリア!`, {
+      font: 'bold 42px sans-serif',
       color: '#ffff00',
       stroke: '#000000',
       strokeThickness: 4,
     });
     this.waveClearText.setOrigin(0.5);
-    this.waveClearText.setDepth(DEPTH.UI);
+    this.waveResultContainer.add(this.waveClearText);
+
+    // 中央の装飾ライン
+    const midLine = this.add.rectangle(0, -135, 500, 2, 0x888888);
+    this.waveResultContainer.add(midLine);
+
+    // スコア内訳の開始Y座標
+    let scoreY = -100;
+    const lineHeight = 36;
+    const labelX = -180;
+    const valueX = 180;
+
+    // 撃破スコア
+    const killLabel = this.add.text(labelX, scoreY, '撃破スコア', {
+      font: '24px sans-serif',
+      color: '#ffffff',
+    });
+    killLabel.setOrigin(0, 0.5);
+    this.waveResultContainer.add(killLabel);
+
+    const killValue = this.add.text(valueX, scoreY, this.formatScore(resultScores.killScore), {
+      font: 'bold 24px sans-serif',
+      color: '#ffffff',
+    });
+    killValue.setOrigin(1, 0.5);
+    this.waveResultContainer.add(killValue);
+
+    const killDetail = this.add.text(valueX + 10, scoreY, `(${this.waveKillCount}体)`, {
+      font: '18px sans-serif',
+      color: '#aaaaaa',
+    });
+    killDetail.setOrigin(0, 0.5);
+    this.waveResultContainer.add(killDetail);
+
+    scoreY += lineHeight;
+
+    // タイムボーナス
+    const timeLabel = this.add.text(labelX, scoreY, 'タイムボーナス', {
+      font: '24px sans-serif',
+      color: '#ffffff',
+    });
+    timeLabel.setOrigin(0, 0.5);
+    this.waveResultContainer.add(timeLabel);
+
+    const timeBonusColor = resultScores.timeBonus > 0 ? '#00ff00' : '#ff6666';
+    const timeBonusPrefix = resultScores.timeBonus >= 0 ? '+' : '';
+    const timeValue = this.add.text(valueX, scoreY, `${timeBonusPrefix}${this.formatScore(resultScores.timeBonus)}`, {
+      font: 'bold 24px sans-serif',
+      color: timeBonusColor,
+    });
+    timeValue.setOrigin(1, 0.5);
+    this.waveResultContainer.add(timeValue);
+
+    const timeDetail = this.add.text(valueX + 10, scoreY, `(${resultScores.clearTimeSeconds}秒)`, {
+      font: '18px sans-serif',
+      color: '#aaaaaa',
+    });
+    timeDetail.setOrigin(0, 0.5);
+    this.waveResultContainer.add(timeDetail);
+
+    scoreY += lineHeight;
+
+    // ノーダメージボーナス
+    const noDamageLabel = this.add.text(labelX, scoreY, 'ノーダメボーナス', {
+      font: '24px sans-serif',
+      color: '#ffffff',
+    });
+    noDamageLabel.setOrigin(0, 0.5);
+    this.waveResultContainer.add(noDamageLabel);
+
+    const noDamageBonusColor = resultScores.noDamageBonus > 0 ? '#ffff00' : '#666666';
+    const noDamageValue = this.add.text(valueX, scoreY, resultScores.noDamageBonus > 0 ? `+${this.formatScore(resultScores.noDamageBonus)}` : '---', {
+      font: 'bold 24px sans-serif',
+      color: noDamageBonusColor,
+    });
+    noDamageValue.setOrigin(1, 0.5);
+    this.waveResultContainer.add(noDamageValue);
+
+    if (this.waveDamageTaken > 0) {
+      const damageDetail = this.add.text(valueX + 10, scoreY, `(被ダメ: ${this.waveDamageTaken})`, {
+        font: '18px sans-serif',
+        color: '#ff6666',
+      });
+      damageDetail.setOrigin(0, 0.5);
+      this.waveResultContainer.add(damageDetail);
+    }
+
+    scoreY += lineHeight + 10;
+
+    // 区切り線
+    const separatorLine = this.add.rectangle(0, scoreY, 400, 2, 0xffffff);
+    this.waveResultContainer.add(separatorLine);
+
+    scoreY += 20;
+
+    // Wave合計
+    const totalLabel = this.add.text(labelX, scoreY, 'Wave合計', {
+      font: 'bold 28px sans-serif',
+      color: '#ffcc00',
+    });
+    totalLabel.setOrigin(0, 0.5);
+    this.waveResultContainer.add(totalLabel);
+
+    const totalValue = this.add.text(valueX, scoreY, this.formatScore(resultScores.totalScore), {
+      font: 'bold 28px sans-serif',
+      color: '#ffcc00',
+    });
+    totalValue.setOrigin(1, 0.5);
+    this.waveResultContainer.add(totalValue);
+
+    scoreY += lineHeight + 20;
+
+    // 下部の装飾ライン
+    const bottomLine1 = this.add.rectangle(0, scoreY, 600, 4, 0xffcc00);
+    this.waveResultContainer.add(bottomLine1);
+
+    scoreY += 25;
 
     // 報酬テキスト
     const waveNum = this.currentWaveId.wave;
     const rewards = waveNum === 1 ? WAVE_CONFIG.REWARDS.WAVE_1_1 : WAVE_CONFIG.REWARDS.WAVE_1_2;
     let rewardText = '';
     if ('HP_RECOVER_PERCENT' in rewards) {
-      rewardText = `HP ${rewards.HP_RECOVER_PERCENT}% 回復!`;
+      rewardText = `報酬: HP ${rewards.HP_RECOVER_PERCENT}% 回復!`;
     } else if ('EXTRA_LIFE' in rewards) {
-      rewardText = `残機 +${rewards.EXTRA_LIFE}!`;
+      rewardText = `報酬: 残機 +${rewards.EXTRA_LIFE}!`;
     }
 
-    this.waveRewardText = this.add.text(centerX, centerY, rewardText, {
-      font: 'bold 36px sans-serif',
+    this.waveRewardText = this.add.text(0, scoreY, rewardText, {
+      font: 'bold 30px sans-serif',
       color: '#00ff00',
       stroke: '#000000',
       strokeThickness: 3,
     });
     this.waveRewardText.setOrigin(0.5);
-    this.waveRewardText.setDepth(DEPTH.UI);
+    this.waveResultContainer.add(this.waveRewardText);
+
+    scoreY += 50;
+
+    // 下部の装飾ライン
+    const bottomLine2 = this.add.rectangle(0, scoreY, 600, 4, 0xffcc00);
+    this.waveResultContainer.add(bottomLine2);
+
+    scoreY += 30;
 
     // 次へ進むテキスト
     const isFinalWave = this.currentWaveId.wave >= WAVE_CONFIG.STAGE_1.TOTAL_WAVES;
     const nextText = isFinalWave ? 'ボス戦へ...' : `Wave ${this.currentWaveId.stage}-${this.currentWaveId.wave + 1} へ...`;
-    this.waveNextText = this.add.text(centerX, centerY + 60, nextText, {
-      font: '24px sans-serif',
-      color: '#ffffff',
+    this.waveNextText = this.add.text(0, scoreY, nextText, {
+      font: '22px sans-serif',
+      color: '#aaaaaa',
       stroke: '#000000',
       strokeThickness: 2,
     });
     this.waveNextText.setOrigin(0.5);
-    this.waveNextText.setDepth(DEPTH.UI);
+    this.waveResultContainer.add(this.waveNextText);
 
     // フェードインアニメーション
     this.waveClearOverlay.setAlpha(0);
-    this.waveClearText.setAlpha(0);
-    this.waveRewardText.setAlpha(0);
-    this.waveNextText.setAlpha(0);
+    this.waveResultContainer.setAlpha(0);
 
     this.tweens.add({
-      targets: [this.waveClearOverlay, this.waveClearText, this.waveRewardText, this.waveNextText],
+      targets: [this.waveClearOverlay, this.waveResultContainer],
       alpha: 1,
       duration: 500,
       ease: 'Power2',
@@ -1244,13 +1394,70 @@ export class MidStageScene extends Phaser.Scene {
 
     // SE再生
     AudioManager.getInstance().playSe('se_spellcard');
+
+    // ボーナススコアを実際のスコアに加算
+    this.score += resultScores.timeBonus + resultScores.noDamageBonus;
+  }
+
+  /**
+   * Waveリザルトのスコアを計算
+   */
+  private calculateWaveResultScores(): {
+    killScore: number;
+    timeBonus: number;
+    noDamageBonus: number;
+    totalScore: number;
+    clearTimeSeconds: number;
+  } {
+    const waveNum = this.currentWaveId.wave;
+    const resultConfig = WAVE_CONFIG.RESULT;
+
+    // クリア時間（秒）
+    const clearTimeMs = this.waveClearTime - this.waveStartTime;
+    const clearTimeSeconds = Math.floor(clearTimeMs / 1000);
+
+    // 想定クリア時間
+    const expectedTime = waveNum === 1
+      ? resultConfig.TIME_BONUS.EXPECTED_CLEAR_TIME.WAVE_1_1
+      : resultConfig.TIME_BONUS.EXPECTED_CLEAR_TIME.WAVE_1_2;
+
+    // タイムボーナス: (想定時間 - 実際の時間) × ポイント/秒
+    const timeDiff = expectedTime - clearTimeSeconds;
+    const timeBonus = timeDiff * resultConfig.TIME_BONUS.POINTS_PER_SECOND;
+
+    // ノーダメージボーナス
+    const noDamageBonusValue = waveNum === 1
+      ? resultConfig.NO_DAMAGE_BONUS.WAVE_1_1
+      : resultConfig.NO_DAMAGE_BONUS.WAVE_1_2;
+    const noDamageBonus = this.waveDamageTaken === 0 ? noDamageBonusValue : 0;
+
+    // 撃破スコア（Wave中に獲得したスコア）
+    const killScore = this.waveScore;
+
+    // 合計
+    const totalScore = killScore + Math.max(0, timeBonus) + noDamageBonus;
+
+    return {
+      killScore,
+      timeBonus,
+      noDamageBonus,
+      totalScore,
+      clearTimeSeconds,
+    };
+  }
+
+  /**
+   * スコアをカンマ区切りでフォーマット
+   */
+  private formatScore(score: number): string {
+    return score.toLocaleString();
   }
 
   /**
    * Waveクリア演出UIを非表示
    */
   private hideWaveClearUI(): void {
-    const targets = [this.waveClearOverlay, this.waveClearText, this.waveRewardText, this.waveNextText]
+    const targets = [this.waveClearOverlay, this.waveResultContainer]
       .filter(t => t !== null);
 
     if (targets.length === 0) return;
@@ -1262,13 +1469,12 @@ export class MidStageScene extends Phaser.Scene {
       ease: 'Power2',
       onComplete: () => {
         this.waveClearOverlay?.destroy();
-        this.waveClearText?.destroy();
-        this.waveRewardText?.destroy();
-        this.waveNextText?.destroy();
+        this.waveResultContainer?.destroy();
         this.waveClearOverlay = null;
         this.waveClearText = null;
         this.waveRewardText = null;
         this.waveNextText = null;
+        this.waveResultContainer = null;
       }
     });
   }
@@ -1598,6 +1804,8 @@ export class MidStageScene extends Phaser.Scene {
 
         if (destroyed) {
           this.score += mob.getScoreValue();
+          this.waveScore += mob.getScoreValue();
+          this.waveKillCount++;
         }
       }
     );
@@ -1617,6 +1825,7 @@ export class MidStageScene extends Phaser.Scene {
         const finalDamage = Math.max(1, Math.floor(rawDamage * defenseReduction));
 
         this.player.takeDamage(finalDamage);
+        this.waveDamageTaken += finalDamage;  // 被ダメージを記録
         bullet.deactivate();
       }
     );
@@ -1654,6 +1863,8 @@ export class MidStageScene extends Phaser.Scene {
 
           if (destroyed) {
             this.score += mob.getScoreValue();
+            this.waveScore += mob.getScoreValue();
+            this.waveKillCount++;
           }
 
           // この弾は処理済みなので次の弾へ
@@ -1698,6 +1909,7 @@ export class MidStageScene extends Phaser.Scene {
     const defenseReduction = DamageCalculator.calculateDamageReduction(this.player.getDefense());
     const finalDamage = Math.max(1, Math.floor(data.damage * defenseReduction));
     this.player.takeDamage(finalDamage);
+    this.waveDamageTaken += finalDamage;  // 被ダメージを記録
 
     // 引き寄せ処理（スキルB）
     if (data.pull) {

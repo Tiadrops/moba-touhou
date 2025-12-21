@@ -129,8 +129,18 @@ rm old_file.ts
 1. フラグ持ち（C）撃破
 2. 残りの敵弾・雑魚敵を消去
 3. クリア演出UI表示（5秒間）
+   - スコア内訳（撃破スコア、タイムボーナス、ノーダメボーナス）
+   - Wave合計スコア
+   - 報酬内容
 4. 報酬適用（HP回復 or 残機追加）
 5. 次Wave開始 or ボス戦へ
+
+#### Waveクリアリザルト設定
+| 項目 | Wave 1-1 | Wave 1-2 |
+|------|----------|----------|
+| 想定クリア時間 | 90秒 | 30秒 |
+| タイムボーナス | (想定時間 - 実際の時間) × 100pt/秒 |
+| ノーダメボーナス | 5,000点 | 10,000点 |
 
 #### 移動パターン
 | パターン | 説明 |
@@ -157,6 +167,15 @@ StageIntroScene → MidStageScene（道中）
                     ↑
 練習モード「ボスのみ」の場合は直接GameSceneへ
 ```
+
+### デバッグシーン
+| シーン | 説明 | ファイル |
+|-------|------|---------|
+| DebugRoomScene | デバッグメニュー | `src/scenes/debug/DebugRoomScene.ts` |
+| BulletTestScene | 弾幕テスト | `src/scenes/debug/BulletTestScene.ts` |
+| CutInTestScene | カットイン演出テスト | `src/scenes/debug/CutInTestScene.ts` |
+| MobTestScene | 雑魚弾幕テスト | `src/scenes/debug/MobTestScene.ts` |
+| ResultTestScene | Waveリザルト演出テスト | `src/scenes/debug/ResultTestScene.ts` |
 
 ### ドキュメント
 - 弾幕仕様: `docs/BULLET_SYSTEM.md`

@@ -311,11 +311,11 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     this.target = null;
     this.setActive(false);
     this.setVisible(false);
-    this.setVelocity(0, 0);
 
-    // 物理ボディを無効化
+    // 物理ボディを無効化（bodyが存在する場合のみ）
     const body = this.body as Phaser.Physics.Arcade.Body;
     if (body) {
+      body.setVelocity(0, 0);
       body.enable = false;
     }
   }
