@@ -1,0 +1,1480 @@
+import Phaser from 'phaser';
+import { SCENES, GAME_CONFIG, COLORS, DEPTH, UNIT } from '@/config/GameConfig';
+import { Player } from '@/entities/Player';
+import { Bullet } from '@/entities/Bullet';
+import { MobEnemy, MobGroupA, MobGroupB, MobGroupC } from '@/entities/mobs';
+import { InputManager } from '@/systems/InputManager';
+import { AudioManager } from '@/systems/AudioManager';
+import { BulletPool } from '@/utils/ObjectPool';
+import { DamageCalculator } from '@/utils/DamageCalculator';
+import { UIManager } from '@/ui/UIManager';
+import { CharacterType, BulletType, GameMode, Difficulty, GameStartData, StageIntroData } from '@/types';
+import { PauseData } from './PauseScene';
+
+/**
+ * MidStageScene - 道中シーン
+ * - グループA/B/Cの雑魚敵が出現
+ * - フラグ持ち（グループC）を撃破するとボスシーンへ移行
+ * - 雑魚は生存時間経過でフェードアウト
+ */
+export class MidStageScene extends Phaser.Scene {
+  private playArea!: Phaser.GameObjects.Rectangle;
+  private fpsText!: Phaser.GameObjects.Text;
+  private infoText!: Phaser.GameObjects.Text;
+  private debugText!: Phaser.GameObjects.Text;
+
+  // 背景スクロール
+  private bgImage!: Phaser.GameObjects.Image;
+  private bgVelocityX: number = 8;
+  private bgVelocityY: number = 15;
+
+  // ゲームオブジェクト
+  private player!: Player;
+  private inputManager!: InputManager;
+  private bulletPool!: BulletPool;
+  private bulletTrailGraphics!: Phaser.GameObjects.Graphics;
+  private uiManager!: UIManager;
+
+  // 道中雑魚管理
+  private mobsGroupA: MobGroupA[] = [];
+  private mobsGroupB: MobGroupB[] = [];
+  private mobsGroupC: MobGroupC[] = [];
+  private allMobs: MobEnemy[] = [];
+  private mobPhysicsGroup!: Phaser.Physics.Arcade.Group;
+
+  // ウェーブ管理
+  private stageStartTime: number = -1;  // -1 = 未初期化
+  private score: number = 0;
+  private waveStarted: boolean[] = [];
+  private wave3B1Defeated: boolean = false;  // Wave 1-3のB-1が撃破されたか
+  private wave3B1Mob: MobGroupB | null = null;  // Wave 1-3のB-1の参照
+
+  // Wave弾幕発射管理
+  private wave1_1Mobs: MobGroupA[] = [];
+  private wave1_2Mobs: MobGroupA[] = [];
+  private wave1_3MobsA: MobGroupA[] = [];
+  private wave1_3MobB: MobGroupB | null = null;
+  private wave1_4MobsA: MobGroupA[] = [];
+  private wave1_4MobB: MobGroupB | null = null;
+  private wave1_1SpawnTime: number = 0;
+  private wave1_2SpawnTime: number = 0;
+  private wave1_3SpawnTime: number = 0;
+  private wave1_4SpawnTime: number = 0;
+  private wave1_1LastFireTime: number = 0;  // 最後の発射時刻（0=未発射）
+  private wave1_2LastFireTime: number = 0;
+  private wave1_3ALastFireTime: number = 0;  // Wave 1-3 A-2用
+  private wave1_3BLastFireTime: number = 0;  // Wave 1-3 B-1用
+  private wave1_4ALastFireTime: number = 0;  // Wave 1-4 A-2用
+  private wave1_4BLastFireTime: number = 0;  // Wave 1-4 B-2用
+
+  // Wave 1-5 管理
+  private wave1_5SpawnCount: number = 0;  // スポーン済み回数
+  private wave1_5LastSpawnTime: number = 0;  // 最後のスポーン時刻
+
+  // Wave 1-6 管理（B1, B2, Cのフォーメーション）
+  private wave1_6MobB1: MobGroupB | null = null;
+  private wave1_6MobB2: MobGroupB | null = null;
+  private wave1_6MobC: MobGroupC | null = null;
+  private wave1_6B1DefeatedTime: number = 0;  // B1撃破時刻（0=未撃破）
+  private wave1_6B2DefeatedTime: number = 0;  // B2撃破時刻（0=未撃破）
+  private wave1_6CDefeated: boolean = false;  // C撃破フラグ
+
+  // ゲーム開始データ
+  private gameStartData: GameStartData | null = null;
+
+  constructor() {
+    super({ key: SCENES.MID_STAGE });
+  }
+
+  init(data?: GameStartData): void {
+    if (data && Object.keys(data).length > 0) {
+      this.gameStartData = data;
+    }
+
+    // シーン再開始時のリセット
+    this.stageStartTime = -1;  // -1 = 未初期化（最初のupdateで設定）
+    this.score = 0;
+    this.waveStarted = [];
+    this.wave3B1Defeated = false;
+    this.wave3B1Mob = null;
+    this.mobsGroupA = [];
+    this.mobsGroupB = [];
+    this.mobsGroupC = [];
+    this.allMobs = [];
+
+    // Wave弾幕発射管理のリセット
+    this.wave1_1Mobs = [];
+    this.wave1_2Mobs = [];
+    this.wave1_3MobsA = [];
+    this.wave1_3MobB = null;
+    this.wave1_4MobsA = [];
+    this.wave1_4MobB = null;
+    this.wave1_1SpawnTime = 0;
+    this.wave1_2SpawnTime = 0;
+    this.wave1_3SpawnTime = 0;
+    this.wave1_4SpawnTime = 0;
+    this.wave1_1LastFireTime = 0;
+    this.wave1_2LastFireTime = 0;
+    this.wave1_3ALastFireTime = 0;
+    this.wave1_3BLastFireTime = 0;
+    this.wave1_4ALastFireTime = 0;
+    this.wave1_4BLastFireTime = 0;
+
+    // Wave 1-5
+    this.wave1_5SpawnCount = 0;
+    this.wave1_5LastSpawnTime = 0;
+
+    // Wave 1-6
+    this.wave1_6MobB1 = null;
+    this.wave1_6MobB2 = null;
+    this.wave1_6MobC = null;
+    this.wave1_6B1DefeatedTime = 0;
+    this.wave1_6B2DefeatedTime = 0;
+    this.wave1_6CDefeated = false;
+  }
+
+  create(): void {
+    // カメラのフェード状態をリセット
+    this.cameras.main.resetFX();
+    this.cameras.main.fadeIn(300);
+
+    // プレイエリアの作成
+    this.createPlayArea();
+
+    // デバッグ情報の表示
+    if (GAME_CONFIG.DEBUG) {
+      this.createDebugInfo();
+    }
+
+    // ゲームプレイを開始
+    this.startGameplay();
+    // stageStartTimeは最初のupdateMobSpawning()で設定される（UIのtimeScoreと同期）
+  }
+
+  update(time: number, delta: number): void {
+    // 背景スクロール
+    this.updateScrollingBackground(delta);
+
+    // FPS表示
+    if (GAME_CONFIG.DEBUG && this.fpsText) {
+      const fps = Math.round(this.game.loop.actualFps);
+      this.fpsText.setText(`FPS: ${fps}`);
+    }
+
+    // プレイヤーの更新
+    if (this.player) {
+      this.player.update(time, delta);
+    }
+
+    // 入力管理の更新
+    if (this.inputManager) {
+      this.inputManager.update(time, delta);
+    }
+
+    // 弾の更新
+    if (this.bulletPool) {
+      this.bulletPool.update();
+
+      // Rスキル範囲内の敵弾を消滅
+      if (this.player && this.player.getIsRSkillActive()) {
+        this.destroyEnemyBulletsInRSkillArea();
+      }
+
+      // 弾道補助線
+      if (GAME_CONFIG.SHOW_BULLET_TRAILS) {
+        this.drawBulletTrails();
+      }
+    }
+
+    // 道中雑魚の更新
+    for (const mob of this.allMobs) {
+      if (mob.getIsActive()) {
+        if (this.player) {
+          mob.setPlayerPosition(this.player.x, this.player.y);
+        }
+        mob.update(time, delta);
+      }
+    }
+
+    // 手動での衝突判定（プレイヤー弾 vs 雑魚）
+    this.checkBulletMobCollisions();
+
+    // 雑魚のスポーン
+    this.updateMobSpawning(time);
+
+    // デバッグ情報の更新
+    if (GAME_CONFIG.DEBUG && this.player && this.debugText) {
+      this.updateDebugText();
+    }
+
+    // UI更新
+    if (this.uiManager) {
+      this.uiManager.update(time, delta);
+    }
+  }
+
+  /**
+   * 道中雑魚のスポーン管理（ウェーブシステム）
+   */
+  private updateMobSpawning(time: number): void {
+    // 最初のupdateでstageStartTimeを設定（UIのtimeScoreと同期）
+    if (this.stageStartTime < 0) {
+      this.stageStartTime = time;
+      console.log(`[MidStageScene] stageStartTime initialized: ${time}ms`);
+    }
+    const elapsedTime = time - this.stageStartTime;
+
+    // Wave 1-1: 開始1秒後
+    if (!this.waveStarted[0] && elapsedTime >= 1000) {
+      this.waveStarted[0] = true;
+      this.spawnWave1_1();
+    }
+
+    // Wave 1-2: 開始から7秒後
+    if (!this.waveStarted[1] && elapsedTime >= 7000) {
+      this.waveStarted[1] = true;
+      this.spawnWave1_2();
+    }
+
+    // Wave 1-3: 開始から20秒後
+    if (!this.waveStarted[2] && elapsedTime >= 20000) {
+      this.waveStarted[2] = true;
+      this.spawnWave1_3();
+    }
+
+    // Wave 1-4: Wave 1-3のB-1撃破後、または開始から35秒後
+    if (!this.waveStarted[3]) {
+      // B-1が撃破されたかチェック
+      if (this.wave3B1Mob && !this.wave3B1Mob.getIsActive() && !this.wave3B1Defeated) {
+        this.wave3B1Defeated = true;
+      }
+
+      // B-1撃破 or 35秒経過
+      if (this.wave3B1Defeated || elapsedTime >= 35000) {
+        this.waveStarted[3] = true;
+        this.spawnWave1_4();
+      }
+    }
+
+    // Wave 1-5: 開始から45秒後、1秒毎にA-1とA-3を1体ずつ、計20回
+    if (!this.waveStarted[4] && elapsedTime >= 45000) {
+      console.log(`[Wave 1-5] 開始! elapsedTime=${Math.floor(elapsedTime)}ms`);
+      this.waveStarted[4] = true;
+      this.wave1_5SpawnCount = 0;
+      this.wave1_5LastSpawnTime = time;
+      this.spawnWave1_5Pair();  // 最初の1ペアをすぐにスポーン
+    }
+
+    // Wave 1-5の継続スポーン
+    if (this.waveStarted[4] && this.wave1_5SpawnCount < 20) {
+      const timeSinceLastSpawn = time - this.wave1_5LastSpawnTime;
+      if (timeSinceLastSpawn >= 1000) {  // 1秒毎
+        this.wave1_5LastSpawnTime = time;
+        this.spawnWave1_5Pair();
+      }
+    }
+
+    // Wave 1-6: 開始から70秒後、B1/B2/Cのフォーメーション
+    if (!this.waveStarted[5] && elapsedTime >= 70000) {
+      console.log(`[Wave 1-6] 開始! elapsedTime=${Math.floor(elapsedTime)}ms`);
+      this.waveStarted[5] = true;
+      this.spawnWave1_6();
+    }
+
+    // Wave 1-6の更新（B1/B2リスポーン、C撃破チェック）
+    if (this.waveStarted[5] && !this.wave1_6CDefeated) {
+      this.updateWave1_6(time);
+    }
+
+    // Wave弾幕発射の更新
+    this.updateWaveShooting(time);
+  }
+
+  /**
+   * Wave制御による弾幕発射の更新
+   */
+  private updateWaveShooting(time: number): void {
+    // Wave 1-1: 登場+1秒後に最初の発射、その後5秒毎
+    if (this.wave1_1SpawnTime > 0) {
+      const timeSinceSpawn = time - this.wave1_1SpawnTime;
+      const timeSinceLastFire = time - this.wave1_1LastFireTime;
+      // 最初の発射は登場+1秒後
+      if (this.wave1_1LastFireTime === 0 && timeSinceSpawn >= 1000) {
+        this.wave1_1LastFireTime = time;
+        this.fireWave1_1();
+      } else if (this.wave1_1LastFireTime > 0 && timeSinceLastFire >= 5000) {
+        this.wave1_1LastFireTime = time;
+        this.fireWave1_1();
+      }
+    }
+
+    // Wave 1-2: 登場+1秒後に最初の発射、その後5秒毎
+    if (this.wave1_2SpawnTime > 0) {
+      const timeSinceSpawn = time - this.wave1_2SpawnTime;
+      const timeSinceLastFire = time - this.wave1_2LastFireTime;
+      // 最初の発射は登場+1秒後
+      if (this.wave1_2LastFireTime === 0 && timeSinceSpawn >= 1000) {
+        this.wave1_2LastFireTime = time;
+        this.fireWave1_2();
+      } else if (this.wave1_2LastFireTime > 0 && timeSinceLastFire >= 5000) {
+        this.wave1_2LastFireTime = time;
+        this.fireWave1_2();
+      }
+    }
+
+    // Wave 1-3: A-2は8秒毎、B-1は4秒毎
+    if (this.wave1_3SpawnTime > 0) {
+      const timeSinceSpawn = time - this.wave1_3SpawnTime;
+
+      // A-2（MobGroupA）: 登場+1秒後に最初の発射、その後8秒毎
+      const timeSinceLastFireA = time - this.wave1_3ALastFireTime;
+      if (this.wave1_3ALastFireTime === 0 && timeSinceSpawn >= 1000) {
+        console.log(`[Wave1-3 A-2] 初回発射 time=${Math.floor(time)}ms`);
+        this.wave1_3ALastFireTime = time;
+        this.fireWave1_3A();
+      } else if (this.wave1_3ALastFireTime > 0 && timeSinceLastFireA >= 8000) {
+        console.log(`[Wave1-3 A-2] 発射 interval=${Math.floor(timeSinceLastFireA)}ms (目標: 8000ms)`);
+        this.wave1_3ALastFireTime = time;
+        this.fireWave1_3A();
+      }
+
+      // B-1（MobGroupB）: 登場+1秒後に最初の発射、その後4秒毎
+      const timeSinceLastFireB = time - this.wave1_3BLastFireTime;
+      if (this.wave1_3BLastFireTime === 0 && timeSinceSpawn >= 1000) {
+        this.wave1_3BLastFireTime = time;
+        this.fireWave1_3B();
+      } else if (this.wave1_3BLastFireTime > 0 && timeSinceLastFireB >= 4000) {
+        this.wave1_3BLastFireTime = time;
+        this.fireWave1_3B();
+      }
+    }
+
+    // Wave 1-4: A-2は8秒毎、B-2は4秒毎
+    if (this.wave1_4SpawnTime > 0) {
+      const timeSinceSpawn = time - this.wave1_4SpawnTime;
+
+      // A-2（MobGroupA）: 登場+1秒後に最初の発射、その後8秒毎
+      const timeSinceLastFireA = time - this.wave1_4ALastFireTime;
+      if (this.wave1_4ALastFireTime === 0 && timeSinceSpawn >= 1000) {
+        console.log(`[Wave1-4 A-2] 初回発射 time=${Math.floor(time)}ms`);
+        this.wave1_4ALastFireTime = time;
+        this.fireWave1_4A();
+      } else if (this.wave1_4ALastFireTime > 0 && timeSinceLastFireA >= 8000) {
+        console.log(`[Wave1-4 A-2] 発射 interval=${Math.floor(timeSinceLastFireA)}ms (目標: 8000ms)`);
+        this.wave1_4ALastFireTime = time;
+        this.fireWave1_4A();
+      }
+
+      // B-2（MobGroupB）: 登場+1秒後に最初の発射、その後4秒毎
+      const timeSinceLastFireB = time - this.wave1_4BLastFireTime;
+      if (this.wave1_4BLastFireTime === 0 && timeSinceSpawn >= 1000) {
+        this.wave1_4BLastFireTime = time;
+        this.fireWave1_4B();
+      } else if (this.wave1_4BLastFireTime > 0 && timeSinceLastFireB >= 4000) {
+        this.wave1_4BLastFireTime = time;
+        this.fireWave1_4B();
+      }
+    }
+  }
+
+  /**
+   * Wave 1-1の弾幕発射
+   */
+  private fireWave1_1(): void {
+    for (const mob of this.wave1_1Mobs) {
+      // アクティブかつA-1パターンのみ発射（再利用されたMobを除外）
+      if (mob.getIsActive() && mob.getPatternType() === 'A1') {
+        mob.shoot();
+      }
+    }
+  }
+
+  /**
+   * Wave 1-2の弾幕発射
+   */
+  private fireWave1_2(): void {
+    for (const mob of this.wave1_2Mobs) {
+      // アクティブかつA-1パターンのみ発射（再利用されたMobを除外）
+      if (mob.getIsActive() && mob.getPatternType() === 'A1') {
+        mob.shoot();
+      }
+    }
+  }
+
+  /**
+   * Wave 1-3のA-2弾幕発射（8秒毎）
+   */
+  private fireWave1_3A(): void {
+    for (const mob of this.wave1_3MobsA) {
+      // アクティブかつA-2パターンのみ発射（再利用されたMobを除外）
+      if (mob.getIsActive() && mob.getPatternType() === 'A2') {
+        mob.shoot();
+      }
+    }
+  }
+
+  /**
+   * Wave 1-3のB-1弾幕発射（4秒毎）
+   */
+  private fireWave1_3B(): void {
+    if (this.wave1_3MobB && this.wave1_3MobB.getIsActive()) {
+      this.wave1_3MobB.shoot();
+    }
+  }
+
+  /**
+   * Wave 1-4のA-2弾幕発射（8秒毎）
+   */
+  private fireWave1_4A(): void {
+    for (const mob of this.wave1_4MobsA) {
+      // アクティブかつA-2パターンのみ発射（再利用されたMobを除外）
+      if (mob.getIsActive() && mob.getPatternType() === 'A2') {
+        mob.shoot();
+      }
+    }
+  }
+
+  /**
+   * Wave 1-4のB-2弾幕発射（4秒毎）
+   */
+  private fireWave1_4B(): void {
+    if (this.wave1_4MobB && this.wave1_4MobB.getIsActive()) {
+      this.wave1_4MobB.shoot();
+    }
+  }
+
+  /**
+   * MobGroupAを取得または作成
+   */
+  private getOrCreateMobA(): MobGroupA {
+    for (const m of this.mobsGroupA) {
+      if (!m.getIsActive()) {
+        return m;
+      }
+    }
+
+    const mob = new MobGroupA(this, 0, 0);
+    mob.setBulletPool(this.bulletPool);
+    this.mobsGroupA.push(mob);
+    this.allMobs.push(mob);
+    this.mobPhysicsGroup.add(mob);
+    return mob;
+  }
+
+  /**
+   * MobGroupBを取得または作成
+   */
+  private getOrCreateMobB(): MobGroupB {
+    for (const m of this.mobsGroupB) {
+      if (!m.getIsActive()) {
+        return m;
+      }
+    }
+
+    const mob = new MobGroupB(this, 0, 0);
+    mob.setBulletPool(this.bulletPool);
+    this.mobsGroupB.push(mob);
+    this.allMobs.push(mob);
+    this.mobPhysicsGroup.add(mob);
+    return mob;
+  }
+
+  /**
+   * MobGroupCを取得または作成
+   */
+  private getOrCreateMobC(): MobGroupC {
+    for (const m of this.mobsGroupC) {
+      if (!m.getIsActive()) {
+        return m;
+      }
+    }
+
+    const mob = new MobGroupC(this, 0, 0);
+    mob.setBulletPool(this.bulletPool);
+    this.mobsGroupC.push(mob);
+    this.allMobs.push(mob);
+    this.mobPhysicsGroup.add(mob);
+    return mob;
+  }
+
+  /**
+   * Wave 1-1: 左上からA-1×10
+   * 2列×5体
+   * 画面の1/3まで下りてから右にカーブして退場
+   * 弾幕発射: 登場+1秒後、その後5秒毎
+   */
+  private spawnWave1_1(): void {
+    const { X, Y, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+
+    // Wave追跡用配列をリセット
+    this.wave1_1Mobs = [];
+    this.wave1_1SpawnTime = this.time.now;
+    this.wave1_1LastFireTime = 0;
+
+    // 左上から出現
+    const startX = X + 80;  // 左寄り
+    const startY = Y - 50;
+    const spacing = 35;  // 妖精同士の間隔
+
+    // 速度設定
+    const velocityY = 60;  // 下方向速度（px/s）
+    const curveAtY = Y + HEIGHT / 3;  // 画面の1/3でカーブ開始
+    const exitVelocityX = 150;  // 右方向に退場（px/s）
+    const curveDuration = 1500;  // カーブに1.5秒
+
+    // 2列×5体のA-1を配置
+    for (let col = 0; col < 2; col++) {
+      for (let row = 0; row < 5; row++) {
+        const mob = this.getOrCreateMobA();
+        const offsetX = col * spacing;
+        const offsetY = -row * spacing;  // 上に向かって配置
+        mob.spawnPassThroughCurveWithPattern(
+          startX + offsetX,
+          startY + offsetY,
+          'A1',
+          velocityY,
+          curveAtY,
+          exitVelocityX,
+          curveDuration
+        );
+        mob.setAutoShoot(false);  // 自動発射を無効化
+        this.wave1_1Mobs.push(mob);
+      }
+    }
+  }
+
+  /**
+   * Wave 1-2: 右上からA-1×10
+   * 2列×5体
+   * 画面の1/3まで下りてから左にカーブして退場
+   * 弾幕発射: 登場+1秒後、その後5秒毎
+   */
+  private spawnWave1_2(): void {
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+
+    // Wave追跡用配列をリセット
+    this.wave1_2Mobs = [];
+    this.wave1_2SpawnTime = this.time.now;
+    this.wave1_2LastFireTime = 0;
+
+    // 右上から出現
+    const startX = X + WIDTH - 80;  // 右寄り
+    const startY = Y - 50;
+    const spacing = 35;
+
+    // 速度設定
+    const velocityY = 60;  // 下方向速度（px/s）
+    const curveAtY = Y + HEIGHT / 3;  // 画面の1/3でカーブ開始
+    const exitVelocityX = -150;  // 左方向に退場（px/s）
+    const curveDuration = 1500;  // カーブに1.5秒
+
+    // 2列×5体のA-1を配置
+    for (let col = 0; col < 2; col++) {
+      for (let row = 0; row < 5; row++) {
+        const mob = this.getOrCreateMobA();
+        const offsetX = -col * spacing;  // 右から左へ
+        const offsetY = -row * spacing;
+        mob.spawnPassThroughCurveWithPattern(
+          startX + offsetX,
+          startY + offsetY,
+          'A1',
+          velocityY,
+          curveAtY,
+          exitVelocityX,
+          curveDuration
+        );
+        mob.setAutoShoot(false);  // 自動発射を無効化
+        this.wave1_2Mobs.push(mob);
+      }
+    }
+  }
+
+  /**
+   * Wave 1-3: 左寄りから陣形で出現
+   * ◯　◯
+   * 　△
+   * ◯=A-2, △=B-1
+   * 2.5秒で中央まで移動後停止
+   * 弾幕発射: A-2は8秒毎、B-1は4秒毎
+   */
+  private spawnWave1_3(): void {
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+
+    // Wave追跡用配列をリセット
+    this.wave1_3MobsA = [];
+    this.wave1_3MobB = null;
+    this.wave1_3SpawnTime = this.time.now;
+    this.wave1_3ALastFireTime = 0;
+    this.wave1_3BLastFireTime = 0;
+
+    // 左寄りに配置（Wave 1-4と被らないように）
+    const centerX = X + WIDTH / 3;  // 左1/3の位置
+    const startY = Y - 50;
+    const targetY = Y + HEIGHT / 3;  // 画面上部1/3の位置で停止
+    const formationSpacing = 60;
+
+    // A-2×2（上の2体）
+    const mobA1 = this.getOrCreateMobA();
+    mobA1.spawnWithPattern(
+      centerX - formationSpacing,
+      startY,
+      'A2',
+      targetY - formationSpacing / 2,
+      'straight'
+    );
+    mobA1.setAutoShoot(false);  // 自動発射を無効化
+    this.wave1_3MobsA.push(mobA1);
+
+    const mobA2 = this.getOrCreateMobA();
+    mobA2.spawnWithPattern(
+      centerX + formationSpacing,
+      startY,
+      'A2',
+      targetY - formationSpacing / 2,
+      'straight'
+    );
+    mobA2.setAutoShoot(false);  // 自動発射を無効化
+    this.wave1_3MobsA.push(mobA2);
+
+    // B-1（下の1体）
+    const mobB = this.getOrCreateMobB();
+    mobB.spawnWithPattern(
+      centerX,
+      startY + formationSpacing,
+      'B1',
+      targetY + formationSpacing / 2,
+      'straight'
+    );
+    mobB.setAutoShoot(false);  // 自動発射を無効化
+    this.wave1_3MobB = mobB;
+
+    // Wave 1-4トリガー用に参照を保持
+    this.wave3B1Mob = mobB;
+  }
+
+  /**
+   * Wave 1-4: 右寄りから陣形で出現
+   * ◯　◯
+   * 　△
+   * ◯=A-2, △=B-2
+   * 2.5秒で中央まで移動後停止
+   * 弾幕発射: A-2は8秒毎、B-2は4秒毎
+   */
+  private spawnWave1_4(): void {
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+
+    // Wave追跡用配列をリセット
+    this.wave1_4MobsA = [];
+    this.wave1_4MobB = null;
+    this.wave1_4SpawnTime = this.time.now;
+    this.wave1_4ALastFireTime = 0;
+    this.wave1_4BLastFireTime = 0;
+
+    // 右寄りに配置（Wave 1-3と被らないように）
+    const centerX = X + WIDTH * 2 / 3;  // 右1/3の位置
+    const startY = Y - 50;
+    const targetY = Y + HEIGHT / 3;
+    const formationSpacing = 60;
+
+    // A-2×2（上の2体）
+    const mobA1 = this.getOrCreateMobA();
+    mobA1.spawnWithPattern(
+      centerX - formationSpacing,
+      startY,
+      'A2',
+      targetY - formationSpacing / 2,
+      'straight'
+    );
+    mobA1.setAutoShoot(false);  // 自動発射を無効化
+    this.wave1_4MobsA.push(mobA1);
+
+    const mobA2 = this.getOrCreateMobA();
+    mobA2.spawnWithPattern(
+      centerX + formationSpacing,
+      startY,
+      'A2',
+      targetY - formationSpacing / 2,
+      'straight'
+    );
+    mobA2.setAutoShoot(false);  // 自動発射を無効化
+    this.wave1_4MobsA.push(mobA2);
+
+    // B-2（下の1体）
+    const mobB = this.getOrCreateMobB();
+    mobB.spawnWithPattern(
+      centerX,
+      startY + formationSpacing,
+      'B2',
+      targetY + formationSpacing / 2,
+      'straight'
+    );
+    mobB.setAutoShoot(false);  // 自動発射を無効化
+    this.wave1_4MobB = mobB;
+  }
+
+  /**
+   * Wave 1-5: A-1とA-3を1体ずつスポーン
+   * 下降 → 画面5/4の高さで弾幕発射 → 上昇して退場
+   */
+  private spawnWave1_5Pair(): void {
+    if (this.wave1_5SpawnCount >= 20) return;
+
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const startY = Y - 50;  // 画面上部から開始
+    // 画面の1/4の位置で発射
+    const shootTargetY = Y + HEIGHT / 4;
+
+    // ランダムなX座標（画面幅内でマージンを取る）
+    const margin = 60;
+    const randomX1 = X + margin + Math.random() * (WIDTH - margin * 2);
+    const randomX2 = X + margin + Math.random() * (WIDTH - margin * 2);
+
+    // 移動速度
+    const descendSpeed = 120;  // 下降速度
+    const ascendSpeed = 150;   // 上昇速度
+
+    // A-1をスポーン
+    const mobA1 = this.getOrCreateMobA();
+    mobA1.spawnDescendShootAscendWithPattern(
+      randomX1,
+      startY,
+      'A1',
+      shootTargetY,
+      descendSpeed,
+      ascendSpeed
+    );
+
+    // A-3をスポーン
+    const mobA3 = this.getOrCreateMobA();
+    mobA3.spawnDescendShootAscendWithPattern(
+      randomX2,
+      startY,
+      'A3',
+      shootTargetY,
+      descendSpeed,
+      ascendSpeed
+    );
+
+    this.wave1_5SpawnCount++;
+  }
+
+  /**
+   * Wave 1-6: B1, B2, Cのフォーメーション
+   * B1  B2
+   *   C
+   * 画面上部から出現し、下降後にプレイヤーに向かって移動
+   */
+  private spawnWave1_6(): void {
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const centerX = X + WIDTH / 2;
+    const startY = Y - 50;  // 画面上部（画面外）からスタート
+    const targetY = Y + HEIGHT / 3;  // 下降目標: 画面上部1/3の位置
+
+    const formationSpacing = 80;  // フォーメーションの間隔
+    const descendSpeed = 150;  // 下降速度（px/s）
+    const chaseSpeedB1 = 1.5 * UNIT.METER_TO_PIXEL;  // B1: 1.5m/s（追尾）
+    const randomWalkSpeedB2 = 1.5 * UNIT.METER_TO_PIXEL;  // B2: 1.5m/s（ランダム移動）
+    const chaseSpeedC = 3 * UNIT.METER_TO_PIXEL;    // C: 3m/s
+
+    // B1（左上）- 下降後、追尾移動
+    this.wave1_6MobB1 = this.getOrCreateMobB();
+    this.wave1_6MobB1.spawnDescendThenChaseWithPattern(
+      centerX - formationSpacing,
+      startY - formationSpacing / 2,
+      'B1',
+      targetY - formationSpacing / 2,
+      descendSpeed,
+      chaseSpeedB1
+    );
+
+    // B2（右上）- 下降後、ランダム移動
+    this.wave1_6MobB2 = this.getOrCreateMobB();
+    this.wave1_6MobB2.spawnDescendThenRandomWalkWithPattern(
+      centerX + formationSpacing,
+      startY - formationSpacing / 2,
+      'B2',
+      targetY - formationSpacing / 2,
+      descendSpeed,
+      randomWalkSpeedB2,
+      1500  // 1.5秒ごとに方向変更
+    );
+
+    // C（下中央）- 下降後、追尾移動
+    this.wave1_6MobC = this.getOrCreateMobC();
+    this.wave1_6MobC.spawnDescendThenChaseMode(
+      centerX,
+      startY + formationSpacing / 2,
+      targetY + formationSpacing / 2,
+      descendSpeed,
+      chaseSpeedC
+    );
+
+    // 撃破タイムをリセット
+    this.wave1_6B1DefeatedTime = 0;
+    this.wave1_6B2DefeatedTime = 0;
+    this.wave1_6CDefeated = false;
+  }
+
+  /**
+   * Wave 1-6の更新処理
+   * - B1/B2の撃破後5秒でリスポーン
+   * - C撃破でB1/B2も消滅
+   */
+  private updateWave1_6(time: number): void {
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const centerX = X + WIDTH / 2;
+    const startY = Y - 50;  // 画面上部（画面外）からスタート
+    const targetY = Y + HEIGHT / 3;  // 下降目標: 画面上部1/3の位置
+    const formationSpacing = 80;
+    const descendSpeed = 150;  // 下降速度（px/s）
+    const chaseSpeedB1 = 1.5 * UNIT.METER_TO_PIXEL;  // B1: 1.5m/s（追尾）
+    const randomWalkSpeedB2 = 1.5 * UNIT.METER_TO_PIXEL;  // B2: 1.5m/s（ランダム移動）
+    const respawnDelay = 5000;  // 5秒
+
+    // Cが撃破されたかチェック
+    if (this.wave1_6MobC && !this.wave1_6MobC.getIsActive() && !this.wave1_6CDefeated) {
+      this.wave1_6CDefeated = true;
+      console.log('[Wave 1-6] C撃破! B1/B2を消滅させます');
+
+      // B1/B2を強制消滅
+      if (this.wave1_6MobB1 && this.wave1_6MobB1.getIsActive()) {
+        this.wave1_6MobB1.deactivate();
+      }
+      if (this.wave1_6MobB2 && this.wave1_6MobB2.getIsActive()) {
+        this.wave1_6MobB2.deactivate();
+      }
+      return;
+    }
+
+    // B1の撃破チェック＆リスポーン（下降→追尾移動）
+    if (this.wave1_6MobB1 && !this.wave1_6MobB1.getIsActive()) {
+      if (this.wave1_6B1DefeatedTime === 0) {
+        this.wave1_6B1DefeatedTime = time;
+        console.log('[Wave 1-6] B1撃破! 5秒後にリスポーン');
+      } else if (time - this.wave1_6B1DefeatedTime >= respawnDelay) {
+        // リスポーン
+        this.wave1_6MobB1 = this.getOrCreateMobB();
+        this.wave1_6MobB1.spawnDescendThenChaseWithPattern(
+          centerX - formationSpacing,
+          startY - formationSpacing / 2,
+          'B1',
+          targetY - formationSpacing / 2,
+          descendSpeed,
+          chaseSpeedB1
+        );
+        this.wave1_6B1DefeatedTime = 0;
+        console.log('[Wave 1-6] B1リスポーン!');
+      }
+    }
+
+    // B2の撃破チェック＆リスポーン（下降→ランダム移動）
+    if (this.wave1_6MobB2 && !this.wave1_6MobB2.getIsActive()) {
+      if (this.wave1_6B2DefeatedTime === 0) {
+        this.wave1_6B2DefeatedTime = time;
+        console.log('[Wave 1-6] B2撃破! 5秒後にリスポーン');
+      } else if (time - this.wave1_6B2DefeatedTime >= respawnDelay) {
+        // リスポーン
+        this.wave1_6MobB2 = this.getOrCreateMobB();
+        this.wave1_6MobB2.spawnDescendThenRandomWalkWithPattern(
+          centerX + formationSpacing,
+          startY - formationSpacing / 2,
+          'B2',
+          targetY - formationSpacing / 2,
+          descendSpeed,
+          randomWalkSpeedB2,
+          1500  // 1.5秒ごとに方向変更
+        );
+        this.wave1_6B2DefeatedTime = 0;
+        console.log('[Wave 1-6] B2リスポーン!');
+      }
+    }
+  }
+
+  /**
+   * フラグ持ち撃破時の処理
+   */
+  private onFlagCarrierDefeated(): void {
+    console.log('Flag carrier defeated! Transitioning to boss scene...');
+
+    // スコアを加算
+    this.score += 1000;
+
+    // 少し待ってからボスシーンへ遷移
+    this.time.delayedCall(1500, () => {
+      this.transitionToBossScene();
+    });
+  }
+
+  /**
+   * ボスシーンへ遷移
+   */
+  private transitionToBossScene(): void {
+    // ゲームデータを引き継いでGameSceneへ
+    const gameData: GameStartData = this.gameStartData ?? {
+      mode: GameMode.ARCADE,
+      character: CharacterType.REIMU,
+      difficulty: Difficulty.NORMAL,
+      stageNumber: 1,
+      summonerSkills: {
+        D: 'flash' as any,
+        F: 'heal' as any,
+      },
+    };
+
+    // スコアを引き継ぎ（continueDataに保存）
+    gameData.continueData = {
+      score: this.score,
+      lives: 3, // TODO: 実際の残機を引き継ぐ
+    };
+
+    this.cameras.main.fadeOut(500, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.scene.start(SCENES.GAME, gameData);
+    });
+  }
+
+  /**
+   * プレイエリアを作成
+   */
+  private createPlayArea(): void {
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+
+    this.playArea = this.add.rectangle(
+      X,
+      Y,
+      WIDTH,
+      HEIGHT,
+      COLORS.PLAY_AREA_BG
+    );
+    this.playArea.setOrigin(0, 0);
+    this.playArea.setDepth(DEPTH.BACKGROUND);
+
+    this.createScrollingBackground();
+
+    const border = this.add.graphics();
+    border.lineStyle(2, COLORS.PLAY_AREA_BORDER, 1);
+    border.strokeRect(X, Y, WIDTH, HEIGHT);
+    border.setDepth(DEPTH.PLAY_AREA);
+  }
+
+  /**
+   * スクロール背景を作成
+   */
+  private createScrollingBackground(): void {
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const centerX = X + WIDTH / 2;
+    const centerY = Y + HEIGHT / 2;
+
+    if (!this.textures.exists('bg_stage1')) {
+      console.warn('bg_stage1 texture not found');
+      return;
+    }
+
+    const bgTexture = this.textures.get('bg_stage1');
+    const bgFrame = bgTexture.get();
+    const bgOriginalWidth = bgFrame.width;
+    const bgOriginalHeight = bgFrame.height;
+
+    const scaleX = (WIDTH * 1.5) / bgOriginalWidth;
+    const scaleY = (HEIGHT * 1.5) / bgOriginalHeight;
+    const scale = Math.max(scaleX, scaleY);
+
+    this.bgImage = this.add.image(centerX, centerY, 'bg_stage1');
+    this.bgImage.setOrigin(0.5, 0.5);
+    this.bgImage.setScale(scale);
+    this.bgImage.setDepth(DEPTH.PLAY_AREA);
+
+    const maskGraphics = this.make.graphics({ x: 0, y: 0 });
+    maskGraphics.fillStyle(0xffffff);
+    maskGraphics.fillRect(X, Y, WIDTH, HEIGHT);
+    const mask = maskGraphics.createGeometryMask();
+    this.bgImage.setMask(mask);
+  }
+
+  /**
+   * 背景スクロールを更新
+   */
+  private updateScrollingBackground(delta: number): void {
+    if (!this.bgImage) return;
+
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const centerX = X + WIDTH / 2;
+    const centerY = Y + HEIGHT / 2;
+
+    const imgHalfWidth = this.bgImage.displayWidth / 2;
+    const imgHalfHeight = this.bgImage.displayHeight / 2;
+
+    const maxOffsetX = imgHalfWidth - WIDTH / 2;
+    const maxOffsetY = imgHalfHeight - HEIGHT / 2;
+
+    const deltaSeconds = delta / 1000;
+    this.bgImage.x += this.bgVelocityX * deltaSeconds;
+    this.bgImage.y += this.bgVelocityY * deltaSeconds;
+
+    if (this.bgImage.x <= centerX - maxOffsetX) {
+      this.bgImage.x = centerX - maxOffsetX;
+      this.bgVelocityX = Math.abs(this.bgVelocityX);
+    } else if (this.bgImage.x >= centerX + maxOffsetX) {
+      this.bgImage.x = centerX + maxOffsetX;
+      this.bgVelocityX = -Math.abs(this.bgVelocityX);
+    }
+
+    if (this.bgImage.y <= centerY - maxOffsetY) {
+      this.bgImage.y = centerY - maxOffsetY;
+      this.bgVelocityY = Math.abs(this.bgVelocityY);
+    } else if (this.bgImage.y >= centerY + maxOffsetY) {
+      this.bgImage.y = centerY + maxOffsetY;
+      this.bgVelocityY = -Math.abs(this.bgVelocityY);
+    }
+  }
+
+  /**
+   * デバッグ情報の表示
+   */
+  private createDebugInfo(): void {
+    this.fpsText = this.add.text(10, 10, 'FPS: 60', {
+      font: '16px monospace',
+      color: '#00ff00',
+    });
+    this.fpsText.setDepth(DEPTH.UI);
+
+    this.infoText = this.add.text(10, 40, [
+      `Resolution: ${GAME_CONFIG.WIDTH}x${GAME_CONFIG.HEIGHT}`,
+      `Play Area: ${GAME_CONFIG.PLAY_AREA.WIDTH}x${GAME_CONFIG.PLAY_AREA.HEIGHT}`,
+      `Scene: MidStageScene`,
+      '',
+      'Debug Mode: ON',
+    ], {
+      font: '14px monospace',
+      color: '#ffffff',
+      backgroundColor: '#000000aa',
+      padding: { x: 5, y: 5 },
+    });
+    this.infoText.setDepth(DEPTH.UI);
+  }
+
+  /**
+   * ゲームプレイ開始
+   */
+  private startGameplay(): void {
+    // 道中BGMを再生
+    const audioManager = AudioManager.getInstance();
+    audioManager.setScene(this);
+    audioManager.playBgm('bgm_stage1'); // Stage1 道中BGM（赤より紅い夢）
+
+    // 弾プールを作成
+    this.bulletPool = new BulletPool(this, 50, 5000);
+
+    // 弾道補助線用のGraphics
+    this.bulletTrailGraphics = this.add.graphics();
+    this.bulletTrailGraphics.setDepth(DEPTH.BULLETS_PLAYER - 1);
+
+    // 道中雑魚プールを初期化
+    this.initMobPools();
+
+    // プレイヤーを生成
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const playerX = X + WIDTH / 2;
+    const playerY = Y + HEIGHT - 100;
+
+    this.player = new Player(this, playerX, playerY, CharacterType.REIMU);
+    this.player.setBulletPool(this.bulletPool);
+    // 道中雑魚を攻撃対象として設定
+    this.player.setMobs(this.allMobs);
+
+    // 入力管理システム
+    this.inputManager = new InputManager(this, this.player);
+
+    // 衝突判定
+    this.setupCollisions();
+
+    // デバッグ情報
+    if (GAME_CONFIG.DEBUG) {
+      this.createPlayerDebugInfo();
+    }
+
+    // UIマネージャー
+    this.uiManager = new UIManager(this, this.player);
+
+    // ポーズ入力
+    this.setupPauseInput();
+
+    // フラグ持ち撃破イベント
+    this.events.on('flag-carrier-defeated', () => {
+      this.onFlagCarrierDefeated();
+    });
+
+    // 雑魚スキルヒットイベント（MobGroupCのスキルA/B）
+    this.events.on('mob-skill-hit', (data: {
+      mob: MobEnemy;
+      damage: number;
+      skillType: 'A' | 'B';
+      pull?: { targetX: number; targetY: number; distance: number; duration: number };
+    }) => {
+      this.onMobSkillHit(data);
+    });
+
+    // ウェーブ管理の初期化（stageStartTimeはupdateMobSpawningで最初のupdate時に設定）
+    this.waveStarted = [false, false, false, false, false, false];  // Wave 1-1 ~ 1-6
+    this.wave3B1Defeated = false;
+    this.wave3B1Mob = null;
+
+    // 操作説明
+    this.showControls();
+  }
+
+  /**
+   * 道中雑魚プールを初期化
+   */
+  private initMobPools(): void {
+    // Physicsグループを作成
+    this.mobPhysicsGroup = this.physics.add.group();
+
+    // 各グループを事前に数体作成
+    for (let i = 0; i < 5; i++) {
+      const mobA = new MobGroupA(this, 0, 0);
+      mobA.deactivate();
+      mobA.setBulletPool(this.bulletPool);
+      this.mobsGroupA.push(mobA);
+      this.allMobs.push(mobA);
+      this.mobPhysicsGroup.add(mobA);
+    }
+
+    for (let i = 0; i < 3; i++) {
+      const mobB = new MobGroupB(this, 0, 0);
+      mobB.deactivate();
+      mobB.setBulletPool(this.bulletPool);
+      this.mobsGroupB.push(mobB);
+      this.allMobs.push(mobB);
+      this.mobPhysicsGroup.add(mobB);
+    }
+
+    // フラグ持ちは1体
+    const mobC = new MobGroupC(this, 0, 0);
+    mobC.deactivate();
+    mobC.setBulletPool(this.bulletPool);
+    this.mobsGroupC.push(mobC);
+    this.allMobs.push(mobC);
+    this.mobPhysicsGroup.add(mobC);
+  }
+
+  /**
+   * ポーズ入力の設定
+   */
+  private setupPauseInput(): void {
+    this.input.keyboard?.on('keydown-SPACE', () => {
+      this.openPauseMenu();
+    });
+
+    this.input.keyboard?.on('keydown-ESC', () => {
+      this.openPauseMenu();
+    });
+  }
+
+  /**
+   * ポーズメニューを開く
+   */
+  private openPauseMenu(): void {
+    if (this.scene.isPaused(SCENES.MID_STAGE)) {
+      return;
+    }
+
+    AudioManager.getInstance().playSe('se_pause');
+    this.scene.pause();
+
+    const retryData: StageIntroData = this.gameStartData ? {
+      mode: this.gameStartData.mode,
+      character: this.gameStartData.character,
+      difficulty: this.gameStartData.difficulty,
+      stageNumber: this.gameStartData.stageNumber,
+      continueData: this.gameStartData.continueData,
+      practiceConfig: this.gameStartData.practiceConfig,
+    } : {
+      mode: GameMode.ARCADE,
+      character: CharacterType.REIMU,
+      difficulty: Difficulty.NORMAL,
+      stageNumber: 1,
+    };
+
+    const pauseData: PauseData = {
+      retryData,
+      player: this.player,
+      boss: null,
+    };
+
+    this.scene.launch(SCENES.PAUSE, pauseData);
+  }
+
+  /**
+   * 衝突判定を設定
+   */
+  private setupCollisions(): void {
+    // プレイヤー弾と道中雑魚の衝突（配列を直接使用）
+    this.physics.add.overlap(
+      this.allMobs,
+      this.bulletPool.getGroup(),
+      (mobObj, bulletObj) => {
+        const mob = mobObj as MobEnemy;
+        const bullet = bulletObj as Bullet;
+
+        if (!bullet.getIsActive()) return;
+        if (!mob.getIsActive()) return;
+        if (bullet.getBulletType() !== BulletType.PLAYER_NORMAL) return;
+
+        const rawDamage = bullet.getDamage();
+        const defenseReduction = DamageCalculator.calculateDamageReduction(mob.getDefense());
+        const finalDamage = Math.max(1, Math.floor(rawDamage * defenseReduction));
+
+        const destroyed = mob.takeDamage(finalDamage);
+        bullet.deactivate();
+
+        if (destroyed) {
+          this.score += mob.getScoreValue();
+        }
+      }
+    );
+
+    // 敵弾とプレイヤーの衝突
+    this.physics.add.overlap(
+      this.player,
+      this.bulletPool.getGroup(),
+      (_playerObj, bulletObj) => {
+        const bullet = bulletObj as Bullet;
+
+        if (!bullet.getIsActive()) return;
+        if (bullet.getBulletType() === BulletType.PLAYER_NORMAL) return;
+
+        const rawDamage = bullet.getDamage();
+        const defenseReduction = DamageCalculator.calculateDamageReduction(this.player.getDefense());
+        const finalDamage = Math.max(1, Math.floor(rawDamage * defenseReduction));
+
+        this.player.takeDamage(finalDamage);
+        bullet.deactivate();
+      }
+    );
+  }
+
+  /**
+   * 手動での衝突判定（プレイヤー弾 vs 雑魚敵）
+   */
+  private checkBulletMobCollisions(): void {
+    const activeBullets = this.bulletPool.getActiveBullets();
+    const activeMobs = this.allMobs.filter(m => m.getIsActive());
+
+    for (const bullet of activeBullets) {
+      if (!bullet.getIsActive()) continue;
+      if (bullet.getBulletType() !== BulletType.PLAYER_NORMAL) continue;
+
+      // 弾のヒットボックス（中心からの半径）
+      const bulletRadius = 8; // プレイヤー弾の大まかなサイズ
+
+      for (const mob of activeMobs) {
+        // 円と円の衝突判定
+        const dx = bullet.x - mob.x;
+        const dy = bullet.y - mob.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const hitDistance = bulletRadius + mob.getHitboxRadius();
+
+        if (distance < hitDistance) {
+          // 衝突！
+          const rawDamage = bullet.getDamage();
+          const defenseReduction = DamageCalculator.calculateDamageReduction(mob.getDefense());
+          const finalDamage = Math.max(1, Math.floor(rawDamage * defenseReduction));
+
+          const destroyed = mob.takeDamage(finalDamage);
+          bullet.deactivate();
+
+          if (destroyed) {
+            this.score += mob.getScoreValue();
+          }
+
+          // この弾は処理済みなので次の弾へ
+          break;
+        }
+      }
+    }
+  }
+
+  /**
+   * Rスキル範囲内の敵弾を消滅させる
+   */
+  private destroyEnemyBulletsInRSkillArea(): void {
+    const rSkillArea = this.player.getRSkillArea();
+    if (!rSkillArea) return;
+
+    const halfSize = rSkillArea.size / 2;
+    const activeBullets = this.bulletPool.getActiveBullets();
+
+    for (const bullet of activeBullets) {
+      if (bullet.getBulletType() === BulletType.PLAYER_NORMAL) continue;
+
+      if (Math.abs(bullet.x - rSkillArea.x) <= halfSize &&
+          Math.abs(bullet.y - rSkillArea.y) <= halfSize) {
+        bullet.deactivate();
+      }
+    }
+  }
+
+  /**
+   * 雑魚スキルヒット時の処理
+   */
+  private onMobSkillHit(data: {
+    mob: MobEnemy;
+    damage: number;
+    skillType: 'A' | 'B';
+    pull?: { targetX: number; targetY: number; distance: number; duration: number };
+  }): void {
+    if (!this.player) return;
+
+    // ダメージを与える
+    const defenseReduction = DamageCalculator.calculateDamageReduction(this.player.getDefense());
+    const finalDamage = Math.max(1, Math.floor(data.damage * defenseReduction));
+    this.player.takeDamage(finalDamage);
+
+    // 引き寄せ処理（スキルB）
+    if (data.pull) {
+      this.pullPlayerToward(data.pull.targetX, data.pull.targetY, data.pull.distance, data.pull.duration);
+    }
+  }
+
+  /**
+   * プレイヤーを特定位置に引き寄せる
+   */
+  private pullPlayerToward(targetX: number, targetY: number, distance: number, duration: number): void {
+    if (!this.player) return;
+
+    // プレイヤーを行動不能にする
+    this.player.setStunned(true);
+
+    // ターゲット方向の角度
+    const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, targetX, targetY);
+
+    // 引き寄せ先の位置を計算（現在位置からtarget方向にdistance分移動）
+    const pullToX = this.player.x + Math.cos(angle) * distance;
+    const pullToY = this.player.y + Math.sin(angle) * distance;
+
+    // プレイエリア内にクランプ
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const margin = 20;
+    const clampedX = Phaser.Math.Clamp(pullToX, X + margin, X + WIDTH - margin);
+    const clampedY = Phaser.Math.Clamp(pullToY, Y + margin, Y + HEIGHT - margin);
+
+    // Tweenで移動
+    this.tweens.add({
+      targets: this.player,
+      x: clampedX,
+      y: clampedY,
+      duration: duration,
+      ease: 'Power2',
+      onComplete: () => {
+        // 引き寄せ完了後、行動可能に
+        if (this.player) {
+          this.player.setStunned(false);
+        }
+      }
+    });
+  }
+
+  /**
+   * 弾道補助線を描画
+   */
+  private drawBulletTrails(): void {
+    if (!this.bulletTrailGraphics) return;
+
+    this.bulletTrailGraphics.clear();
+
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const clamp = (value: number, min: number, max: number) =>
+      Math.max(min, Math.min(max, value));
+
+    const activeBullets = this.bulletPool.getActiveBullets();
+    for (const bullet of activeBullets) {
+      const startPos = bullet.getStartPosition();
+      const bulletType = bullet.getBulletType();
+
+      if (bulletType === BulletType.PLAYER_NORMAL) {
+        this.bulletTrailGraphics.lineStyle(2, COLORS.TRAIL_PLAYER, 0.7);
+      } else {
+        this.bulletTrailGraphics.lineStyle(2, COLORS.TRAIL_ENEMY, 0.7);
+      }
+
+      this.bulletTrailGraphics.lineBetween(
+        clamp(startPos.x, X, X + WIDTH),
+        clamp(startPos.y, Y, Y + HEIGHT),
+        clamp(bullet.x, X, X + WIDTH),
+        clamp(bullet.y, Y, Y + HEIGHT)
+      );
+    }
+  }
+
+  /**
+   * プレイヤーのデバッグ情報を作成
+   */
+  private createPlayerDebugInfo(): void {
+    this.debugText = this.add.text(10, 150, '', {
+      font: '14px monospace',
+      color: '#ffff00',
+      backgroundColor: '#000000aa',
+      padding: { x: 5, y: 5 },
+    });
+    this.debugText.setDepth(DEPTH.UI);
+  }
+
+  /**
+   * デバッグテキストを更新
+   */
+  private updateDebugText(): void {
+    const config = this.player.getCharacterConfig();
+    const bulletStats = this.bulletPool?.getStats();
+    const activeMobs = this.allMobs.filter(m => m.getIsActive()).length;
+    const elapsedTime = this.stageStartTime >= 0
+      ? Math.floor((this.time.now - this.stageStartTime) / 1000)
+      : 0;
+
+    this.debugText.setText([
+      `Character: ${config.name}`,
+      `HP: ${this.player.getCurrentHp()}/${this.player.getMaxHp()}`,
+      `Score: ${this.score}`,
+      `Position: (${Math.round(this.player.x)}, ${Math.round(this.player.y)})`,
+      `Bullets: ${bulletStats?.active || 0}/${bulletStats?.total || 0}`,
+      `Active Mobs: ${activeMobs}`,
+      `Elapsed: ${elapsedTime}s`,
+      `Wave: ${this.waveStarted.filter(w => w).length}/${this.waveStarted.length}`,
+    ]);
+  }
+
+  /**
+   * 操作説明を表示
+   */
+  private showControls(): void {
+    const centerX = GAME_CONFIG.WIDTH / 2;
+    const y = GAME_CONFIG.HEIGHT - 80;
+
+    const controlsText = this.add.text(centerX, y, [
+      '【道中シーン】',
+      'フラグ持ち（ピンク色の敵）を撃破するとボス戦へ',
+      '',
+      '右クリック: 移動 / 左クリック: 攻撃',
+      'Q/W/E/R: スキル',
+    ], {
+      font: '16px monospace',
+      color: '#ffffff',
+      backgroundColor: '#000000cc',
+      padding: { x: 10, y: 10 },
+      align: 'center',
+    });
+    controlsText.setOrigin(0.5);
+    controlsText.setDepth(DEPTH.UI);
+
+    this.time.delayedCall(5000, () => {
+      this.tweens.add({
+        targets: controlsText,
+        alpha: 0,
+        duration: 1000,
+        onComplete: () => {
+          controlsText.destroy();
+        },
+      });
+    });
+  }
+}

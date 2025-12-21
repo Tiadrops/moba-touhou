@@ -79,8 +79,20 @@ export class BootScene extends Phaser.Scene {
     this.load.image('rindan_15', 'img/bullets/rindan_purple.png');
     this.load.image('rindan_16', 'img/bullets/rindan_blue.png');
 
+    // 道中雑魚妖精スプライトシート（左右2フレーム）
+    // GROUP_A用（パターンA-1, A-2, A-3）
+    this.load.spritesheet('fairy_a1', 'img/fairy/zakoC1.png', { frameWidth: 850, frameHeight: 1100 });
+    this.load.spritesheet('fairy_a2', 'img/fairy/zakoC2.png', { frameWidth: 850, frameHeight: 1100 });
+    this.load.spritesheet('fairy_a3', 'img/fairy/zakoC3.png', { frameWidth: 850, frameHeight: 1100 });
+    // GROUP_B用（パターンB-1, B-2）
+    this.load.spritesheet('fairy_b1', 'img/fairy/zakoB1.png', { frameWidth: 1584, frameHeight: 1344 });
+    this.load.spritesheet('fairy_b2', 'img/fairy/zakoB2.png', { frameWidth: 1584, frameHeight: 1344 });
+    // GROUP_C用（フラグ持ち）
+    this.load.spritesheet('fairy_c', 'img/fairy/zakoA1.png', { frameWidth: 1488, frameHeight: 1440 });
+
     // BGM読み込み
     this.load.audio('bgm_title', 'sound/bgm/赤より紅い夢.mp3');
+    this.load.audio('bgm_stage1', 'sound/bgm/ほおずきみたいに紅い魂.mp3'); // Stage1 道中BGM
     this.load.audio('bgm_rumia', 'sound/bgm/nc119989_東方原曲_妖魔夜行.mp3');
 
     // SE読み込み
@@ -290,6 +302,47 @@ export class BootScene extends Phaser.Scene {
       repeat: -1,
     });
 
-    console.log('Character animations created: reimu_idle, reimu_move, rumia_idle, rumia_cast, rumia_move, rumia_move_cast');
+    // 道中雑魚妖精アニメーション（2フレーム）
+    // GROUP_A用（パターンA-1, A-2, A-3）
+    this.anims.create({
+      key: 'fairy_a1_idle',
+      frames: this.anims.generateFrameNumbers('fairy_a1', { frames: [0, 1] }),
+      frameRate: 2,
+      repeat: -1,
+    });
+    this.anims.create({
+      key: 'fairy_a2_idle',
+      frames: this.anims.generateFrameNumbers('fairy_a2', { frames: [0, 1] }),
+      frameRate: 2,
+      repeat: -1,
+    });
+    this.anims.create({
+      key: 'fairy_a3_idle',
+      frames: this.anims.generateFrameNumbers('fairy_a3', { frames: [0, 1] }),
+      frameRate: 2,
+      repeat: -1,
+    });
+    // GROUP_B用（パターンB-1, B-2）
+    this.anims.create({
+      key: 'fairy_b1_idle',
+      frames: this.anims.generateFrameNumbers('fairy_b1', { frames: [0, 1] }),
+      frameRate: 2,
+      repeat: -1,
+    });
+    this.anims.create({
+      key: 'fairy_b2_idle',
+      frames: this.anims.generateFrameNumbers('fairy_b2', { frames: [0, 1] }),
+      frameRate: 2,
+      repeat: -1,
+    });
+    // GROUP_C用（フラグ持ち）
+    this.anims.create({
+      key: 'fairy_c_idle',
+      frames: this.anims.generateFrameNumbers('fairy_c', { frames: [0, 1] }),
+      frameRate: 2,
+      repeat: -1,
+    });
+
+    console.log('Character animations created: reimu_idle, reimu_move, rumia_idle, rumia_cast, rumia_move, rumia_move_cast, fairy_a1-a3, fairy_b1-b2, fairy_c');
   }
 }

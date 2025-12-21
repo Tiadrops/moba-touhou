@@ -361,19 +361,29 @@ export class PauseScene extends Phaser.Scene {
   private resume(): void {
     AudioManager.getInstance().playSe('se_cancel');
     this.scene.stop();
-    this.scene.resume(SCENES.GAME);
+    // GameSceneかMidStageSceneのいずれかを再開
+    if (this.scene.isPaused(SCENES.MID_STAGE)) {
+      this.scene.resume(SCENES.MID_STAGE);
+    } else {
+      this.scene.resume(SCENES.GAME);
+    }
   }
 
   /**
-   * ステージの最初からやり直す（GameSceneを直接再起動）
+   * ステージの最初からやり直す（MidStageSceneを再起動）
    */
   private restartStage(): void {
-    // BGMを停止してからGameSceneを再起動（GameSceneでBGMが再生される）
+    // BGMを停止してからMidStageSceneを再起動
     AudioManager.getInstance().stopBgm();
-    this.scene.stop(SCENES.GAME);
+    // どちらのシーンが動いているかを確認して停止
+    if (this.scene.isPaused(SCENES.MID_STAGE)) {
+      this.scene.stop(SCENES.MID_STAGE);
+    } else {
+      this.scene.stop(SCENES.GAME);
+    }
     this.scene.stop();
-    // GameSceneを直接再起動（サモナースペルは変更なし）
-    this.scene.start(SCENES.GAME);
+    // ステージの最初（MidStageScene）を再起動
+    this.scene.start(SCENES.MID_STAGE);
   }
 
   /**
@@ -382,7 +392,12 @@ export class PauseScene extends Phaser.Scene {
   private goToSummonerSelect(): void {
     // メニューBGMに切り替え
     AudioManager.getInstance().playBgm('bgm_title');
-    this.scene.stop(SCENES.GAME);
+    // どちらのシーンが動いているかを確認して停止
+    if (this.scene.isPaused(SCENES.MID_STAGE)) {
+      this.scene.stop(SCENES.MID_STAGE);
+    } else {
+      this.scene.stop(SCENES.GAME);
+    }
     this.scene.stop();
 
     const retryData: StageIntroData = {
@@ -399,7 +414,12 @@ export class PauseScene extends Phaser.Scene {
   private goToTitle(): void {
     // メニューBGMに切り替え
     AudioManager.getInstance().playBgm('bgm_title');
-    this.scene.stop(SCENES.GAME);
+    // どちらのシーンが動いているかを確認して停止
+    if (this.scene.isPaused(SCENES.MID_STAGE)) {
+      this.scene.stop(SCENES.MID_STAGE);
+    } else {
+      this.scene.stop(SCENES.GAME);
+    }
     this.scene.stop();
     this.scene.start(SCENES.TITLE);
   }

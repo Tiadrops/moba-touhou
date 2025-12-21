@@ -5,6 +5,7 @@ import { ModeSelectScene } from '@/scenes/ModeSelectScene';
 import { ArcadeSetupScene } from '@/scenes/ArcadeSetupScene';
 import { PracticeSetupScene } from '@/scenes/PracticeSetupScene';
 import { StageIntroScene } from '@/scenes/StageIntroScene';
+import { MidStageScene } from '@/scenes/MidStageScene';
 import { GameScene } from '@/scenes/GameScene';
 import { PauseScene } from '@/scenes/PauseScene';
 import { ResultScene } from '@/scenes/ResultScene';
@@ -37,6 +38,7 @@ const config: Phaser.Types.Core.GameConfig = {
     ArcadeSetupScene,
     PracticeSetupScene,
     StageIntroScene,
+    MidStageScene,
     GameScene,
     PauseScene,
     ResultScene,

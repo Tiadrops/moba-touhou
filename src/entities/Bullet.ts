@@ -231,7 +231,7 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
    * 更新処理
    */
   update(): void {
-    if (!this.isActive) {
+    if (!this.isActive || !this.scene) {
       return;
     }
 

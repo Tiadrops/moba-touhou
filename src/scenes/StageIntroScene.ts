@@ -341,10 +341,15 @@ export class StageIntroScene extends Phaser.Scene {
       practiceConfig: this.stageData.practiceConfig,
     };
 
-    // フェードアウトしてゲームシーンへ遷移
+    // 練習モードでボスのみの場合はGameSceneへ直接遷移
+    // それ以外は道中シーン（MidStageScene）へ遷移
+    const targetScene = this.stageData.practiceConfig?.practiceTarget === 'boss'
+      ? SCENES.GAME
+      : SCENES.MID_STAGE;
+
     this.cameras.main.fadeOut(300, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
-      this.scene.start(SCENES.GAME, gameData);
+      this.scene.start(targetScene, gameData);
     });
   }
 

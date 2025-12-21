@@ -110,6 +110,7 @@ export const SCENES = {
   ARCADE_SETUP: 'ArcadeSetupScene',
   PRACTICE_SETUP: 'PracticeSetupScene',
   STAGE_INTRO: 'StageIntroScene',
+  MID_STAGE: 'MidStageScene',
   GAME: 'GameScene',
   PAUSE: 'PauseScene',
   RESULT: 'ResultScene',
@@ -417,6 +418,70 @@ export const BOSS_CONFIG = {
     get SKILL_E() { return this.PHASE_0_SKILLS.E; },
     // 旧HPは最初のフェーズのHPを返す
     get HP() { return this.PHASES[0].HP; },
+  },
+} as const;
+
+/**
+ * 道中雑魚グループ設定
+ * グループ内の雑魚は異なる弾幕を使うが、生存時間とパラメータは共通
+ */
+export const MOB_GROUP_CONFIG = {
+  // グループA: 弱い雑魚（生存時間15秒、1回だけ弾幕）
+  GROUP_A: {
+    HP: 200,
+    DEF: 0,
+    ATK: 100,
+    MOVE_SPEED: 80,
+    HITBOX_RADIUS: 16,
+    SCORE_VALUE: 100,
+    SURVIVAL_TIME: 15000,   // 15秒で退場開始
+    IS_FLAG_CARRIER: false,
+    // 退場方式: 端へ移動して消える
+    EXIT_MODE: 'move_to_edge' as const,
+  },
+  // グループB: 中程度の雑魚（生存時間無制限、撃破まで残る）
+  GROUP_B: {
+    HP: 500,
+    DEF: 0,
+    ATK: 100,
+    MOVE_SPEED: 60,
+    HITBOX_RADIUS: 20,
+    SCORE_VALUE: 300,
+    SURVIVAL_TIME: -1,      // 無制限（撃破まで残る）
+    IS_FLAG_CARRIER: false,
+    EXIT_MODE: 'none' as const,
+  },
+  // グループC: フラグ持ち（撃破でボス移行、生存時間無制限）
+  GROUP_C: {
+    HP: 1500,
+    DEF: 0,
+    ATK: 100,
+    MOVE_SPEED: 40,
+    HITBOX_RADIUS: 28,
+    SCORE_VALUE: 1000,
+    SURVIVAL_TIME: -1,      // 無制限（撃破まで残る）
+    IS_FLAG_CARRIER: true,
+    EXIT_MODE: 'none' as const,
+  },
+} as const;
+
+/**
+ * 道中シーン設定
+ */
+export const MID_STAGE_CONFIG = {
+  // ステージ1の道中設定
+  STAGE_1: {
+    // フラグ持ちが出現するまでの時間（ms）
+    FLAG_CARRIER_SPAWN_DELAY: 30000,  // 30秒後
+    // 雑魚の出現間隔（ms）
+    SPAWN_INTERVAL: {
+      GROUP_A: 2000,   // 2秒ごと
+      GROUP_B: 5000,   // 5秒ごと
+    },
+    // 同時に存在できる最大数
+    MAX_MOBS: 15,
+    // フェードアウト時間（ms）
+    FADE_OUT_DURATION: 1000,
   },
 } as const;
 

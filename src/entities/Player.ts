@@ -18,6 +18,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // 現在の状態
   private currentHp: number = 0;
   private isInvincible: boolean = false;
+  private isStunned: boolean = false;  // 行動不能状態
 
   // 移動関連
   private targetPosition: Position | null = null;
@@ -28,6 +29,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private attackCooldown: number = 0;
   private bulletPool: BulletPool | null = null;
   private enemies: Enemy[] = [];
+  private mobs: Attackable[] = []; // 道中雑魚敵
   private boss: Attackable | null = null; // 現在のボス（Rumiaなど）
 
   // Attack Move関連
@@ -169,6 +171,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
    * 更新処理
    */
   update(time: number, delta: number): void {
+    // スタン中（引き寄せなど）は処理をスキップ
+    if (this.isStunned) {
+      this.setVelocity(0, 0);
+      this.drawHitbox();
+      return;
+    }
+
     // バフの更新
     this.updateBuffs(delta);
 
@@ -503,8 +512,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.qSkillProjectile = new SkillProjectile(this.scene);
     }
 
-    // ターゲット配列を作成（敵 + ボス）
-    const targets: Attackable[] = [...this.enemies];
+    // ターゲット配列を作成（敵 + 雑魚 + ボス）
+    const targets: Attackable[] = [...this.enemies, ...this.mobs];
     if (this.boss && this.boss.getIsActive()) {
       targets.push(this.boss);
     }
@@ -579,8 +588,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.wSkillProjectile = new SkillProjectile(this.scene);
     }
 
-    // ターゲット配列を作成（敵 + ボス）
-    const targets: Attackable[] = [...this.enemies];
+    // ターゲット配列を作成（敵 + 雑魚 + ボス）
+    const targets: Attackable[] = [...this.enemies, ...this.mobs];
     if (this.boss && this.boss.getIsActive()) {
       targets.push(this.boss);
     }
@@ -713,8 +722,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
    * ダッシュ経路上の敵にダメージを与える
    */
   private dealDashDamage(startX: number, startY: number, endX: number, endY: number, damage: number): void {
-    // ターゲット配列を作成（敵 + ボス）
-    const targets: Attackable[] = [...this.enemies];
+    // ターゲット配列を作成（敵 + 雑魚 + ボス）
+    const targets: Attackable[] = [...this.enemies, ...this.mobs];
     if (this.boss && this.boss.getIsActive()) {
       targets.push(this.boss);
     }
@@ -823,8 +832,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       const rawDamage = DAMAGE.BASE_DAMAGE +
         this.characterConfig.stats.attackPower * DAMAGE.SCALING_RATIO;
 
-      // ターゲット配列を作成（敵 + ボス）
-      const targets: Attackable[] = [...this.enemies];
+      // ターゲット配列を作成（敵 + 雑魚 + ボス）
+      const targets: Attackable[] = [...this.enemies, ...this.mobs];
       if (this.boss && this.boss.getIsActive()) {
         targets.push(this.boss);
       }
@@ -1186,6 +1195,25 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       }
     }
 
+    // 道中雑魚をチェック
+    for (const mob of this.mobs) {
+      if (!mob.getIsActive()) {
+        continue;
+      }
+
+      const distance = Phaser.Math.Distance.Between(
+        this.x,
+        this.y,
+        mob.x,
+        mob.y
+      );
+
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestTarget = mob;
+      }
+    }
+
     // ボスもチェック
     if (this.boss && this.boss.getIsActive()) {
       const distance = Phaser.Math.Distance.Between(
@@ -1227,6 +1255,25 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       if (distance < nearestDistance) {
         nearestDistance = distance;
         nearestTarget = enemy;
+      }
+    }
+
+    // 道中雑魚をチェック
+    for (const mob of this.mobs) {
+      if (!mob.getIsActive()) {
+        continue;
+      }
+
+      const distance = Phaser.Math.Distance.Between(
+        x,
+        y,
+        mob.x,
+        mob.y
+      );
+
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestTarget = mob;
       }
     }
 
@@ -1339,6 +1386,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
+   * 道中雑魚リストを設定
+   */
+  setMobs(mobs: Attackable[]): void {
+    this.mobs = mobs;
+  }
+
+  /**
    * ボスを設定
    */
   setBoss(boss: Attackable | null): void {
@@ -1439,5 +1493,25 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
    */
   getCombatStats() {
     return this.characterConfig.stats;
+  }
+
+  /**
+   * スタン状態を設定（引き寄せなど外部からの行動不能）
+   */
+  setStunned(stunned: boolean): void {
+    this.isStunned = stunned;
+    if (stunned) {
+      // スタン中は移動を停止
+      this.targetPosition = null;
+      this.isMoving = false;
+      this.setVelocity(0, 0);
+    }
+  }
+
+  /**
+   * スタン状態かどうか
+   */
+  getIsStunned(): boolean {
+    return this.isStunned;
   }
 }

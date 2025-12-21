@@ -155,6 +155,29 @@ export enum EnemyType {
   BOSS = 'boss',
 }
 
+// 道中雑魚グループタイプ
+export enum MobGroupType {
+  GROUP_A = 'group_a',  // HP200, DEF0, ATK100
+  GROUP_B = 'group_b',  // HP500, DEF0, ATK100
+  GROUP_C = 'group_c',  // HP1500, DEF0, ATK100（フラグ持ち）
+}
+
+// 雑魚敵の退場方式
+export type MobExitMode = 'fade_out' | 'move_to_edge' | 'none';
+
+// 道中雑魚のステータス定義
+export interface MobStats {
+  maxHp: number;
+  attackPower: number;
+  defense: number;
+  moveSpeed: number;
+  hitboxRadius: number;
+  scoreValue: number;
+  survivalTime: number;     // 生存時間（ms）- -1は無制限
+  isFlagCarrier: boolean;   // フラグ持ちかどうか（撃破でボス移行）
+  exitMode: MobExitMode;    // 退場方式
+}
+
 // 敵の設定
 export interface EnemyConfig {
   type: EnemyType;

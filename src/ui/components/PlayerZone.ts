@@ -41,7 +41,7 @@ export class PlayerZone extends Phaser.GameObjects.Container {
   private scoreboardTexts: Phaser.GameObjects.Text[] = [];
   private breakScoreUnit!: Phaser.GameObjects.Text; // x100単位表示
   private breakCount: number = 0;
-  private gameStartTime: number = 0;
+  private gameStartTime: number = -1;  // -1 = 未初期化（最初のupdateで設定）
   private totalScore: number = 0; // 過去ステージのスコア合算
 
   // スキルスロット順序
@@ -278,9 +278,7 @@ export class PlayerZone extends Phaser.GameObjects.Container {
     );
     this.breakScoreUnit.setAlpha(0.8);
     this.add(this.breakScoreUnit);
-
-    // ゲーム開始時間を記録
-    this.gameStartTime = this.scene.time.now;
+    // gameStartTimeは最初のupdate時に設定される（MidStageSceneのstageStartTimeと同期）
   }
 
   private createSkillBar(): void {
@@ -452,6 +450,11 @@ export class PlayerZone extends Phaser.GameObjects.Container {
    * スコアボードを更新
    */
   private updateScoreboard(time: number): void {
+    // 最初のupdate時にgameStartTimeを設定（Wave発動タイミングと同期）
+    if (this.gameStartTime < 0) {
+      this.gameStartTime = time;
+    }
+
     const layout = UI_LAYOUT.PLAYER_ZONE.SCOREBOARD;
     const targetTime = layout.TARGET_TIME;
 
