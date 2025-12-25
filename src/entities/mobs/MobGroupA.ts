@@ -36,13 +36,6 @@ export class MobGroupA extends MobEnemy {
   private shootDelay: number = 1000;  // 登場後1秒後に発射
   private autoShootEnabled: boolean = true;  // 自動発射の有効/無効
 
-  // A-6連射パラメータ
-  private a6BulletCount: number = 3;           // 発射弾数（デフォルト3発）
-  private a6Interval: number = 500;            // 発射間隔（デフォルト0.5秒）
-  private a6FiredCount: number = 0;            // 発射済み弾数
-  private a6LastFireTime: number = 0;          // 最後に発射した時刻
-  private a6IsFiring: boolean = false;         // 連射中フラグ
-
   constructor(scene: Phaser.Scene, x: number, y: number) {
     // 初期パターンを決定
     const initialPattern = MobGroupA.getRandomPatternStatic();
@@ -86,11 +79,6 @@ export class MobGroupA extends MobEnemy {
     // 再利用時に自動発射をリセット（デフォルトは有効）
     this.autoShootEnabled = true;
 
-    // A-6連射状態をリセット
-    this.a6FiredCount = 0;
-    this.a6LastFireTime = 0;
-    this.a6IsFiring = false;
-
     super.spawn(x, y, targetY, movePattern);
     this.hasShot = false;
   }
@@ -113,11 +101,6 @@ export class MobGroupA extends MobEnemy {
 
     // 再利用時に自動発射をリセット（デフォルトは有効）
     this.autoShootEnabled = true;
-
-    // A-6連射状態をリセット
-    this.a6FiredCount = 0;
-    this.a6LastFireTime = 0;
-    this.a6IsFiring = false;
 
     super.spawn(x, y, targetY, movePattern);
     this.hasShot = false;
@@ -184,16 +167,6 @@ export class MobGroupA extends MobEnemy {
   }
 
   /**
-   * A-6パターンの連射パラメータを設定
-   * @param bulletCount 発射弾数
-   * @param interval 発射間隔（ミリ秒）
-   */
-  setA6Params(bulletCount: number, interval: number = 500): void {
-    this.a6BulletCount = bulletCount;
-    this.a6Interval = interval;
-  }
-
-  /**
    * 下降→発射→上昇パターンでスポーン（パターン指定可能）
    */
   spawnDescendShootAscendWithPattern(
@@ -222,6 +195,33 @@ export class MobGroupA extends MobEnemy {
   }
 
   /**
+   * 下降→ランダム移動パターンでスポーン（パターン指定付き）
+   * 画面上部から下降し、目標Y座標到達後にランダム移動を開始
+   */
+  spawnDescendThenRandomWalkWithPattern(
+    x: number,
+    y: number,
+    pattern: MobAPatternType,
+    targetY: number,
+    descendSpeed: number,
+    walkSpeed: number,
+    changeInterval: number = 2000
+  ): void {
+    // パターンを設定
+    this.patternType = pattern;
+    const config = PATTERN_TEXTURES[this.patternType];
+    this.setTexture(config.texture);
+    this.animationKey = config.animation;
+
+    // 再利用時に自動発射をリセット（デフォルトは有効）
+    this.autoShootEnabled = true;
+
+    // 下降→ランダム移動型スポーン
+    this.spawnDescendThenRandomWalk(x, y, targetY, descendSpeed, walkSpeed, changeInterval);
+    this.hasShot = false;
+  }
+
+  /**
    * 外部から弾幕を発射させる（Wave制御用）
    */
   shoot(): void {
@@ -231,6 +231,11 @@ export class MobGroupA extends MobEnemy {
 
     // カーブ中（横移動中）は発射しない
     if (this.getIsCurving()) {
+      return;
+    }
+
+    // プレイエリア外にいる場合は発射しない
+    if (!this.isInsidePlayArea()) {
       return;
     }
 
@@ -287,6 +292,11 @@ export class MobGroupA extends MobEnemy {
       return;
     }
 
+    // プレイエリア外にいる場合は発射しない
+    if (!this.isInsidePlayArea()) {
+      return;
+    }
+
     this.hasShot = true;
 
     // パターンに応じた弾幕を発射
@@ -309,144 +319,6 @@ export class MobGroupA extends MobEnemy {
       case 'A6':
         this.shootPatternA6();
         break;
-    }
-  }
-
-  /**
-   * 更新処理（オーバーライド）
-   */
-  update(time: number, delta: number): void {
-    super.update(time, delta);
-
-    // A-6連射中の更新
-    if (this.patternType === 'A6' && this.a6IsFiring) {
-      this.updateA6Firing(time);
-    }
-  }
-
-  /**
-   * A-6連射処理の更新
-   */
-  private updateA6Firing(time: number): void {
-    if (!this.bulletPool || !this.playerPosition || !this.isActive) {
-      return;
-    }
-
-    // 全弾発射完了
-    if (this.a6FiredCount >= this.a6BulletCount) {
-      this.a6IsFiring = false;
-      return;
-    }
-
-    // 発射間隔チェック
-    if (time - this.a6LastFireTime < this.a6Interval) {
-      return;
-    }
-
-    // 1発発射
-    this.fireA6SingleBullet();
-    this.a6FiredCount++;
-    this.a6LastFireTime = time;
-  }
-
-  /**
-   * A-6用の1発発射
-   */
-  private fireA6SingleBullet(): void {
-    if (!this.bulletPool || !this.playerPosition) return;
-
-    const bulletRadius = 0.25 * UNIT.METER_TO_PIXEL;
-    const displayScale = (bulletRadius * 2) / 278;
-    const initialSpeed = 8 * UNIT.METER_TO_PIXEL;   // 初速8m/s
-    const finalSpeed = 24 * UNIT.METER_TO_PIXEL;    // 最終速度24m/s
-
-    // プレイヤー方向の角度
-    const playerAngle = Phaser.Math.Angle.Between(
-      this.x, this.y,
-      this.playerPosition.x, this.playerPosition.y
-    );
-    // 逆方向
-    const reverseAngle = playerAngle + Math.PI;
-
-    const bullet = this.bulletPool.acquire();
-    if (bullet) {
-      const targetX = this.x + Math.cos(reverseAngle) * 500;
-      const targetY = this.y + Math.sin(reverseAngle) * 500;
-      bullet.fire(
-        this.x, this.y,
-        targetX, targetY,
-        BulletType.ENEMY_NORMAL,
-        this.stats.attackPower,
-        null, false,
-        KSHOT.RINDAN.RED
-      );
-      bullet.setScale(displayScale);
-
-      // プレイエリア外でも消えないようにする（戻り弾用）
-      bullet.setPersistOutsidePlayArea(true);
-
-      const body = bullet.body as Phaser.Physics.Arcade.Body;
-      if (body) {
-        body.setCircle(bulletRadius / displayScale, 0, 0);
-
-        // 初速を逆方向に設定
-        body.setVelocity(
-          Math.cos(reverseAngle) * initialSpeed,
-          Math.sin(reverseAngle) * initialSpeed
-        );
-
-        // 減速→停止→プレイヤー方向に加速
-        const decelerateTime = 1000;
-        const stopTime = 50;
-        const accelerateTime = 1000;
-
-        const speedObj = { speed: initialSpeed };
-
-        this.scene.tweens.add({
-          targets: speedObj,
-          speed: 0,
-          duration: decelerateTime,
-          ease: 'Quad.easeOut',
-          onUpdate: () => {
-            if (bullet.active && body.enable) {
-              body.setVelocity(
-                Math.cos(reverseAngle) * speedObj.speed,
-                Math.sin(reverseAngle) * speedObj.speed
-              );
-            }
-          },
-          onComplete: () => {
-            if (bullet.active && body.enable) {
-              body.setVelocity(0, 0);
-            }
-
-            this.scene.time.delayedCall(stopTime, () => {
-              if (!bullet.active || !body.enable) return;
-
-              const accelObj = { speed: 0 };
-              this.scene.tweens.add({
-                targets: accelObj,
-                speed: finalSpeed,
-                duration: accelerateTime,
-                ease: 'Quad.easeIn',
-                onUpdate: () => {
-                  if (bullet.active && body.enable) {
-                    body.setVelocity(
-                      Math.cos(playerAngle) * accelObj.speed,
-                      Math.sin(playerAngle) * accelObj.speed
-                    );
-                  }
-                },
-                onComplete: () => {
-                  if (bullet.active) {
-                    bullet.setPersistOutsidePlayArea(false);
-                  }
-                }
-              });
-            });
-          }
-        });
-      }
     }
   }
 
@@ -556,13 +428,20 @@ export class MobGroupA extends MobEnemy {
 
   /**
    * A-3: 自機狙い1発
-   * 中玉ID:8（白）、半径0.15m
+   * 中玉ID:8（白）、半径0.15m、6m/s
    */
   private shootPatternA3(): void {
     if (!this.bulletPool || !this.playerPosition) return;
 
     const bulletRadius = 0.15 * UNIT.METER_TO_PIXEL;  // 0.15m = 8.25px
     const displayScale = (bulletRadius * 2) / 512;     // 中玉は512px
+    const bulletSpeed = 6 * UNIT.METER_TO_PIXEL;       // 6m/s = 330px/s
+
+    // プレイヤー方向の角度
+    const angle = Phaser.Math.Angle.Between(
+      this.x, this.y,
+      this.playerPosition.x, this.playerPosition.y
+    );
 
     const bullet = this.bulletPool.acquire();
     if (bullet) {
@@ -576,10 +455,14 @@ export class MobGroupA extends MobEnemy {
       );
       bullet.setScale(displayScale);
 
-      // 当たり判定を設定
+      // 当たり判定と速度を設定
       const body = bullet.body as Phaser.Physics.Arcade.Body;
       if (body) {
         body.setCircle(bulletRadius / displayScale, 0, 0);
+        body.setVelocity(
+          Math.cos(angle) * bulletSpeed,
+          Math.sin(angle) * bulletSpeed
+        );
       }
     }
   }
@@ -595,7 +478,7 @@ export class MobGroupA extends MobEnemy {
     const wayCount = 12;
     const bulletRadius = 0.25 * UNIT.METER_TO_PIXEL;  // 0.25m
     const displayScale = (bulletRadius * 2) / 278;    // 輪弾は278px
-    const bulletSpeed = 8 * UNIT.METER_TO_PIXEL;      // 8m/s
+    const bulletSpeed = 4 * UNIT.METER_TO_PIXEL;      // 4m/s（半減）
 
     for (let i = 0; i < wayCount; i++) {
       const angle = (Math.PI * 2 / wayCount) * i;
@@ -636,8 +519,8 @@ export class MobGroupA extends MobEnemy {
     const bulletRadius = 0.25 * UNIT.METER_TO_PIXEL;
     const displayScale = (bulletRadius * 2) / 278;
     const spreadAngle = Math.PI / 6;  // 30度（全体60度の扇）
-    const initialSpeed = 6 * UNIT.METER_TO_PIXEL;   // 6m/s
-    const maxSpeed = 24 * UNIT.METER_TO_PIXEL;      // 24m/s
+    const initialSpeed = 3 * UNIT.METER_TO_PIXEL;   // 3m/s（半減）
+    const maxSpeed = 12 * UNIT.METER_TO_PIXEL;      // 12m/s（半減）
     const accelerationTime = 1000;  // 1秒で最高速度に
 
     const centerAngle = Phaser.Math.Angle.Between(
@@ -690,19 +573,120 @@ export class MobGroupA extends MobEnemy {
   }
 
   /**
-   * A-6: 連射型重力弾（自機狙い）
-   * N発を一定間隔で発射、各弾はプレイヤーと逆方向に発射後、減速→停止→プレイヤー方向に加速
-   * デフォルト: 0.5秒毎に3発発射
-   * setA6Params()で発射弾数・間隔を設定可能
+   * A-6: 3way重力弾（自機狙い）
+   * 3方向に弾を発射、各弾はプレイヤーと逆方向に発射後、減速→停止→プレイヤー方向に加速
    */
   private shootPatternA6(): void {
-    // 連射開始トリガー
-    this.a6IsFiring = true;
-    this.a6FiredCount = 0;
-    this.a6LastFireTime = this.scene.time.now;
+    if (!this.bulletPool || !this.playerPosition) return;
 
-    // 即座に1発目を発射
-    this.fireA6SingleBullet();
-    this.a6FiredCount++;
+    // プレイエリア外にいる場合は発射しない
+    if (!this.isInsidePlayArea()) {
+      return;
+    }
+
+    const wayCount = 3;
+    const spreadAngle = Math.PI / 8;  // 22.5度（全体45度の扇）
+    const bulletRadius = 0.25 * UNIT.METER_TO_PIXEL;
+    const displayScale = (bulletRadius * 2) / 512;  // 中玉は512px
+    const initialSpeed = 5.3 * UNIT.METER_TO_PIXEL;   // 初速5.3m/s（2/3に減速）
+    const finalSpeed = 16 * UNIT.METER_TO_PIXEL;     // 最終速度16m/s（2/3に減速）
+
+    // プレイヤー方向の角度
+    const playerAngle = Phaser.Math.Angle.Between(
+      this.x, this.y,
+      this.playerPosition.x, this.playerPosition.y
+    );
+    // 逆方向
+    const reverseAngle = playerAngle + Math.PI;
+
+    // 落下順序: 左(i=0)→右(i=2)→中央(i=1)
+    // 各弾の落下遅延（ms）
+    const fallDelays = [0, 400, 200];  // i=0: 0ms, i=1: 400ms, i=2: 200ms
+    // 上がる高さ: 中央(i=1)＞右(i=2)＞左(i=0)
+    // 減速時間が長いほど高く上がる
+    const decelerateTimes = [1200, 1800, 1500];  // i=0: 1.2秒, i=1: 1.8秒, i=2: 1.5秒
+
+    for (let i = 0; i < wayCount; i++) {
+      // 3way: 左(i=0)、中央(i=1)、右(i=2)
+      const angleOffset = (i - 1) * spreadAngle;
+      const fireAngle = reverseAngle + angleOffset;
+
+      const bullet = this.bulletPool.acquire();
+      if (bullet) {
+        const targetX = this.x + Math.cos(fireAngle) * 500;
+        const targetY = this.y + Math.sin(fireAngle) * 500;
+        bullet.fire(
+          this.x, this.y,
+          targetX, targetY,
+          BulletType.ENEMY_NORMAL,
+          this.stats.attackPower,
+          null, false,
+          KSHOT.MEDIUM_BALL.CYAN  // ID 5（黒縁中玉シアン）
+        );
+        bullet.setScale(displayScale);
+
+        // プレイエリア外でも消えないようにする（戻り弾用）
+        bullet.setPersistOutsidePlayArea(true);
+
+        const body = bullet.body as Phaser.Physics.Arcade.Body;
+        if (body) {
+          body.setCircle(bulletRadius / displayScale, 0, 0);
+
+          // 初速を逆方向に設定
+          body.setVelocity(
+            Math.cos(fireAngle) * initialSpeed,
+            Math.sin(fireAngle) * initialSpeed
+          );
+
+          // 減速→即座に反転（Linearで一定減速、停止時間なし）
+          const decelerateTime = decelerateTimes[i];  // 弾ごとに異なる減速時間
+          const accelerateTime = 600;   // 加速は早めに
+          const fallDelay = fallDelays[i];  // 落下タイミングの遅延
+
+          const speedObj = { speed: initialSpeed };
+          const currentFireAngle = fireAngle;
+          const fallAngle = Math.PI / 2;  // 真下に落下
+
+          this.scene.tweens.add({
+            targets: speedObj,
+            speed: 0,
+            duration: decelerateTime,
+            ease: 'Linear',  // 一定速度で減速（最後に遅くならない）
+            onUpdate: () => {
+              if (bullet.active && body.enable) {
+                body.setVelocity(
+                  Math.cos(currentFireAngle) * speedObj.speed,
+                  Math.sin(currentFireAngle) * speedObj.speed
+                );
+              }
+            },
+            onComplete: () => {
+              if (!bullet.active || !body.enable) return;
+
+              // 落下遅延後に反転して落下開始
+              this.scene.time.delayedCall(fallDelay, () => {
+                if (!bullet.active || !body.enable) return;
+
+                const accelObj = { speed: 0 };
+                this.scene.tweens.add({
+                  targets: accelObj,
+                  speed: finalSpeed,
+                  duration: accelerateTime,
+                  ease: 'Quad.easeIn',
+                  onUpdate: () => {
+                    if (bullet.active && body.enable) {
+                      body.setVelocity(
+                        Math.cos(fallAngle) * accelObj.speed,
+                        Math.sin(fallAngle) * accelObj.speed
+                      );
+                    }
+                  }
+                });
+              });
+            }
+          });
+        }
+      }
+    }
   }
 }

@@ -116,14 +116,21 @@ rm old_file.ts
 | Wave | 内容 | フラグ持ち | クリア報酬 |
 |------|------|-----------|-----------|
 | Wave 1-1 | サブウェーブ6個 (1-1-1〜1-1-6) | 1-1-6にC | HP30%回復、スコア+5000 |
-| Wave 1-2 | サブウェーブ1個 (1-2-1) | 1-2-1にC | 残機+1、スコア+10000 |
+| Wave 1-2 | サブウェーブ6個 (1-2-1〜1-2-6) | 1-2-6にC-2 | 残機+1、スコア+10000 |
 
 #### 雑魚グループステータス
 | グループ | HP | DEF | ATK | 生存時間 | 特徴 |
 |---------|-----|-----|-----|---------|------|
-| GROUP_A | 200 | 0 | 100 | 15秒 | A1(5way 8m/s), A2(11way×2 4m/s), A3(狙い弾) |
-| GROUP_B | 500 | 0 | 100 | 無制限 | B1(オーブ弾), B2(レーザー), B3(ラプチャー/スクリーム), B4(固定射撃/ムービング/恐怖弾) |
-| GROUP_C | 1500 | 0 | 100 | 無制限 | フラグ持ち（撃破でWaveクリア）|
+| GROUP_A | 200 | 0 | 100 | 15秒 | A1(5way), A2(11way×2), A3(狙い弾), A4(12way円), A5(5way加速), A6(3way重力) |
+| GROUP_B | 500 | 0 | 100 | 無制限 | B1(オーブ弾), B2(レーザー), B3(ラプチャー/スクリーム), B4(固定射撃/恐怖弾) |
+| GROUP_C | 1500 | 0 | 100 | 無制限 | C1(Kaiser型: オブリテレイト/デスグラスプ), C2(Hisui型: W2/E/R) フラグ持ち（撃破でWaveクリア）|
+
+#### B-4 AI仕様
+- 通常移動速度: 3m/s、目標距離: 7.5m（プレイヤーとの距離を維持）
+- 登場後待機: 2秒（登場後2秒間は行動しない）
+- 恐怖弾: 4.5m以内で使用、CD 3秒、固定射撃中は使用不可
+- 固定射撃: 2.2秒間連射、CD 3秒
+- ムービング: 目標距離から1m以上離れた時、CD 5秒
 
 #### Waveクリアフロー
 1. フラグ持ち（C）撃破
@@ -174,8 +181,9 @@ StageIntroScene → MidStageScene（道中）
 | DebugRoomScene | デバッグメニュー | `src/scenes/debug/DebugRoomScene.ts` |
 | BulletTestScene | 弾幕テスト | `src/scenes/debug/BulletTestScene.ts` |
 | CutInTestScene | カットイン演出テスト | `src/scenes/debug/CutInTestScene.ts` |
-| MobTestScene | 雑魚弾幕テスト | `src/scenes/debug/MobTestScene.ts` |
+| MobTestScene | 雑魚弾幕テスト（A1-A6, B1-B4, C1-C2） | `src/scenes/debug/MobTestScene.ts` |
 | ResultTestScene | Waveリザルト演出テスト | `src/scenes/debug/ResultTestScene.ts` |
+| WaveDebugScene | Wave単位デバッグ（1-1-1〜1-2-6） | `src/scenes/debug/WaveDebugScene.ts` |
 
 ### ドキュメント
 - 弾幕仕様: `docs/BULLET_SYSTEM.md`

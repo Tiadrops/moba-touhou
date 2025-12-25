@@ -18,6 +18,7 @@ import { BulletTestScene } from '@/scenes/debug/BulletTestScene';
 import { CutInTestScene } from '@/scenes/debug/CutInTestScene';
 import { MobTestScene } from '@/scenes/debug/MobTestScene';
 import { ResultTestScene } from '@/scenes/debug/ResultTestScene';
+import { WaveDebugScene } from '@/scenes/debug/WaveDebugScene';
 import { GAME_CONFIG, PHYSICS_CONFIG, COLORS } from '@/config/GameConfig';
 
 /**
@@ -53,6 +54,7 @@ const config: Phaser.Types.Core.GameConfig = {
     CutInTestScene,
     MobTestScene,
     ResultTestScene,
+    WaveDebugScene,
   ],
   fps: {
     target: GAME_CONFIG.TARGET_FPS,

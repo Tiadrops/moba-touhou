@@ -78,7 +78,7 @@ export class MobTestScene extends Phaser.Scene {
     this.patterns = [
       { name: 'A-1: 5way弾', group: 'A', pattern: 'A1', description: '5方向弾（8m/s）' },
       { name: 'A-2: 11way×2列', group: 'A', pattern: 'A2', description: '11方向×2列弾（4m/s）' },
-      { name: 'A-3: 狙い弾', group: 'A', pattern: 'A3', description: '自機狙い1発（8m/s）' },
+      { name: 'A-3: 狙い弾', group: 'A', pattern: 'A3', description: '自機狙い1発（6m/s）' },
       { name: 'A-4: 12way円弾', group: 'A', pattern: 'A4', description: '12方向円弾（8m/s）' },
       { name: 'A-5: 5way加速弾', group: 'A', pattern: 'A5', description: '5方向弾（6→24m/sに加速）' },
       { name: 'A-6: 連射重力弾', group: 'A', pattern: 'A6', description: '0.5s毎に3発、逆方向発射→1秒減速→停止→プレイヤー方向24m/s' },

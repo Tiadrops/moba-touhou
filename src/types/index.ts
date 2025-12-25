@@ -173,6 +173,7 @@ export interface MobStats {
   moveSpeed: number;
   hitboxRadius: number;
   scoreValue: number;
+  expValue: number;         // 経験値
   survivalTime: number;     // 生存時間（ms）- -1は無制限
   isFlagCarrier: boolean;   // フラグ持ちかどうか（撃破でボス移行）
   exitMode: MobExitMode;    // 退場方式
@@ -429,7 +430,7 @@ export interface GameStartData {
   character: CharacterType;
   difficulty: Difficulty;
   stageNumber: number;
-  summonerSkills: SummonerSkillConfig;
+  summonerSkills?: SummonerSkillConfig;
   // アーケードモード継続時
   continueData?: {
     score: number;
@@ -437,6 +438,8 @@ export interface GameStartData {
   };
   // 練習モード専用
   practiceConfig?: PracticeModeConfig;
+  // デバッグ用: 開始Wave指定
+  debugWaveStart?: WaveId;
 }
 
 // GameScene → ResultScene へのデータ

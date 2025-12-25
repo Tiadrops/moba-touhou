@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { MobGroupType, BulletType } from '@/types';
 import { MobEnemy } from './MobEnemy';
 import { KSHOT } from '../Bullet';
-import { UNIT, DEPTH } from '@/config/GameConfig';
+import { UNIT, DEPTH, GAME_CONFIG } from '@/config/GameConfig';
 
 /**
  * 弾幕パターンタイプ
@@ -71,31 +71,38 @@ export class MobGroupB extends MobEnemy {
   private readonly SCREAM_ANGLE = Phaser.Math.DegToRad(60);   // 60度
   private readonly SCREAM_WARNING_TIME = 500;  // 0.5秒予告
 
-  // B-4用: 固定射撃、ムービング、恐怖弾
-  private b4AttackType: 'fixed_shot' | 'moving' | 'fear' = 'fixed_shot';  // ローテーション
-  private b4AttackCount: number = 0;  // 攻撃回数（3つをローテーション）
-  // 固定射撃用
+  // B-4用: 固定射撃、ムービング、恐怖弾（同時に使用可能な要素あり）
+  // 固定射撃用（移動中でも発射可能）
   private isFixedShotActive: boolean = false;
   private fixedShotStartTime: number = 0;
   private fixedShotLastFireTime: number = 0;
   private fixedShotAngle: number = 0;  // 発射角度（固定）
+  private lastFixedShotCDTime: number = 0;  // 固定射撃のCD開始時刻
   private readonly FIXED_SHOT_DURATION = 2200;     // 2.2秒間
   private readonly FIXED_SHOT_INTERVAL = 220;      // 0.22秒毎
   private readonly FIXED_SHOT_SPEED = 20 * UNIT.METER_TO_PIXEL;  // 20m/s
   private readonly FIXED_SHOT_RADIUS = 0.5 * UNIT.METER_TO_PIXEL;  // 半径0.5m
-  // ムービング用
+  private readonly FIXED_SHOT_COOLDOWN = 3000;  // 固定射撃のCD（2.2s発射 + 0.8s待機 ≈ 3秒）
+  // ムービング用（プレイヤーとの距離7.5mを維持）
   private isMoving: boolean = false;
   private moveStartPos: { x: number; y: number } = { x: 0, y: 0 };
   private moveTargetPos: { x: number; y: number } = { x: 0, y: 0 };
   private moveStartTime: number = 0;
-  private readonly MOVE_DISTANCE = 4 * UNIT.METER_TO_PIXEL;  // 4m
-  private readonly MOVE_SPEED = 10 * UNIT.METER_TO_PIXEL;    // 10m/s
+  private moveDuration: number = 0;  // 移動時間（距離に応じて変わる）
+  private lastMoveTime: number = 0;  // ムービングのCD開始時刻
+  private readonly MOVE_SPEED = 10 * UNIT.METER_TO_PIXEL;    // 10m/s（ムービング用）
+  private readonly BASE_MOVE_SPEED = 3 * UNIT.METER_TO_PIXEL;  // 3m/s（通常移動用）
+  private readonly TARGET_DISTANCE = 7.5 * UNIT.METER_TO_PIXEL;  // 目標距離7.5m
+  private readonly DISTANCE_TOLERANCE = 1 * UNIT.METER_TO_PIXEL;  // 許容誤差1m
+  private readonly MOVE_COOLDOWN = 5000;  // ムービングのCD 5秒
   // 恐怖弾用
   private fearWarningCircle: Phaser.GameObjects.Graphics | null = null;
   private isFearCharging: boolean = false;
   private fearChargeStartTime: number = 0;
+  private lastFearTime: number = 0;  // 恐怖弾のクールダウン用
   private readonly FEAR_RADIUS = 4.5 * UNIT.METER_TO_PIXEL;  // 半径4.5m
   private readonly FEAR_WARNING_TIME = 660;  // 0.66秒予告
+  private readonly FEAR_COOLDOWN = 3000;  // 恐怖弾のクールダウン3秒
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     // 初期パターンを決定
@@ -351,6 +358,11 @@ export class MobGroupB extends MobEnemy {
     }
     if (this.isFearCharging) {
       this.updateFear(time);
+    }
+
+    // B-4専用: 継続的にAIを更新（移動と射撃の同時実行のため）
+    if (this.patternType === 'B4' && this.autoShootEnabled) {
+      this.updateB4AI(time);
     }
 
     // 自動発射が無効なら新規攻撃はしない
@@ -625,7 +637,8 @@ export class MobGroupB extends MobEnemy {
       this.raptureWarningCircle.destroy();
       this.raptureWarningCircle = null;
     }
-    this.raptureBullets = [];
+    // ラプチャーの弾を破棄
+    this.destroyRaptureBullets();
     this.rapturePhase = 'none';
 
     // スクリーム
@@ -661,8 +674,8 @@ export class MobGroupB extends MobEnemy {
     this.cleanupB3();
     this.cleanupB4();
     this.b3AttackType = 'rapture';  // 最初はラプチャーから
-    this.b4AttackType = 'fixed_shot';  // 最初は固定射撃から
-    this.b4AttackCount = 0;
+    this.lastFixedShotCDTime = 0;
+    this.lastFearTime = 0;
   }
 
   /**
@@ -1080,29 +1093,179 @@ export class MobGroupB extends MobEnemy {
   // =============================================
 
   /**
-   * B-4攻撃開始（固定射撃→ムービング→恐怖弾をローテーション）
+   * B-4 AIの継続的な更新
+   * 毎フレーム呼ばれ、条件に応じて移動・射撃を開始する
+   */
+  private updateB4AI(time: number): void {
+    // 登場後2秒間は全ての行動を行わない
+    const aliveTime = time - this.spawnTime;
+    const attackDelay = 2000;  // 2秒
+
+    // 登場後2秒間は何もしない
+    if (aliveTime < attackDelay) {
+      return;
+    }
+
+    if (!this.playerPosition) {
+      // プレイヤー位置が分からない場合は固定射撃のみ
+      if (!this.isFixedShotActive && time - this.lastFixedShotCDTime >= this.FIXED_SHOT_COOLDOWN) {
+        this.startFixedShot(time);
+      }
+      return;
+    }
+
+    // プレイヤーとの距離を計算
+    const dx = this.playerPosition.x - this.x;
+    const dy = this.playerPosition.y - this.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // 通常移動：ムービング中でない場合、毎フレームプレイヤーとの距離7.5mを維持
+    if (!this.isMoving) {
+      this.updateBaseMovement(distance, dx, dy);
+    }
+
+    // 恐怖弾：プレイヤーが射程内(4.5m)にいて、CDが上がっていて、チャージ中でなく、固定射撃中でない場合
+    if (distance <= this.FEAR_RADIUS &&
+        time - this.lastFearTime >= this.FEAR_COOLDOWN &&
+        !this.isFearCharging &&
+        !this.isFixedShotActive) {
+      this.startFear(time);
+      return;
+    }
+
+    // ムービング：プレイヤーとの距離が目標距離(7.5m)から大きく離れていて、移動中でなく、CDが上がっている場合
+    const distanceDiff = Math.abs(distance - this.TARGET_DISTANCE);
+    if (distanceDiff > this.DISTANCE_TOLERANCE && !this.isMoving &&
+        time - this.lastMoveTime >= this.MOVE_COOLDOWN) {
+      this.startMovingToTargetDistance(time, distance);
+    }
+
+    // 固定射撃：CDが上がっていて、発射中でない場合（移動中でも発射可能）
+    if (!this.isFixedShotActive && time - this.lastFixedShotCDTime >= this.FIXED_SHOT_COOLDOWN) {
+      this.startFixedShot(time);
+    }
+  }
+
+  /**
+   * B-4の通常移動（毎フレーム）
+   * - 固定射撃中以外: プレイヤーとの距離7.5mを維持
+   * - 固定射撃中: 弾道軸を合わせる移動
+   */
+  private updateBaseMovement(distance: number, dx: number, dy: number): void {
+    if (!this.playerPosition) return;
+
+    const delta = this.scene.game.loop.delta / 1000;  // 秒単位
+
+    let moveX = 0;
+    let moveY = 0;
+
+    if (this.isFixedShotActive) {
+      // 固定射撃中: 弾道軸を合わせる移動
+      // 目標: 妖精→プレイヤーの方向がfixedShotAngleになる位置へ移動
+
+      // 弾道軸の単位ベクトル
+      const axisX = Math.cos(this.fixedShotAngle);
+      const axisY = Math.sin(this.fixedShotAngle);
+
+      // 目標位置: プレイヤーから弾道方向の逆側へ、現在の距離分だけ離れた位置
+      const targetX = this.playerPosition.x - axisX * distance;
+      const targetY = this.playerPosition.y - axisY * distance;
+
+      // 目標への差分
+      const toTargetX = targetX - this.x;
+      const toTargetY = targetY - this.y;
+      const toTargetDist = Math.sqrt(toTargetX * toTargetX + toTargetY * toTargetY);
+
+      // 距離が小さければ移動しない
+      if (toTargetDist < 5) {
+        return;
+      }
+
+      // 移動量
+      const moveAmount = Math.min(this.BASE_MOVE_SPEED * delta, toTargetDist);
+      moveX = (toTargetX / toTargetDist) * moveAmount;
+      moveY = (toTargetY / toTargetDist) * moveAmount;
+    } else {
+      // 固定射撃中以外: プレイヤーとの距離7.5mを維持
+      const distanceDiff = distance - this.TARGET_DISTANCE;
+
+      // 距離が許容誤差内なら移動しない
+      if (Math.abs(distanceDiff) <= this.DISTANCE_TOLERANCE * 0.5) {
+        return;
+      }
+
+      // 移動方向: プレイヤーに近づく(+) or 離れる(-)
+      const moveDir = distanceDiff > 0 ? 1 : -1;
+      const angle = Math.atan2(dy, dx);
+
+      // 移動量（デルタ時間ベース）
+      const moveAmount = this.BASE_MOVE_SPEED * delta * moveDir;
+      moveX = Math.cos(angle) * moveAmount;
+      moveY = Math.sin(angle) * moveAmount;
+    }
+
+    // 新しい位置を計算
+    let newX = this.x + moveX;
+    let newY = this.y + moveY;
+
+    // 画面内に収まるように調整
+    const { PLAY_AREA } = GAME_CONFIG;
+    newX = Phaser.Math.Clamp(newX, PLAY_AREA.X + 50, PLAY_AREA.X + PLAY_AREA.WIDTH - 50);
+    newY = Phaser.Math.Clamp(newY, PLAY_AREA.Y + 50, PLAY_AREA.Y + PLAY_AREA.HEIGHT - 50);
+
+    this.x = newX;
+    this.y = newY;
+  }
+
+  /**
+   * B-4攻撃開始（条件ベースのAI）
+   *
+   * 優先度:
+   * 1. 恐怖弾: プレイヤーが射程内(4.5m)にいて、CDが上がっていれば使用
+   * 2. 移動: プレイヤーとの距離が7.5mから離れていれば移動開始
+   * 3. 固定射撃: CDが上がっていれば使用（移動中でも発射可能）
+   *
+   * 固定射撃は移動と並行して使用可能
    */
   private startB4Attack(time: number): void {
-    const attackTypes: ('fixed_shot' | 'moving' | 'fear')[] = ['fixed_shot', 'moving', 'fear'];
-    this.b4AttackType = attackTypes[this.b4AttackCount % 3];
-    this.b4AttackCount++;
-
-    switch (this.b4AttackType) {
-      case 'fixed_shot':
+    if (!this.playerPosition) {
+      // プレイヤー位置が分からない場合は固定射撃のみ
+      if (!this.isFixedShotActive && time - this.lastFixedShotCDTime >= this.FIXED_SHOT_COOLDOWN) {
         this.startFixedShot(time);
-        break;
-      case 'moving':
-        this.startMoving(time);
-        break;
-      case 'fear':
-        this.startFear(time);
-        break;
+      }
+      return;
+    }
+
+    // プレイヤーとの距離を計算
+    const dx = this.playerPosition.x - this.x;
+    const dy = this.playerPosition.y - this.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // 恐怖弾：プレイヤーが射程内(4.5m)にいて、CDが上がっていて、チャージ中でない場合
+    if (distance <= this.FEAR_RADIUS &&
+        time - this.lastFearTime >= this.FEAR_COOLDOWN &&
+        !this.isFearCharging) {
+      this.startFear(time);
+      return;
+    }
+
+    // 移動：プレイヤーとの距離が目標距離(7.5m)から大きく離れていて、移動中でなく、CDが上がっている場合
+    const distanceDiff = Math.abs(distance - this.TARGET_DISTANCE);
+    if (distanceDiff > this.DISTANCE_TOLERANCE && !this.isMoving &&
+        time - this.lastMoveTime >= this.MOVE_COOLDOWN) {
+      this.startMovingToTargetDistance(time, distance);
+    }
+
+    // 固定射撃：CDが上がっていて、発射中でない場合（移動中でも発射可能）
+    if (!this.isFixedShotActive && time - this.lastFixedShotCDTime >= this.FIXED_SHOT_COOLDOWN) {
+      this.startFixedShot(time);
     }
   }
 
   /**
    * 固定射撃開始
-   * 2.2秒間、0.22秒毎に妖精の向いている方向に弾発射
+   * 2.2秒間、0.22秒毎に固定角度で弾発射
+   * 射撃開始時のプレイヤー方向を固定し、移動で距離を調整して当てる
    */
   private startFixedShot(time: number): void {
     if (!this.playerPosition) return;
@@ -1111,7 +1274,7 @@ export class MobGroupB extends MobEnemy {
     this.fixedShotStartTime = time;
     this.fixedShotLastFireTime = time;
 
-    // プレイヤー方向を固定（この角度は変わらない）
+    // 射撃開始時のプレイヤー方向を固定（この角度は射撃中変わらない）
     this.fixedShotAngle = Phaser.Math.Angle.Between(
       this.x, this.y,
       this.playerPosition.x, this.playerPosition.y
@@ -1130,6 +1293,7 @@ export class MobGroupB extends MobEnemy {
     // 2.2秒経過で終了
     if (elapsed >= this.FIXED_SHOT_DURATION) {
       this.isFixedShotActive = false;
+      this.lastFixedShotCDTime = time;  // CD開始
       return;
     }
 
@@ -1142,6 +1306,7 @@ export class MobGroupB extends MobEnemy {
 
   /**
    * 固定射撃の弾を発射
+   * 固定された角度（射撃開始時のプレイヤー方向）に発射
    */
   private fireFixedShotBullet(): void {
     if (!this.bulletPool) return;
@@ -1151,7 +1316,7 @@ export class MobGroupB extends MobEnemy {
 
     const displayScale = (this.FIXED_SHOT_RADIUS * 2) / 278;  // 輪弾(278px)
 
-    // 発射位置から角度方向へ
+    // 固定角度方向へ発射
     const targetX = this.x + Math.cos(this.fixedShotAngle) * 500;
     const targetY = this.y + Math.sin(this.fixedShotAngle) * 500;
 
@@ -1177,23 +1342,58 @@ export class MobGroupB extends MobEnemy {
   }
 
   /**
-   * ムービング開始
-   * 任意の方向に4m移動（10m/s）
+   * 移動開始
+   *
+   * 固定射撃中の場合：プレイヤーが弾道軸上に来る位置へ移動（距離は無視）
+   * 固定射撃中でない場合：プレイヤー方向に距離7.5mを維持
    */
-  private startMoving(time: number): void {
+  private startMovingToTargetDistance(time: number, currentDistance: number): void {
+    if (!this.playerPosition) return;
+
     this.isMoving = true;
     this.moveStartTime = time;
     this.moveStartPos = { x: this.x, y: this.y };
 
-    // ランダムな方向を決定
-    const angle = Math.random() * Math.PI * 2;
-    this.moveTargetPos = {
-      x: this.x + Math.cos(angle) * this.MOVE_DISTANCE,
-      y: this.y + Math.sin(angle) * this.MOVE_DISTANCE,
-    };
+    if (this.isFixedShotActive) {
+      // 固定射撃中: プレイヤーが弾道軸上に来る位置へ移動（距離は気にしない）
+      //
+      // 目標: 弾がプレイヤーに当たるように妖精を移動させる
+      // 方法: プレイヤーから弾道方向の逆側へ移動
+      //       （妖精→プレイヤーの方向がfixedShotAngleになる位置）
+
+      // 弾道軸の単位ベクトル
+      const axisX = Math.cos(this.fixedShotAngle);
+      const axisY = Math.sin(this.fixedShotAngle);
+
+      // 現在の妖精→プレイヤーの距離を計算
+      const toPlayerX = this.playerPosition.x - this.x;
+      const toPlayerY = this.playerPosition.y - this.y;
+      const distToPlayer = Math.sqrt(toPlayerX * toPlayerX + toPlayerY * toPlayerY);
+
+      // 目標位置: プレイヤーから弾道方向の逆側へ、現在の距離分だけ離れた位置
+      // これで妖精が移動すると、弾道軸がプレイヤーを通るようになる
+      this.moveTargetPos = {
+        x: this.playerPosition.x - axisX * distToPlayer,
+        y: this.playerPosition.y - axisY * distToPlayer,
+      };
+    } else {
+      // 固定射撃中でない場合: プレイヤー方向に距離7.5mを維持
+      const dx = this.playerPosition.x - this.x;
+      const dy = this.playerPosition.y - this.y;
+      const moveAngle = Math.atan2(dy, dx);
+
+      // 目標距離との差分
+      const distanceDiff = currentDistance - this.TARGET_DISTANCE;
+
+      // 目標位置を計算
+      this.moveTargetPos = {
+        x: this.x + Math.cos(moveAngle) * distanceDiff,
+        y: this.y + Math.sin(moveAngle) * distanceDiff,
+      };
+    }
 
     // 画面内に収まるように調整
-    const { PLAY_AREA } = require('@/config/GameConfig').GAME_CONFIG;
+    const { PLAY_AREA } = GAME_CONFIG;
     this.moveTargetPos.x = Phaser.Math.Clamp(
       this.moveTargetPos.x,
       PLAY_AREA.X + 50,
@@ -1204,6 +1404,19 @@ export class MobGroupB extends MobEnemy {
       PLAY_AREA.Y + 50,
       PLAY_AREA.Y + PLAY_AREA.HEIGHT - 50
     );
+
+    // 実際の移動距離を計算
+    const actualDx = this.moveTargetPos.x - this.moveStartPos.x;
+    const actualDy = this.moveTargetPos.y - this.moveStartPos.y;
+    const actualMoveDistance = Math.sqrt(actualDx * actualDx + actualDy * actualDy);
+
+    // 移動時間を計算（距離に応じて変わる）
+    this.moveDuration = (actualMoveDistance / this.MOVE_SPEED) * 1000;
+
+    // 移動距離が非常に小さい場合は移動しない
+    if (actualMoveDistance < 10) {
+      this.isMoving = false;
+    }
   }
 
   /**
@@ -1211,18 +1424,18 @@ export class MobGroupB extends MobEnemy {
    */
   private updateMoving(time: number): void {
     const elapsed = time - this.moveStartTime;
-    const moveDuration = (this.MOVE_DISTANCE / this.MOVE_SPEED) * 1000;  // 移動にかかる時間（ms）
 
-    if (elapsed >= moveDuration) {
+    if (elapsed >= this.moveDuration) {
       // 移動完了
       this.x = this.moveTargetPos.x;
       this.y = this.moveTargetPos.y;
       this.isMoving = false;
+      this.lastMoveTime = time;  // CD開始
       return;
     }
 
     // 線形補間で移動
-    const progress = elapsed / moveDuration;
+    const progress = elapsed / this.moveDuration;
     this.x = this.moveStartPos.x + (this.moveTargetPos.x - this.moveStartPos.x) * progress;
     this.y = this.moveStartPos.y + (this.moveTargetPos.y - this.moveStartPos.y) * progress;
   }
@@ -1276,6 +1489,7 @@ export class MobGroupB extends MobEnemy {
     if (elapsed >= this.FEAR_WARNING_TIME) {
       this.executeFearDamage();
       this.isFearCharging = false;
+      this.lastFearTime = time;  // CD開始
       if (this.fearWarningCircle) {
         this.fearWarningCircle.destroy();
         this.fearWarningCircle = null;

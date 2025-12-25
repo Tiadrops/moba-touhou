@@ -37,6 +37,14 @@ export class BulletPool {
     // 非アクティブな弾を探す
     for (const bullet of this.pool) {
       if (!bullet.getIsActive()) {
+        // シーン参照が失われていないか確認
+        if (!bullet.scene) {
+          console.warn('[BulletPool.acquire] Bullet has lost scene reference, skipping...', {
+            poolIndex: this.pool.indexOf(bullet),
+            poolSize: this.pool.length,
+          });
+          continue; // このBulletはスキップして次を探す
+        }
         return bullet;
       }
     }

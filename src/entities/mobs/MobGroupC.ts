@@ -164,6 +164,23 @@ export class MobGroupC extends MobEnemy {
   }
 
   /**
+   * 下降→追尾型スポーン（パターン指定付き）
+   * 画面上部から下降し、目標Y座標到達後に追尾移動を開始
+   */
+  spawnDescendThenChaseWithPattern(
+    x: number,
+    y: number,
+    pattern: MobCPatternType,
+    targetY: number,
+    descendSpeed: number,
+    chaseSpeed: number
+  ): void {
+    this.setPatternType(pattern);
+    this.spawnDescendThenChase(x, y, targetY, descendSpeed, chaseSpeed);
+    this.resetSkillState();
+  }
+
+  /**
    * パターン指定付きスポーン
    */
   spawnWithPattern(
@@ -596,7 +613,7 @@ export class MobGroupC extends MobEnemy {
   }
 
   /**
-   * プレイヤー方向に接近（重ならない程度に）
+   * プレイヤー方向に高速移動で接近（重ならない程度に）
    */
   private moveTowardsPlayer(): void {
     if (!this.playerPosition) return;
@@ -606,14 +623,23 @@ export class MobGroupC extends MobEnemy {
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     // 最小距離（これより近づかない）
-    const minDistance = 2 * UNIT.METER_TO_PIXEL;  // 2m
+    const minDistance = 0.5 * UNIT.METER_TO_PIXEL;  // 0.5m
 
     if (dist > minDistance) {
       // プレイヤーとの距離が最小距離になるまで移動
       const targetDist = minDistance;
       const ratio = (dist - targetDist) / dist;
-      this.x += dx * ratio;
-      this.y += dy * ratio;
+      const targetX = this.x + dx * ratio;
+      const targetY = this.y + dy * ratio;
+
+      // 高速移動（0.15秒で移動）
+      this.scene.tweens.add({
+        targets: this,
+        x: targetX,
+        y: targetY,
+        duration: 150,
+        ease: 'Quad.easeOut'
+      });
     }
   }
 

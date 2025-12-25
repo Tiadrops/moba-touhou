@@ -109,6 +109,17 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     isCritical: boolean = false,
     kshotFrameId: number | null = null
   ): void {
+    // シーン参照チェック
+    if (!this.scene || !this.scene.time) {
+      console.error('[Bullet.fire] scene or scene.time is undefined!', {
+        hasScene: !!this.scene,
+        hasSceneTime: this.scene ? !!this.scene.time : false,
+        bulletActive: this.active,
+        bulletVisible: this.visible,
+      });
+      return;
+    }
+
     this.bulletType = bulletType;
     this.damage = damage;
     this.isActive = true;

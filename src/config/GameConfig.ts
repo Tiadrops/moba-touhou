@@ -123,6 +123,7 @@ export const SCENES = {
   CUTIN_TEST: 'CutInTestScene',
   MOB_TEST: 'MobTestScene',
   RESULT_TEST: 'ResultTestScene',
+  WAVE_DEBUG: 'WaveDebugScene',
 } as const;
 
 /**
@@ -436,6 +437,7 @@ export const MOB_GROUP_CONFIG = {
     MOVE_SPEED: 80,
     HITBOX_RADIUS: 16,
     SCORE_VALUE: 100,
+    EXP_VALUE: 5,           // 経験値
     SURVIVAL_TIME: 15000,   // 15秒で退場開始
     IS_FLAG_CARRIER: false,
     // 退場方式: 端へ移動して消える
@@ -449,6 +451,7 @@ export const MOB_GROUP_CONFIG = {
     MOVE_SPEED: 60,
     HITBOX_RADIUS: 20,
     SCORE_VALUE: 300,
+    EXP_VALUE: 25,          // 経験値
     SURVIVAL_TIME: -1,      // 無制限（撃破まで残る）
     IS_FLAG_CARRIER: false,
     EXIT_MODE: 'none' as const,
@@ -461,6 +464,7 @@ export const MOB_GROUP_CONFIG = {
     MOVE_SPEED: 40,
     HITBOX_RADIUS: 28,
     SCORE_VALUE: 1000,
+    EXP_VALUE: 50,          // 経験値
     SURVIVAL_TIME: -1,      // 無制限（撃破まで残る）
     IS_FLAG_CARRIER: true,
     EXIT_MODE: 'none' as const,

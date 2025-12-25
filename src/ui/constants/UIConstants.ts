@@ -155,7 +155,7 @@ export const UI_LAYOUT = {
       LINE_HEIGHT: 22,          // 行の高さ
       PADDING: 12,              // パディング
       WIDTH: 260,               // 背景の幅
-      TARGET_TIME: 180,         // 目標時間（秒）
+      TARGET_TIME: 90,          // 目標時間（秒）- Wave 1-1基準
     },
     // スキルバー（エネミーのボススキルバーと対称位置）
     SKILL_BAR: {

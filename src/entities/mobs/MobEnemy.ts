@@ -186,6 +186,7 @@ export abstract class MobEnemy extends Phaser.Physics.Arcade.Sprite {
       moveSpeed: config.MOVE_SPEED,
       hitboxRadius: config.HITBOX_RADIUS,
       scoreValue: config.SCORE_VALUE,
+      expValue: config.EXP_VALUE,
       survivalTime: config.SURVIVAL_TIME,
       isFlagCarrier: config.IS_FLAG_CARRIER,
       exitMode: config.EXIT_MODE as MobExitMode,
@@ -559,15 +560,26 @@ export abstract class MobEnemy extends Phaser.Physics.Arcade.Sprite {
     // HPバーを更新
     this.updateHpBar();
 
+    // プレイエリア外にいる場合は描画しない（pass_throughでスポーン待ち中など）
+    const insidePlayArea = this.isInsidePlayArea();
+    if (!insidePlayArea && this.visible) {
+      this.setVisible(false);
+      if (this.hpBarBg) this.hpBarBg.setVisible(false);
+      if (this.hpBarFill) this.hpBarFill.setVisible(false);
+    } else if (insidePlayArea && !this.visible) {
+      this.setVisible(true);
+      // HPバーはupdateHpBar()で制御されるのでここでは変更しない
+    }
+
     // 画面外に出たら非アクティブ化
-    // pass_through/pass_through_curveモードでは上方向のマージンを大きくする（スポーン位置対応）
+    // pass_through/pass_through_curveモードでは上方向・横方向のマージンを大きくする（スポーン位置対応）
     const { X, WIDTH } = GAME_CONFIG.PLAY_AREA;
     const Y = GAME_CONFIG.PLAY_AREA.Y;
     const HEIGHT = GAME_CONFIG.PLAY_AREA.HEIGHT;
     const margin = 100;
     const isPassThrough = this.movePattern === 'pass_through' || this.movePattern === 'pass_through_curve';
     const topMargin = isPassThrough ? 300 : margin;
-    const sideMargin = isPassThrough ? 50 : margin;  // 横方向はすぐに消える
+    const sideMargin = isPassThrough ? 1000 : margin;  // 横方向は遠くからスポーンする可能性がある
     if (this.x < X - sideMargin || this.x > X + WIDTH + sideMargin ||
         this.y < Y - topMargin || this.y > Y + HEIGHT + margin) {
       this.deactivate();
@@ -1247,6 +1259,13 @@ export abstract class MobEnemy extends Phaser.Physics.Arcade.Sprite {
     if (this.hpBarBg) this.hpBarBg.setVisible(true);
     if (this.hpBarFill) this.hpBarFill.setVisible(true);
     this.updateHpBar();
+
+    // プレイエリア外にスポーンした場合は非表示にする（下降してきてから表示）
+    if (!this.isInsidePlayArea()) {
+      this.setVisible(false);
+      if (this.hpBarBg) this.hpBarBg.setVisible(false);
+      if (this.hpBarFill) this.hpBarFill.setVisible(false);
+    }
   }
 
   /**
@@ -1366,6 +1385,10 @@ export abstract class MobEnemy extends Phaser.Physics.Arcade.Sprite {
     return this.stats.scoreValue;
   }
 
+  getExpValue(): number {
+    return this.stats.expValue;
+  }
+
   getIsActive(): boolean {
     return this.isActive;
   }
@@ -1399,5 +1422,14 @@ export abstract class MobEnemy extends Phaser.Physics.Arcade.Sprite {
    */
   getIsCurving(): boolean {
     return this.isCurving;
+  }
+
+  /**
+   * プレイエリア内にいるかどうかを判定
+   */
+  isInsidePlayArea(): boolean {
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    return this.x >= X && this.x <= X + WIDTH &&
+           this.y >= Y && this.y <= Y + HEIGHT;
   }
 }

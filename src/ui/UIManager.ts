@@ -98,10 +98,33 @@ export class UIManager {
   }
 
   /**
+   * 経験値獲得時の処理
+   */
+  addExp(expValue: number): void {
+    this.playerZone.addExp(expValue);
+  }
+
+  /**
+   * プレイヤーがダメージを受けた時の処理（スコアボード用）
+   */
+  onDamageTaken(damage: number): void {
+    this.playerZone.addDamageTaken(damage);
+  }
+
+  /**
    * PlayerZoneを取得
    */
   getPlayerZone(): PlayerZone {
     return this.playerZone;
+  }
+
+  /**
+   * Waveクリア時にスコアを精算
+   * @param waveScore Waveリザルトで計算されたスコア
+   * @param time 現在時刻
+   */
+  finalizeWaveScore(waveScore: number, time: number): void {
+    this.playerZone.finalizeWaveScore(waveScore, time);
   }
 
   /**

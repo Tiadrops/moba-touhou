@@ -19,6 +19,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private currentHp: number = 0;
   private isInvincible: boolean = false;
   private isStunned: boolean = false;  // 行動不能状態
+  private stunEndTime: number = 0;     // スタン終了時刻
+  private stunDuration: number = 0;    // スタン総時間
 
   // 移動関連
   private targetPosition: Position | null = null;
@@ -1497,14 +1499,28 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   /**
    * スタン状態を設定（引き寄せなど外部からの行動不能）
+   * @param stunned スタン状態にするかどうか
+   * @param duration スタン持続時間（ms）、0の場合は手動解除まで
    */
-  setStunned(stunned: boolean): void {
+  setStunned(stunned: boolean, duration: number = 0): void {
     this.isStunned = stunned;
     if (stunned) {
       // スタン中は移動を停止
       this.targetPosition = null;
       this.isMoving = false;
       this.setVelocity(0, 0);
+
+      // スタン時間を記録
+      if (duration > 0) {
+        this.stunDuration = duration;
+        this.stunEndTime = this.scene.time.now + duration;
+      } else {
+        this.stunDuration = 0;
+        this.stunEndTime = 0;
+      }
+    } else {
+      this.stunDuration = 0;
+      this.stunEndTime = 0;
     }
   }
 
@@ -1513,5 +1529,20 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
    */
   getIsStunned(): boolean {
     return this.isStunned;
+  }
+
+  /**
+   * スタン情報を取得（デバフ表示用）
+   * @returns スタン中ならば { remainingTime, totalDuration }、そうでなければ null
+   */
+  getStunInfo(): { remainingTime: number; totalDuration: number } | null {
+    if (!this.isStunned || this.stunDuration <= 0) {
+      return null;
+    }
+    const remaining = Math.max(0, this.stunEndTime - this.scene.time.now);
+    return {
+      remainingTime: remaining,
+      totalDuration: this.stunDuration
+    };
   }
 }

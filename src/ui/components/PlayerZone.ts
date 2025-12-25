@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { Player } from '@/entities/Player';
-import { SkillSlot, SkillState, BuffType } from '@/types';
+import { SkillSlot, SkillState, BuffType, StatusEffectType } from '@/types';
 import { SKILL_CONFIG } from '@/config/GameConfig';
 import { UI_LAYOUT, UI_DEPTH, SKILL_KEY_LABELS } from '../constants/UIConstants';
 import { SkillSlotUI } from './SkillSlotUI';
@@ -43,6 +43,9 @@ export class PlayerZone extends Phaser.GameObjects.Container {
   private breakCount: number = 0;
   private gameStartTime: number = -1;  // -1 = 未初期化（最初のupdateで設定）
   private totalScore: number = 0; // 過去ステージのスコア合算
+  private exp: number = 0;  // Wave中の経験値（スコアとして使用）
+  private totalExp: number = 0;  // プレイ中ずっと溜まる経験値
+  private damageTaken: number = 0;  // 被ダメージ
 
   // スキルスロット順序
   private readonly slotOrder: SkillSlot[] = [
@@ -239,8 +242,8 @@ export class PlayerZone extends Phaser.GameObjects.Container {
   private createScoreboard(): void {
     const layout = UI_LAYOUT.PLAYER_ZONE.SCOREBOARD;
 
-    // 背景パネル（4行分）
-    const bgHeight = 4 * layout.LINE_HEIGHT + layout.PADDING * 2;
+    // 背景パネル（6行分）
+    const bgHeight = 6 * layout.LINE_HEIGHT + layout.PADDING * 2;
     this.scoreboardBg = this.scene.add.rectangle(
       layout.X,
       layout.Y + bgHeight / 2,
@@ -251,8 +254,8 @@ export class PlayerZone extends Phaser.GameObjects.Container {
     this.scoreboardBg.setAlpha(0.7);
     this.add(this.scoreboardBg);
 
-    // スコアテキスト（4行）
-    const labels = ['Total Score', 'Stage Score', 'Break Score', 'Time Score'];
+    // スコアテキスト（6行）
+    const labels = ['Total Score', 'Total Exp', 'Exp', 'Damage Taken', 'Break Score', 'Time Score'];
     labels.forEach((label, index) => {
       const text = this.scene.add.text(
         layout.X - layout.WIDTH / 2 + layout.PADDING,
@@ -387,8 +390,18 @@ export class PlayerZone extends Phaser.GameObjects.Container {
       });
     }
 
-    // デバフ（現在プレイヤーにはデバフなし）
+    // デバフ
     const debuffEffects: { type: string; remainingTime: number; totalDuration?: number }[] = [];
+
+    // スタン状態
+    const stunInfo = this.player.getStunInfo();
+    if (stunInfo) {
+      debuffEffects.push({
+        type: StatusEffectType.STUN,
+        remainingTime: stunInfo.remainingTime,
+        totalDuration: stunInfo.totalDuration,
+      });
+    }
 
     this.statusEffectBar.updateEffects(buffEffects, debuffEffects);
   }
@@ -464,33 +477,36 @@ export class PlayerZone extends Phaser.GameObjects.Container {
     // タイムスコア表示: 経過時間 / 目標時間
     const timeScoreDisplay = `${elapsedSeconds}s / ${targetTime}s`;
 
-    // タイムボーナス（目標時間 - 経過時間）、マイナスにならないように
-    const timeBonus = Math.max(0, targetTime - elapsedSeconds);
-
-    // ステージスコア: BreakScore x 100 + タイムボーナス x 100（0以上）
-    const stageScore = Math.max(0, this.breakCount * 100 + timeBonus * 100);
-
-    // トータルスコア: 過去ステージのスコア合算 + 現在のステージスコア
-    const currentTotalScore = this.totalScore + stageScore;
-
     // テキスト更新
+    // [0] Total Score
     if (this.scoreboardTexts[0]) {
-      this.scoreboardTexts[0].setText(`Total Score: ${currentTotalScore}`);
+      this.scoreboardTexts[0].setText(`Total Score: ${this.totalScore}`);
     }
+    // [1] Total Exp（累計経験値）
     if (this.scoreboardTexts[1]) {
-      this.scoreboardTexts[1].setText(`Stage Score: ${stageScore}`);
+      this.scoreboardTexts[1].setText(`Total Exp: ${this.totalExp}`);
     }
+    // [2] Exp（Wave中の経験値）
     if (this.scoreboardTexts[2]) {
-      this.scoreboardTexts[2].setText(`Break Score: ${this.breakCount}`);
+      this.scoreboardTexts[2].setText(`Exp: ${this.exp}`);
+    }
+    // [3] Damage Taken（被ダメージ）
+    if (this.scoreboardTexts[3]) {
+      this.scoreboardTexts[3].setText(`Damage Taken: ${this.damageTaken}`);
+    }
+    // [4] Break Score
+    if (this.scoreboardTexts[4]) {
+      this.scoreboardTexts[4].setText(`Break Score: ${this.breakCount}`);
       // 単位をBreak Scoreテキストの直後に配置
-      const breakText = this.scoreboardTexts[2];
+      const breakText = this.scoreboardTexts[4];
       this.breakScoreUnit.setPosition(
         breakText.x + breakText.width + 4,
         breakText.y + 4
       );
     }
-    if (this.scoreboardTexts[3]) {
-      this.scoreboardTexts[3].setText(`Time Score: ${timeScoreDisplay}`);
+    // [5] Time Score
+    if (this.scoreboardTexts[5]) {
+      this.scoreboardTexts[5].setText(`Time Score: ${timeScoreDisplay}`);
     }
   }
 
@@ -506,6 +522,42 @@ export class PlayerZone extends Phaser.GameObjects.Container {
    */
   getBreakCount(): number {
     return this.breakCount;
+  }
+
+  /**
+   * 経験値を追加（Wave中のExpとTotal Exp両方に加算）
+   */
+  addExp(expValue: number): void {
+    this.exp += expValue;
+    this.totalExp += expValue;
+  }
+
+  /**
+   * 被ダメージを追加
+   */
+  addDamageTaken(damage: number): void {
+    this.damageTaken += damage;
+  }
+
+  /**
+   * 現在のWave中Expを取得
+   */
+  getExp(): number {
+    return this.exp;
+  }
+
+  /**
+   * 現在の累計Expを取得
+   */
+  getTotalExp(): number {
+    return this.totalExp;
+  }
+
+  /**
+   * 現在の被ダメージを取得
+   */
+  getDamageTaken(): number {
+    return this.damageTaken;
   }
 
   /**
@@ -525,6 +577,26 @@ export class PlayerZone extends Phaser.GameObjects.Container {
     this.gameStartTime = time;
 
     return stageScore;
+  }
+
+  /**
+   * Waveクリア時にスコアを加算してタイマーをリセット
+   * @param waveScore Waveリザルトで計算されたスコア
+   * @param time 現在時刻
+   */
+  finalizeWaveScore(waveScore: number, time: number): void {
+    // Waveスコアをトータルスコアに加算
+    this.totalScore += waveScore;
+
+    // タイマーをリセット（次のWave用）
+    this.gameStartTime = time;
+
+    // 各種カウンターをリセット（expはリセットするがtotalExpは維持）
+    this.breakCount = 0;
+    this.exp = 0;
+    this.damageTaken = 0;
+
+    console.log(`[PlayerZone] Waveスコア精算: +${waveScore}, Total: ${this.totalScore}, TotalExp: ${this.totalExp}`);
   }
 
   /**
