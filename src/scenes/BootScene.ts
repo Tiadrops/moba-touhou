@@ -110,6 +110,18 @@ export class BootScene extends Phaser.Scene {
     this.load.audio('se_hit_player', 'sound/se/hit_player.mp3');
     this.load.audio('se_hit_enemy', 'sound/se/hit_enemy.mp3');
     this.load.audio('se_spellcard', 'sound/se/spellcard.mp3');
+    this.load.audio('se_enep00', 'sound/se/se_enep00.mp3');       // 雑魚撃破SE
+    this.load.audio('se_hit_arrow', 'sound/se/se_hisou_orizin_009.mp3'); // プレイヤー攻撃ヒットSE
+    this.load.audio('se_tan00', 'sound/se/se_tan00.wav');         // 雑魚弾幕発射SE（A系、B-1）
+    this.load.audio('se_gun00', 'sound/se/se_gun00.wav');         // B-2レーザー発射SE
+    this.load.audio('se_death_grasp', 'sound/se/koma_020.wav');   // デスグラスプヒットSE
+    this.load.audio('se_obliterate', 'sound/se/ten_010.mp3');     // オブリテレイトヒットSE
+
+    // C-1 デスグラスプエフェクト画像
+    this.load.image('shadow1-1', 'img/fairy/attack/shadow/shadow1-1.png');
+    this.load.image('shadow1-2', 'img/fairy/attack/shadow/shadow1-2.png');
+    this.load.image('shadow1-3', 'img/fairy/attack/shadow/shadow1-3.png');
+    this.load.image('shadow1-4', 'img/fairy/attack/shadow/shadow1-4.png');
   }
 
   create(): void {

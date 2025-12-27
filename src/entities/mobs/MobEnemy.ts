@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { MobGroupType, MobStats, MobExitMode, StatusEffect, StatusEffectType } from '@/types';
 import { DEPTH, COLORS, GAME_CONFIG, MOB_GROUP_CONFIG, MID_STAGE_CONFIG } from '@/config/GameConfig';
 import { BulletPool } from '@/utils/ObjectPool';
+import { AudioManager } from '@/systems/AudioManager';
 
 /**
  * 道中雑魚敵の基底クラス
@@ -1323,6 +1324,9 @@ export abstract class MobEnemy extends Phaser.Physics.Arcade.Sprite {
    * 死亡処理
    */
   protected onDeath(): void {
+    // 戦闘不能SEを再生
+    AudioManager.getInstance().playSe('se_enep00');
+
     // TODO: 死亡エフェクト
     // TODO: アイテムドロップ
 

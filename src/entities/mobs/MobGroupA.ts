@@ -3,6 +3,7 @@ import { MobGroupType, BulletType } from '@/types';
 import { MobEnemy } from './MobEnemy';
 import { KSHOT } from '../Bullet';
 import { UNIT } from '@/config/GameConfig';
+import { AudioManager } from '@/systems/AudioManager';
 
 /**
  * 弾幕パターンタイプ
@@ -329,6 +330,9 @@ export class MobGroupA extends MobEnemy {
   private shootPatternA1(): void {
     if (!this.bulletPool || !this.playerPosition) return;
 
+    // 発射SEを再生
+    AudioManager.getInstance().playSe('se_tan00', { volume: 0.6 });
+
     const wayCount = 5;
     const bulletRadius = 0.25 * UNIT.METER_TO_PIXEL;  // 0.25m = 13.75px
     const displayScale = (bulletRadius * 2) / 278;    // 輪弾は278px
@@ -378,6 +382,9 @@ export class MobGroupA extends MobEnemy {
   private shootPatternA2(): void {
     if (!this.bulletPool || !this.playerPosition) return;
     console.log(`[A-2 shootPatternA2] 発射! time=${Math.floor(this.scene.time.now)}ms`);
+
+    // 発射SEを再生
+    AudioManager.getInstance().playSe('se_tan00', { volume: 0.6 });
 
     const wayCount = 11;
     const rowCount = 2;
@@ -433,6 +440,9 @@ export class MobGroupA extends MobEnemy {
   private shootPatternA3(): void {
     if (!this.bulletPool || !this.playerPosition) return;
 
+    // 発射SEを再生
+    AudioManager.getInstance().playSe('se_tan00', { volume: 0.6 });
+
     const bulletRadius = 0.15 * UNIT.METER_TO_PIXEL;  // 0.15m = 8.25px
     const displayScale = (bulletRadius * 2) / 512;     // 中玉は512px
     const bulletSpeed = 6 * UNIT.METER_TO_PIXEL;       // 6m/s = 330px/s
@@ -475,6 +485,9 @@ export class MobGroupA extends MobEnemy {
   private shootPatternA4(): void {
     if (!this.bulletPool) return;
 
+    // 発射SEを再生
+    AudioManager.getInstance().playSe('se_tan00', { volume: 0.6 });
+
     const wayCount = 12;
     const bulletRadius = 0.25 * UNIT.METER_TO_PIXEL;  // 0.25m
     const displayScale = (bulletRadius * 2) / 278;    // 輪弾は278px
@@ -514,6 +527,9 @@ export class MobGroupA extends MobEnemy {
    */
   private shootPatternA5(): void {
     if (!this.bulletPool || !this.playerPosition) return;
+
+    // 発射SEを再生
+    AudioManager.getInstance().playSe('se_tan00', { volume: 0.6 });
 
     const wayCount = 5;
     const bulletRadius = 0.25 * UNIT.METER_TO_PIXEL;
@@ -583,6 +599,9 @@ export class MobGroupA extends MobEnemy {
     if (!this.isInsidePlayArea()) {
       return;
     }
+
+    // 発射SEを再生
+    AudioManager.getInstance().playSe('se_tan00', { volume: 0.6 });
 
     const wayCount = 3;
     const spreadAngle = Math.PI / 8;  // 22.5度（全体45度の扇）

@@ -693,6 +693,12 @@ export class GameScene extends Phaser.Scene {
         // プレイヤー弾のみ処理（敵弾は無視）
         if (bullet.getBulletType() !== BulletType.PLAYER_NORMAL) return;
 
+        // AA弾はターゲット以外の敵をすり抜ける
+        const bulletTarget = bullet.getTarget();
+        if (bulletTarget && bulletTarget !== enemy) {
+          return; // ターゲット以外の敵は無視
+        }
+
         // 防御力を考慮したダメージ計算
         const rawDamage = bullet.getDamage();
         const defenseReduction = DamageCalculator.calculateDamageReduction(enemy.getDefense());

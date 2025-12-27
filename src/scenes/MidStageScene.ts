@@ -2479,9 +2479,18 @@ export class MidStageScene extends Phaser.Scene {
         if (!mob.getIsActive()) return;
         if (bullet.getBulletType() !== BulletType.PLAYER_NORMAL) return;
 
+        // AA弾はターゲット以外の敵をすり抜ける
+        const bulletTarget = bullet.getTarget();
+        if (bulletTarget && bulletTarget !== mob) {
+          return; // ターゲット以外の敵は無視
+        }
+
         const rawDamage = bullet.getDamage();
         const defenseReduction = DamageCalculator.calculateDamageReduction(mob.getDefense());
         const finalDamage = Math.max(1, Math.floor(rawDamage * defenseReduction));
+
+        // ヒットSEを再生
+        AudioManager.getInstance().playSe('se_hit_arrow');
 
         const destroyed = mob.takeDamage(finalDamage);
         bullet.deactivate();
@@ -2538,6 +2547,12 @@ export class MidStageScene extends Phaser.Scene {
       const bulletRadius = 8; // プレイヤー弾の大まかなサイズ
 
       for (const mob of activeMobs) {
+        // AA弾はターゲット以外の敵をすり抜ける
+        const bulletTarget = bullet.getTarget();
+        if (bulletTarget && bulletTarget !== mob) {
+          continue; // ターゲット以外の敵は無視
+        }
+
         // 円と円の衝突判定
         const dx = bullet.x - mob.x;
         const dy = bullet.y - mob.y;
@@ -2549,6 +2564,9 @@ export class MidStageScene extends Phaser.Scene {
           const rawDamage = bullet.getDamage();
           const defenseReduction = DamageCalculator.calculateDamageReduction(mob.getDefense());
           const finalDamage = Math.max(1, Math.floor(rawDamage * defenseReduction));
+
+          // ヒットSEを再生
+          AudioManager.getInstance().playSe('se_hit_arrow');
 
           const destroyed = mob.takeDamage(finalDamage);
           bullet.deactivate();

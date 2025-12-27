@@ -1,0 +1,85 @@
+# SE一覧
+
+このドキュメントはゲーム内で使用されているSE（効果音）の一覧です。
+SEを追加した場合はこのファイルに追記してください。
+
+## UI系SE
+
+| SEキー | ファイル | 行 | 用途 | 音量倍率 |
+|--------|----------|-----|------|---------|
+| `se_select` | TitleScene.ts | 194 | メニュー選択 | 1.0 |
+| `se_select` | PauseScene.ts | 242, 345, 483, 501, 540, 852 | メニュー選択 | 1.0 |
+| `se_select` | ModeSelectScene.ts | 169 | メニュー選択 | 1.0 |
+| `se_decision` | TitleScene.ts | 214 | 決定 | 1.0 |
+| `se_decision` | PauseScene.ts | 226, 353, 548, 604 | 決定 | 1.0 |
+| `se_decision` | ModeSelectScene.ts | 221 | 決定 | 1.0 |
+| `se_cancel` | PauseScene.ts | 327, 362, 575 | キャンセル | 1.0 |
+| `se_cancel` | ModeSelectScene.ts | 235 | キャンセル | 1.0 |
+| `se_cancel` | OptionScene.ts | 242 | キャンセル | 1.0 |
+| `se_cancel` | CreditScene.ts | 88 | キャンセル | 1.0 |
+| `se_pause` | GameScene.ts | 434 | ポーズ | 1.0 |
+| `se_pause` | MidStageScene.ts | 2440 | ポーズ | 1.0 |
+
+## 戦闘系SE（プレイヤー）
+
+| SEキー | ファイル | 行 | 用途 | 音量倍率 |
+|--------|----------|-----|------|---------|
+| `se_hit_arrow` | MidStageScene.ts | 2487, 2557 | プレイヤー攻撃ヒット | 1.0 |
+| `se_hit_arrow` | Player.ts | 749 | Eスキルヒット | 1.0 |
+| `se_hit_arrow` | SkillProjectile.ts | 332 | スキル弾ヒット | 1.0 |
+| `se_hit_player` | Player.ts | 1059 | プレイヤー被弾 | 1.0 |
+
+## 戦闘系SE（雑魚敵）
+
+| SEキー | ファイル | 行 | 用途 | 音量倍率 |
+|--------|----------|-----|------|---------|
+| `se_enep00` | MobEnemy.ts | 1328 | 雑魚撃破 | 1.0 |
+| `se_tan00` | MobGroupA.ts | 334 | A-1弾幕発射 | 0.6 |
+| `se_tan00` | MobGroupA.ts | 387 | A-2弾幕発射 | 0.6 |
+| `se_tan00` | MobGroupA.ts | 444 | A-3弾幕発射 | 0.6 |
+| `se_tan00` | MobGroupA.ts | 489 | A-4弾幕発射 | 0.6 |
+| `se_tan00` | MobGroupA.ts | 532 | A-5弾幕発射 | 0.6 |
+| `se_tan00` | MobGroupA.ts | 604 | A-6弾幕発射 | 0.6 |
+| `se_tan00` | MobGroupB.ts | 411 | B-1オーブ弾発射 | 0.6 |
+| `se_gun00` | MobGroupB.ts | 577 | B-2レーザー発射 | 0.6 |
+
+## 戦闘系SE（C-1スキル）
+
+| SEキー | ファイル | 行 | 用途 | 音量倍率 |
+|--------|----------|-----|------|---------|
+| `se_obliterate` | MobGroupC.ts | 441 | オブリテレイト発動 | 1.5 |
+| `se_death_grasp` | MobGroupC.ts | 461 | デスグラスプ発動 | 1.5 |
+
+## ボス系SE
+
+| SEキー | ファイル | 行 | 用途 | 音量倍率 |
+|--------|----------|-----|------|---------|
+| `se_hit_enemy` | Boss.ts | 431 | ボスへのヒット | 1.0 |
+| `se_break` | Boss.ts | 214 | スペルカードブレイク | 1.0 |
+| `se_break` | Rumia.ts | 408, 417 | ルーミアスペル終了 | 1.0 |
+| `se_shot1` | Rumia.ts | 1346, 1712, 2190, 2772 | ルーミア弾発射 | 1.0 |
+| `se_shot1_multi` | Rumia.ts | 1058, 3009 | ルーミア複数弾発射 | 1.0 |
+| `se_spellcard` | SpellCardCutIn.ts | 123 | スペルカード宣言 | 1.0 |
+| `se_spellcard` | SpellCardCutInV2.ts | 318 | スペルカード宣言 | 1.0 |
+| `se_spellcard` | MidStageScene.ts | 2079 | カットイン演出 | 1.0 |
+
+## SEファイル一覧
+
+| SEキー | ファイルパス |
+|--------|-------------|
+| `se_select` | sound/se/select.mp3 |
+| `se_decision` | sound/se/decision.mp3 |
+| `se_cancel` | sound/se/cancel.mp3 |
+| `se_pause` | sound/se/pause.mp3 |
+| `se_shot1` | sound/se/shot1.mp3 |
+| `se_shot1_multi` | sound/se/shot1_multi.mp3 |
+| `se_break` | sound/se/break.mp3 |
+| `se_hit_player` | sound/se/hit_player.mp3 |
+| `se_hit_enemy` | sound/se/hit_enemy.mp3 |
+| `se_spellcard` | sound/se/spellcard.mp3 |
+| `se_enep00` | sound/se/se_enep00.mp3 |
+| `se_hit_arrow` | sound/se/se_hisou_orizin_009.mp3 |
+| `se_tan00` | sound/se/se_tan00.wav |
+| `se_gun00` | sound/se/se_gun00.wav |
+| `se_death_grasp` | sound/se/koma_020.wav |
+| `se_obliterate` | sound/se/ten_010.mp3 |

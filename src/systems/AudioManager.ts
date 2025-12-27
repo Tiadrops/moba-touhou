@@ -15,6 +15,10 @@ export class AudioManager {
   // 音量変更の購読解除関数
   private unsubscribe: (() => void) | null = null;
 
+  // SE再生レート制限用（同じSEを短時間に連続再生しすぎないように）
+  private seLastPlayTime: Map<string, number> = new Map();
+  private static readonly SE_MIN_INTERVAL = 50; // 同じSEの最小再生間隔（ms）
+
   private constructor() {
     // シングルトン
   }
@@ -168,17 +172,28 @@ export class AudioManager {
       return;
     }
 
-    const volume = getEffectiveVolume('se');
+    // レート制限チェック（同じSEを短時間に連続再生しすぎないように）
+    const now = Date.now();
+    const lastPlayTime = this.seLastPlayTime.get(key) || 0;
+    if (now - lastPlayTime < AudioManager.SE_MIN_INTERVAL) {
+      return; // 間隔が短すぎる場合はスキップ
+    }
+    this.seLastPlayTime.set(key, now);
+
+    const baseVolume = getEffectiveVolume('se');
+    // configで個別の音量倍率が指定されている場合は掛け合わせる
+    const volumeMultiplier = config?.volume ?? 1.0;
+    const volume = baseVolume * volumeMultiplier;
 
     console.log(`[AudioManager] playSe('${key}'), volume=${volume}`);
 
     // 同じSEを短時間に複数回再生できるように、新しいサウンドインスタンスを作成
     const sound = this.scene.sound.add(key, {
-      volume,
       ...config,
+      volume,  // 計算した音量で上書き
     });
 
-    console.log(`[AudioManager] Sound created, playing...`);
+    console.log(`[AudioManager] Playing SE: ${key}`);
     sound.play();
 
     // 再生完了後に自動的に破棄

@@ -374,6 +374,13 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
+   * 追尾対象を取得（AA弾のターゲット判定用）
+   */
+  getTarget(): Attackable | null {
+    return this.target;
+  }
+
+  /**
    * プレイエリア外でも維持するフラグを設定（戻り弾用）
    */
   setPersistOutsidePlayArea(value: boolean): void {

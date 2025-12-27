@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { MobGroupType } from '@/types';
 import { MobEnemy } from './MobEnemy';
 import { UNIT, DEPTH } from '@/config/GameConfig';
+import { AudioManager } from '@/systems/AudioManager';
 
 /**
  * グループCパターンタイプ
@@ -431,10 +432,13 @@ export class MobGroupC extends MobEnemy {
   }
 
   /**
-   * スキルA実行
+   * スキルA実行（オブリテレイト）
    */
   private executeSkillA(): void {
     if (!this.playerPosition) return;
+
+    // SEは常に再生（ヒット有無に関わらず）
+    AudioManager.getInstance().playSe('se_obliterate', { volume: 1.5 });
 
     // 範囲内にプレイヤーがいるかチェック
     if (this.isPlayerInArea(this.skillAWidth, this.skillAHeight)) {
@@ -448,10 +452,14 @@ export class MobGroupC extends MobEnemy {
   }
 
   /**
-   * スキルB実行
+   * スキルB実行（デスグラスプ）
    */
   private executeSkillB(): void {
     if (!this.playerPosition) return;
+
+    // SE・演出は常に再生（ヒット有無に関わらず）
+    AudioManager.getInstance().playSe('se_death_grasp', { volume: 1.5 });
+    this.showDeathGraspEffect();
 
     // 範囲内にプレイヤーがいるかチェック
     if (this.isPlayerInArea(this.skillBWidth, this.skillBHeight)) {
@@ -475,6 +483,50 @@ export class MobGroupC extends MobEnemy {
         }
       });
     }
+  }
+
+  /**
+   * デスグラスプヒットエフェクトを表示
+   * shadow1-1 → shadow1-2 → shadow1-3 → shadow1-4 のアニメーション（ループなし）
+   */
+  private showDeathGraspEffect(): void {
+    if (!this.playerPosition) return;
+
+    // エフェクトの位置（攻撃範囲の中心）
+    const effectX = this.x + Math.cos(this.currentSkillAngle) * (this.skillBHeight / 2);
+    const effectY = this.y + Math.sin(this.currentSkillAngle) * (this.skillBHeight / 2);
+
+    // 画像のオリジナルサイズ: 618x232px
+    // 攻撃範囲: 横2.8m(skillBWidth)、縦9.5m(skillBHeight)
+    const scaleX = this.skillBHeight / 618;  // 縦方向に伸ばす（画像の横を攻撃の縦に対応）
+    const scaleY = this.skillBWidth / 232;   // 横方向（画像の縦を攻撃の横に対応）
+
+    // 最初のフレームを表示
+    const effect = this.scene.add.image(effectX, effectY, 'shadow1-1');
+    effect.setDepth(DEPTH.BULLETS_ENEMY + 1);
+    effect.setScale(scaleX, scaleY);
+    effect.setRotation(this.currentSkillAngle);  // 攻撃方向に回転
+    effect.setAlpha(0.8);
+
+    // アニメーション: 各フレーム100msで切り替え
+    const frameDuration = 100;
+
+    this.scene.time.delayedCall(frameDuration, () => {
+      if (effect.active) effect.setTexture('shadow1-2');
+    });
+
+    this.scene.time.delayedCall(frameDuration * 2, () => {
+      if (effect.active) effect.setTexture('shadow1-3');
+    });
+
+    this.scene.time.delayedCall(frameDuration * 3, () => {
+      if (effect.active) effect.setTexture('shadow1-4');
+    });
+
+    // アニメーション終了後に削除
+    this.scene.time.delayedCall(frameDuration * 4, () => {
+      if (effect.active) effect.destroy();
+    });
   }
 
   /**

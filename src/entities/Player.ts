@@ -38,6 +38,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private isAttackMove: boolean = false;
   private attackMoveTarget: Position | null = null;
 
+  // 右クリックターゲット関連（敵を右クリックした時のAA対象）
+  private currentAttackTarget: Attackable | null = null;
+
   // スキル関連
   private skillCooldowns: Record<SkillSlot, number> = {
     [SkillSlot.Q]: 0,
@@ -208,6 +211,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     // Attack Move処理
     this.updateAttackMove(time);
+
+    // 右クリックターゲットへのAA処理
+    this.updateAttackTarget(time);
 
     // 当たり判定表示を更新
     this.drawHitbox();
@@ -745,6 +751,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         const defenseReduction = 100 / (target.getDefense() + 100);
         const finalDamage = Math.max(1, Math.floor(damage * defenseReduction));
         target.takeDamage(finalDamage);
+        // ヒットSEを再生
+        AudioManager.getInstance().playSe('se_hit_arrow');
         console.log(`E skill dash hit! Damage: ${finalDamage}`);
       }
     }
@@ -1033,9 +1041,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   /**
    * 目標位置を設定（右クリック移動）
+   * 移動コマンドが発行されたら攻撃ターゲットをクリア
    */
   setTargetPosition(x: number, y: number): void {
     this.targetPosition = { x, y };
+    // 移動コマンドで攻撃ターゲットをクリア（LoL風の挙動）
+    this.currentAttackTarget = null;
   }
 
   /**
@@ -1135,11 +1146,23 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * Attack Move処理
-   * Aキーで設定された地点に移動中、射程内の敵を発見したら攻撃して停止
+   * Attack Move中のターゲット攻撃処理
+   * 移動中にターゲットした敵が射程内に入ったら攻撃して停止
+   * （自動で最寄りの敵を探さない、ターゲット設定した敵のみ攻撃）
    */
   private updateAttackMove(time: number): void {
     if (!this.isAttackMove || !this.isMoving) {
+      return;
+    }
+
+    // ターゲットがいない場合は移動のみ
+    if (!this.currentAttackTarget) {
+      return;
+    }
+
+    // ターゲットが無効になった場合はクリア
+    if (!this.currentAttackTarget.getIsActive()) {
+      this.currentAttackTarget = null;
       return;
     }
 
@@ -1148,26 +1171,69 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       return;
     }
 
-    // 最も近い敵を探す
-    const nearestEnemy = this.findNearestEnemy();
-    if (!nearestEnemy) {
-      return;
-    }
-
-    // 射程内かチェック
+    // ターゲットとの距離を計算
     const distance = Phaser.Math.Distance.Between(
       this.x,
       this.y,
-      nearestEnemy.x,
-      nearestEnemy.y
+      this.currentAttackTarget.x,
+      this.currentAttackTarget.y
     );
 
     if (distance <= this.characterConfig.stats.attackRange) {
-      // 攻撃して移動を停止
-      this.attackTarget(time, nearestEnemy);
+      // ターゲットが射程内に入ったら攻撃して停止
+      this.attackTarget(time, this.currentAttackTarget);
+      // 攻撃後はターゲットをクリア（1クリック1発）
+      this.currentAttackTarget = null;
       this.stopMovement();
       this.isAttackMove = false;
       this.attackMoveTarget = null;
+    }
+  }
+
+  /**
+   * 左クリックターゲットへのAA処理
+   * ターゲットが有効で射程内なら攻撃、射程外なら接近
+   * Attack Move中はupdateAttackMoveで処理されるのでスキップ
+   */
+  private updateAttackTarget(time: number): void {
+    // Attack Move中はupdateAttackMoveで処理される
+    if (this.isAttackMove) {
+      return;
+    }
+
+    if (!this.currentAttackTarget) {
+      return;
+    }
+
+    // ターゲットが無効になった場合はクリア
+    if (!this.currentAttackTarget.getIsActive()) {
+      this.currentAttackTarget = null;
+      return;
+    }
+
+    // 攻撃クールダウン中は処理しない
+    if (!this.canAttack(time)) {
+      return;
+    }
+
+    // ターゲットとの距離を計算
+    const distance = Phaser.Math.Distance.Between(
+      this.x,
+      this.y,
+      this.currentAttackTarget.x,
+      this.currentAttackTarget.y
+    );
+
+    if (distance <= this.characterConfig.stats.attackRange) {
+      // 射程内なら攻撃
+      this.attackTarget(time, this.currentAttackTarget);
+      // 攻撃後はターゲットをクリア（1クリック1発）
+      this.currentAttackTarget = null;
+      // 移動を停止
+      this.stopMovement();
+    } else {
+      // 射程外ならターゲットに向かって移動（ターゲットをクリアしない）
+      this.targetPosition = { x: this.currentAttackTarget.x, y: this.currentAttackTarget.y };
     }
   }
 
@@ -1298,6 +1364,107 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
+   * 指定位置から最も近い攻撃対象を探す（射程内に限定）
+   * Attack Move用：カーソル位置から最寄りで、かつプレイヤーの射程内の敵を返す
+   */
+  findNearestEnemyToPositionInRange(x: number, y: number): Attackable | null {
+    let nearestTarget: Attackable | null = null;
+    let nearestDistanceToCursor = Infinity;
+    const attackRange = this.characterConfig.stats.attackRange;
+
+    console.log(`[Player] findNearestEnemyToPositionInRange: cursor=(${x.toFixed(0)}, ${y.toFixed(0)}), player=(${this.x.toFixed(0)}, ${this.y.toFixed(0)}), range=${attackRange.toFixed(0)}, mobs=${this.mobs.length}, enemies=${this.enemies.length}`);
+
+    // 通常の敵をチェック
+    for (const enemy of this.enemies) {
+      if (!enemy.getIsActive()) {
+        continue;
+      }
+
+      // プレイヤーからの距離（射程判定用）
+      const distanceFromPlayer = Phaser.Math.Distance.Between(
+        this.x,
+        this.y,
+        enemy.x,
+        enemy.y
+      );
+
+      // 射程外ならスキップ
+      if (distanceFromPlayer > attackRange) {
+        continue;
+      }
+
+      // カーソルからの距離（優先順位用）
+      const distanceFromCursor = Phaser.Math.Distance.Between(
+        x,
+        y,
+        enemy.x,
+        enemy.y
+      );
+
+      if (distanceFromCursor < nearestDistanceToCursor) {
+        nearestDistanceToCursor = distanceFromCursor;
+        nearestTarget = enemy;
+      }
+    }
+
+    // 道中雑魚をチェック
+    for (const mob of this.mobs) {
+      if (!mob.getIsActive()) {
+        continue;
+      }
+
+      const distanceFromPlayer = Phaser.Math.Distance.Between(
+        this.x,
+        this.y,
+        mob.x,
+        mob.y
+      );
+
+      if (distanceFromPlayer > attackRange) {
+        continue;
+      }
+
+      const distanceFromCursor = Phaser.Math.Distance.Between(
+        x,
+        y,
+        mob.x,
+        mob.y
+      );
+
+      if (distanceFromCursor < nearestDistanceToCursor) {
+        nearestDistanceToCursor = distanceFromCursor;
+        nearestTarget = mob;
+      }
+    }
+
+    // ボスもチェック
+    if (this.boss && this.boss.getIsActive()) {
+      const distanceFromPlayer = Phaser.Math.Distance.Between(
+        this.x,
+        this.y,
+        this.boss.x,
+        this.boss.y
+      );
+
+      if (distanceFromPlayer <= attackRange) {
+        const distanceFromCursor = Phaser.Math.Distance.Between(
+          x,
+          y,
+          this.boss.x,
+          this.boss.y
+        );
+
+        if (distanceFromCursor < nearestDistanceToCursor) {
+          nearestDistanceToCursor = distanceFromCursor;
+          nearestTarget = this.boss;
+        }
+      }
+    }
+
+    return nearestTarget;
+  }
+
+  /**
    * 通常攻撃可能か判定
    */
   canAttack(currentTime: number): boolean {
@@ -1366,11 +1533,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   /**
    * Attack Moveを設定
+   * 注意: setTargetPositionを使うとcurrentAttackTargetがクリアされるため直接設定
    */
   setAttackMove(x: number, y: number): void {
     this.isAttackMove = true;
     this.attackMoveTarget = { x, y };
-    this.setTargetPosition(x, y);
+    // setTargetPositionはcurrentAttackTargetをクリアするので直接設定
+    this.targetPosition = { x, y };
   }
 
   /**
@@ -1428,6 +1597,22 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   getAttackMoveTarget(): Position | null {
     return this.attackMoveTarget;
+  }
+
+  /**
+   * 道中雑魚敵のリストを取得
+   */
+  getMobs(): Attackable[] {
+    return this.mobs;
+  }
+
+  /**
+   * 左クリックで指定した攻撃ターゲットを設定
+   * ターゲットが射程内なら即攻撃、射程外なら接近してから攻撃
+   * Attack Move中は解除しない（移動中にターゲットを攻撃できるようにする）
+   */
+  setAttackTarget(target: Attackable): void {
+    this.currentAttackTarget = target;
   }
 
   /**

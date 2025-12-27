@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { StatusEffectType, Attackable } from '@/types';
 import { DEPTH, GAME_CONFIG } from '@/config/GameConfig';
+import { AudioManager } from '@/systems/AudioManager';
 
 // 命中時コールバックの型定義
 export type OnHitCallback = (target: Attackable, damage: number, didBreak: boolean) => void;
@@ -326,6 +327,9 @@ export class SkillProjectile extends Phaser.GameObjects.Container {
         value: this.slowAmount,
       });
     }
+
+    // ヒットSEを再生
+    AudioManager.getInstance().playSe('se_hit_arrow');
 
     // コールバックを呼び出し
     if (this.onHitCallback) {

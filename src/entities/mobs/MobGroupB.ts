@@ -3,6 +3,7 @@ import { MobGroupType, BulletType } from '@/types';
 import { MobEnemy } from './MobEnemy';
 import { KSHOT } from '../Bullet';
 import { UNIT, DEPTH, GAME_CONFIG } from '@/config/GameConfig';
+import { AudioManager } from '@/systems/AudioManager';
 
 /**
  * 弾幕パターンタイプ
@@ -406,6 +407,9 @@ export class MobGroupB extends MobEnemy {
   private startOrbAttack(): void {
     if (!this.bulletPool || !this.playerPosition) return;
 
+    // 発射SEを再生
+    AudioManager.getInstance().playSe('se_tan00', { volume: 0.6 });
+
     const range = 9 * UNIT.METER_TO_PIXEL;  // 射程9m
     const bulletRadius = 0.8 * UNIT.METER_TO_PIXEL;  // 半径0.8m（ルーミアと同じ）
     const displayScale = (bulletRadius * 2) / 512;  // 大玉は512px
@@ -568,6 +572,9 @@ export class MobGroupB extends MobEnemy {
    */
   private fireLaser(): void {
     if (!this.bulletPool) return;
+
+    // 発射SEを再生
+    AudioManager.getInstance().playSe('se_gun00', { volume: 0.6 });
 
     // 予告線を消す
     if (this.laserWarningLine) {

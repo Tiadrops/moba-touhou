@@ -191,7 +191,26 @@ StageIntroScene → MidStageScene（道中）
 - ルーミアスキル: `docs/RUMIA_SKILLS.md`
 - カットイン演出: `docs/CUTIN_SYSTEM.md`
 - 道中システム: `docs/MID_STAGE_SYSTEM.md`
+- SE一覧: `docs/SE_LIST.md`
 - トラブルシューティング: `docs/TROUBLESHOOTING.md`
+
+### AA（Auto Attack）システム
+
+#### 基本仕様
+- **左クリック**: 敵をターゲット設定 → 射程内なら1発撃ってターゲットクリア
+- **右クリック**: 移動のみ（敵ターゲットは行わない）
+- **Attack Move (Aキー)**: カーソル位置の最寄りの敵をターゲット設定 → その方向に移動 → 射程内に入ったら1発撃つ
+- **1クリック1発**: 連続攻撃したい場合は連続クリック
+
+#### AA弾の貫通仕様
+- AA弾はターゲットした敵にのみ当たる
+- 経路上の他の敵はすり抜ける（壁にならない）
+- 実装: `Bullet.getTarget()` でターゲット判定
+
+#### 実装箇所
+- 入力処理: `src/systems/InputManager.ts`
+- プレイヤー攻撃: `src/entities/Player.ts` の `attackTarget()`, `updateAttackMove()`, `updateAttackTarget()`
+- 衝突判定: `src/scenes/MidStageScene.ts`, `src/scenes/GameScene.ts`
 
 ## ゲームバランス設計
 

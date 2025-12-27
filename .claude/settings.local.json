@@ -11,7 +11,17 @@
       "Bash(mkdir:*)",
       "Bash(cp:*)",
       "Bash(python -c:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(npm run dev:*)",
+      "Bash(git push)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(ls:*)",
+      "Bash(tree:*)",
+      "Bash(taskkill:*)",
+      "Bash(timeout:*)",
+      "Bash(node -e:*)",
+      "Bash(cd:*)"
     ],
     "deny": [],
     "ask": []
