@@ -226,7 +226,13 @@ export class MobGroupA extends MobEnemy {
    * 外部から弾幕を発射させる（Wave制御用）
    */
   shoot(): void {
-    if (!this.bulletPool || !this.playerPosition || !this.isActive) {
+    if (!this.bulletPool) {
+      return;
+    }
+    if (!this.playerPosition) {
+      return;
+    }
+    if (!this.isActive) {
       return;
     }
 
@@ -236,7 +242,8 @@ export class MobGroupA extends MobEnemy {
     }
 
     // プレイエリア外にいる場合は発射しない
-    if (!this.isInsidePlayArea()) {
+    // ただしdescend_shoot_ascendパターンでは目標到達時に発射するのでスキップ
+    if (this.movePattern !== 'descend_shoot_ascend' && !this.isInsidePlayArea()) {
       return;
     }
 
@@ -381,7 +388,6 @@ export class MobGroupA extends MobEnemy {
    */
   private shootPatternA2(): void {
     if (!this.bulletPool || !this.playerPosition) return;
-    console.log(`[A-2 shootPatternA2] 発射! time=${Math.floor(this.scene.time.now)}ms`);
 
     // 発射SEを再生
     AudioManager.getInstance().playSe('se_tan00', { volume: 0.6 });

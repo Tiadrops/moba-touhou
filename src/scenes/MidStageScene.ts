@@ -83,7 +83,7 @@ export class MidStageScene extends Phaser.Scene {
   // Wave 1-5 管理
   private wave1_5SpawnCount: number = 0;  // スポーン済み回数
   private wave1_5LastSpawnTime: number = 0;  // 最後のスポーン時刻
-  private wave1_5CompletedTime: number = 0;  // 1-1-5完了時刻（0=未完了）
+  private wave1_5StartTime: number = 0;  // 1-1-5開始時刻（0=未開始）
 
   // Wave 1-6 管理（B1, B2, Cのフォーメーション）
   private wave1_6MobB1: MobGroupB | null = null;
@@ -202,7 +202,7 @@ export class MidStageScene extends Phaser.Scene {
     // Wave 1-5
     this.wave1_5SpawnCount = 0;
     this.wave1_5LastSpawnTime = 0;
-    this.wave1_5CompletedTime = 0;
+    this.wave1_5StartTime = 0;
 
     // Wave 1-6
     this.wave1_6MobB1 = null;
@@ -396,39 +396,31 @@ export class MidStageScene extends Phaser.Scene {
       this.spawnWave1_1();
     }
 
-    // サブウェーブ 1-1-2: 6秒後 or 1-1-1の全妖精撃破後
-    if (!this.subWaveStarted[1] && this.subWaveStarted[0]) {
-      const wave1_1AllDefeated = this.areAllMobsDefeated(this.wave1_1Mobs);
-      if (elapsedTime >= 6000 || wave1_1AllDefeated) {
-        this.subWaveStarted[1] = true;
-        const trigger = wave1_1AllDefeated ? '1-1-1全滅' : '6秒経過';
-        console.log(`[SubWave 1-1-2] 開始! (${trigger})`);
-        this.spawnWave1_2();
-      }
+    // サブウェーブ 1-1-2: 開始4秒後
+    if (!this.subWaveStarted[1] && elapsedTime >= 4000) {
+      this.subWaveStarted[1] = true;
+      console.log(`[SubWave 1-1-2] 開始! (4秒経過)`);
+      this.spawnWave1_2();
     }
 
-    // サブウェーブ 1-1-3: 15秒後 or 1-1-2の全妖精撃破後
-    if (!this.subWaveStarted[2] && this.subWaveStarted[1]) {
-      const wave1_2AllDefeated = this.areAllMobsDefeated(this.wave1_2Mobs);
-      if (elapsedTime >= 15000 || wave1_2AllDefeated) {
-        this.subWaveStarted[2] = true;
-        const trigger = wave1_2AllDefeated ? '1-1-2全滅' : '15秒経過';
-        console.log(`[SubWave 1-1-3] 開始! (${trigger})`);
-        this.spawnWave1_3();
-      }
+    // サブウェーブ 1-1-3: 開始10秒後
+    if (!this.subWaveStarted[2] && elapsedTime >= 10000) {
+      this.subWaveStarted[2] = true;
+      console.log(`[SubWave 1-1-3] 開始! (10秒経過)`);
+      this.spawnWave1_3();
     }
 
-    // サブウェーブ 1-1-4: Wave 1-1-3のB-1撃破後、または開始から35秒後
-    if (!this.subWaveStarted[3]) {
+    // サブウェーブ 1-1-4: Wave 1-1-3のB-1撃破後
+    if (!this.subWaveStarted[3] && this.subWaveStarted[2]) {
       // B-1が撃破されたかチェック
       if (this.wave3B1Mob && !this.wave3B1Mob.getIsActive() && !this.wave3B1Defeated) {
         this.wave3B1Defeated = true;
       }
 
-      // B-1撃破 or 35秒経過
-      if (this.wave3B1Defeated || elapsedTime >= 35000) {
+      // B-1撃破のみ（時間経過は条件から削除）
+      if (this.wave3B1Defeated) {
         this.subWaveStarted[3] = true;
-        console.log(`[SubWave 1-1-4] 開始!`);
+        console.log(`[SubWave 1-1-4] 開始! (B-1撃破後)`);
         this.spawnWave1_4();
       }
     }
@@ -447,29 +439,24 @@ export class MidStageScene extends Phaser.Scene {
       this.subWaveStarted[4] = true;
       this.wave1_5SpawnCount = 0;
       this.wave1_5LastSpawnTime = time;
-      this.spawnWave1_5Pair();  // 最初の1ペアをすぐにスポーン
+      this.wave1_5StartTime = time;  // 1-1-5開始時刻を記録
+      this.spawnWave1_5Quad();  // 最初の4体をすぐにスポーン
     }
 
-    // サブウェーブ 1-1-5の継続スポーン
-    if (this.subWaveStarted[4] && this.wave1_5SpawnCount < 20) {
+    // サブウェーブ 1-1-5の継続スポーン（10秒間、1秒毎にA-1/A-3 x 2 = 4体）
+    if (this.subWaveStarted[4] && this.wave1_5SpawnCount < 10) {
       const timeSinceLastSpawn = time - this.wave1_5LastSpawnTime;
       if (timeSinceLastSpawn >= 1000) {  // 1秒毎
         this.wave1_5LastSpawnTime = time;
-        this.spawnWave1_5Pair();
+        this.spawnWave1_5Quad();
       }
     }
 
-    // 1-1-5完了時刻を記録（20回スポーン完了時）
-    if (this.subWaveStarted[4] && this.wave1_5SpawnCount >= 20 && this.wave1_5CompletedTime === 0) {
-      this.wave1_5CompletedTime = time;
-      console.log(`[SubWave 1-1-5] 完了! 2秒後に1-1-6開始`);
-    }
-
-    // サブウェーブ 1-1-6: 1-1-5終了後、2秒後に開始
-    if (!this.subWaveStarted[5] && this.wave1_5CompletedTime > 0) {
-      const timeSinceCompletion = time - this.wave1_5CompletedTime;
-      if (timeSinceCompletion >= 2000) {
-        console.log(`[SubWave 1-1-6] 開始! (1-1-5終了から2秒後)`);
+    // サブウェーブ 1-1-6: 1-1-5開始から12秒後
+    if (!this.subWaveStarted[5] && this.wave1_5StartTime > 0) {
+      const timeSinceStart = time - this.wave1_5StartTime;
+      if (timeSinceStart >= 12000) {
+        console.log(`[SubWave 1-1-6] 開始! (1-1-5開始から12秒後)`);
         this.subWaveStarted[5] = true;
         this.spawnWave1_6();
       }
@@ -640,12 +627,13 @@ export class MidStageScene extends Phaser.Scene {
           this.subWaveStarted[4] = true;
           this.wave1_5SpawnCount = 0;
           this.wave1_5LastSpawnTime = this.time.now;
-          this.spawnWave1_5Pair();
+          this.wave1_5StartTime = this.time.now;
+          this.spawnWave1_5Quad();
           break;
         case 6:
           this.subWaveStarted[5] = true;
-          this.wave1_5SpawnCount = 20;  // 1-1-5は完了済み扱い
-          this.wave1_5CompletedTime = this.time.now - 2000;  // 2秒前に完了済み扱い
+          this.wave1_5SpawnCount = 10;  // 1-1-5は完了済み扱い
+          this.wave1_5StartTime = this.time.now - 12000;  // 12秒前に開始済み扱い
           this.spawnWave1_6();
           break;
       }
@@ -1181,12 +1169,12 @@ export class MidStageScene extends Phaser.Scene {
    * Wave制御による弾幕発射の更新
    */
   private updateWaveShooting(time: number): void {
-    // Wave 1-1: 登場+1秒後に最初の発射、その後5秒毎
-    if (this.wave1_1SpawnTime > 0) {
+    // Wave 1-1: 登場+4秒後に最初の発射（全員が画面内に入るまで待つ）、その後5秒毎（1-1-5開始後は停止）
+    if (this.wave1_1SpawnTime > 0 && !this.subWaveStarted[4]) {
       const timeSinceSpawn = time - this.wave1_1SpawnTime;
       const timeSinceLastFire = time - this.wave1_1LastFireTime;
-      // 最初の発射は登場+1秒後
-      if (this.wave1_1LastFireTime === 0 && timeSinceSpawn >= 1000) {
+      // 最初の発射は登場+4秒後（最後尾が画面内に入るまで約3.8秒）
+      if (this.wave1_1LastFireTime === 0 && timeSinceSpawn >= 4000) {
         this.wave1_1LastFireTime = time;
         this.fireWave1_1();
       } else if (this.wave1_1LastFireTime > 0 && timeSinceLastFire >= 5000) {
@@ -1195,12 +1183,12 @@ export class MidStageScene extends Phaser.Scene {
       }
     }
 
-    // Wave 1-2: 登場+1秒後に最初の発射、その後5秒毎
-    if (this.wave1_2SpawnTime > 0) {
+    // Wave 1-2: 登場+4秒後に最初の発射（全員が画面内に入るまで待つ）、その後5秒毎（1-1-5開始後は停止）
+    if (this.wave1_2SpawnTime > 0 && !this.subWaveStarted[4]) {
       const timeSinceSpawn = time - this.wave1_2SpawnTime;
       const timeSinceLastFire = time - this.wave1_2LastFireTime;
-      // 最初の発射は登場+1秒後
-      if (this.wave1_2LastFireTime === 0 && timeSinceSpawn >= 1000) {
+      // 最初の発射は登場+4秒後（最後尾が画面内に入るまで待つ）
+      if (this.wave1_2LastFireTime === 0 && timeSinceSpawn >= 4000) {
         this.wave1_2LastFireTime = time;
         this.fireWave1_2();
       } else if (this.wave1_2LastFireTime > 0 && timeSinceLastFire >= 5000) {
@@ -1209,18 +1197,16 @@ export class MidStageScene extends Phaser.Scene {
       }
     }
 
-    // Wave 1-3: A-2は8秒毎、B-1は4秒毎
-    if (this.wave1_3SpawnTime > 0) {
+    // Wave 1-3: A-2は8秒毎、B-1は4秒毎（1-1-5開始後は停止）
+    if (this.wave1_3SpawnTime > 0 && !this.subWaveStarted[4]) {
       const timeSinceSpawn = time - this.wave1_3SpawnTime;
 
       // A-2（MobGroupA）: 登場+1秒後に最初の発射、その後8秒毎
       const timeSinceLastFireA = time - this.wave1_3ALastFireTime;
       if (this.wave1_3ALastFireTime === 0 && timeSinceSpawn >= 1000) {
-        console.log(`[Wave1-3 A-2] 初回発射 time=${Math.floor(time)}ms`);
         this.wave1_3ALastFireTime = time;
         this.fireWave1_3A();
       } else if (this.wave1_3ALastFireTime > 0 && timeSinceLastFireA >= 8000) {
-        console.log(`[Wave1-3 A-2] 発射 interval=${Math.floor(timeSinceLastFireA)}ms (目標: 8000ms)`);
         this.wave1_3ALastFireTime = time;
         this.fireWave1_3A();
       }
@@ -1236,18 +1222,16 @@ export class MidStageScene extends Phaser.Scene {
       }
     }
 
-    // Wave 1-4: A-2は8秒毎、B-2は4秒毎
-    if (this.wave1_4SpawnTime > 0) {
+    // Wave 1-4: A-2は8秒毎、B-2は4秒毎（1-1-5開始後は停止）
+    if (this.wave1_4SpawnTime > 0 && !this.subWaveStarted[4]) {
       const timeSinceSpawn = time - this.wave1_4SpawnTime;
 
       // A-2（MobGroupA）: 登場+1秒後に最初の発射、その後8秒毎
       const timeSinceLastFireA = time - this.wave1_4ALastFireTime;
       if (this.wave1_4ALastFireTime === 0 && timeSinceSpawn >= 1000) {
-        console.log(`[Wave1-4 A-2] 初回発射 time=${Math.floor(time)}ms`);
         this.wave1_4ALastFireTime = time;
         this.fireWave1_4A();
       } else if (this.wave1_4ALastFireTime > 0 && timeSinceLastFireA >= 8000) {
-        console.log(`[Wave1-4 A-2] 発射 interval=${Math.floor(timeSinceLastFireA)}ms (目標: 8000ms)`);
         this.wave1_4ALastFireTime = time;
         this.fireWave1_4A();
       }
@@ -1600,11 +1584,10 @@ export class MidStageScene extends Phaser.Scene {
   }
 
   /**
-   * Wave 1-5: A-1とA-3を1体ずつスポーン
-   * 下降 → 画面5/4の高さで弾幕発射 → 上昇して退場
+   * Wave 1-5: A-1 x 1, A-3 x 2 を1秒毎にスポーン（計10回 = 30体）
    */
-  private spawnWave1_5Pair(): void {
-    if (this.wave1_5SpawnCount >= 20) return;
+  private spawnWave1_5Quad(): void {
+    if (this.wave1_5SpawnCount >= 10) return;
 
     const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
     const startY = Y - 50;  // 画面上部から開始
@@ -1613,34 +1596,46 @@ export class MidStageScene extends Phaser.Scene {
 
     // ランダムなX座標（画面幅内でマージンを取る）
     const margin = 60;
-    const randomX1 = X + margin + Math.random() * (WIDTH - margin * 2);
-    const randomX2 = X + margin + Math.random() * (WIDTH - margin * 2);
 
     // 移動速度
     const descendSpeed = 120;  // 下降速度
     const ascendSpeed = 150;   // 上昇速度
 
-    // A-1をスポーン
-    const mobA1 = this.getOrCreateMobA();
-    mobA1.spawnDescendShootAscendWithPattern(
-      randomX1,
-      startY,
-      'A1',
-      shootTargetY,
-      descendSpeed,
-      ascendSpeed
-    );
+    // A-1を1体スポーン
+    {
+      const randomX = X + margin + Math.random() * (WIDTH - margin * 2);
+      const mobA1 = this.getOrCreateMobA();
+      // スポーン前にplayerPositionを設定（発射時に必要）
+      if (this.player) {
+        mobA1.setPlayerPosition(this.player.x, this.player.y);
+      }
+      mobA1.spawnDescendShootAscendWithPattern(
+        randomX,
+        startY,
+        'A1',
+        shootTargetY,
+        descendSpeed,
+        ascendSpeed
+      );
+    }
 
-    // A-3をスポーン
-    const mobA3 = this.getOrCreateMobA();
-    mobA3.spawnDescendShootAscendWithPattern(
-      randomX2,
-      startY,
-      'A3',
-      shootTargetY,
-      descendSpeed,
-      ascendSpeed
-    );
+    // A-3を2体スポーン
+    for (let i = 0; i < 2; i++) {
+      const randomX = X + margin + Math.random() * (WIDTH - margin * 2);
+      const mobA3 = this.getOrCreateMobA();
+      // スポーン前にplayerPositionを設定（発射時に必要）
+      if (this.player) {
+        mobA3.setPlayerPosition(this.player.x, this.player.y);
+      }
+      mobA3.spawnDescendShootAscendWithPattern(
+        randomX,
+        startY,
+        'A3',
+        shootTargetY,
+        descendSpeed,
+        ascendSpeed
+      );
+    }
 
     this.wave1_5SpawnCount++;
   }

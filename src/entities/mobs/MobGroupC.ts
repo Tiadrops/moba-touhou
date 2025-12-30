@@ -440,6 +440,9 @@ export class MobGroupC extends MobEnemy {
     // SEは常に再生（ヒット有無に関わらず）
     AudioManager.getInstance().playSe('se_obliterate', { volume: 1.5 });
 
+    // エフェクト表示
+    this.showObliterateEffect();
+
     // 範囲内にプレイヤーがいるかチェック
     if (this.isPlayerInArea(this.skillAWidth, this.skillAHeight)) {
       // ダメージイベントを発火
@@ -486,8 +489,48 @@ export class MobGroupC extends MobEnemy {
   }
 
   /**
-   * デスグラスプヒットエフェクトを表示
-   * shadow1-1 → shadow1-2 → shadow1-3 → shadow1-4 のアニメーション（ループなし）
+   * オブリテレイトエフェクトを表示
+   * impact1-1 → impact1-2 → impact1-3 のアニメーション（ループなし）
+   */
+  private showObliterateEffect(): void {
+    if (!this.playerPosition) return;
+
+    // エフェクトの位置（攻撃範囲の中心）
+    const effectX = this.x + Math.cos(this.currentSkillAngle) * (this.skillAHeight / 2);
+    const effectY = this.y + Math.sin(this.currentSkillAngle) * (this.skillAHeight / 2);
+
+    // 画像のオリジナルサイズ: 550x1100px
+    // 攻撃範囲: 横2.5m(skillAWidth)、縦7m(skillAHeight)
+    const scaleX = this.skillAWidth / 550;   // 横方向
+    const scaleY = this.skillAHeight / 1100; // 縦方向
+
+    // 最初のフレームを表示
+    const effect = this.scene.add.image(effectX, effectY, 'impact1-1');
+    effect.setDepth(DEPTH.BULLETS_ENEMY + 1);
+    effect.setScale(scaleX, scaleY);
+    effect.setRotation(this.currentSkillAngle - Math.PI / 2);  // 攻撃方向に回転（画像は縦長なので-90度）
+    effect.setAlpha(0.5);  // 薄めに表示
+
+    // アニメーション: 各フレーム80msで切り替え
+    const frameDuration = 80;
+
+    this.scene.time.delayedCall(frameDuration, () => {
+      if (effect.active) effect.setTexture('impact1-2');
+    });
+
+    this.scene.time.delayedCall(frameDuration * 2, () => {
+      if (effect.active) effect.setTexture('impact1-3');
+    });
+
+    // アニメーション終了後に削除
+    this.scene.time.delayedCall(frameDuration * 3, () => {
+      if (effect.active) effect.destroy();
+    });
+  }
+
+  /**
+   * デスグラスプエフェクトを表示
+   * shadow3-1 → 3-2 → 3-3 → 3-4 → 3-5 → 3-4 → 3-3 → 3-2 → 3-1 のアニメーション（ループなし）
    */
   private showDeathGraspEffect(): void {
     if (!this.playerPosition) return;
@@ -496,35 +539,32 @@ export class MobGroupC extends MobEnemy {
     const effectX = this.x + Math.cos(this.currentSkillAngle) * (this.skillBHeight / 2);
     const effectY = this.y + Math.sin(this.currentSkillAngle) * (this.skillBHeight / 2);
 
-    // 画像のオリジナルサイズ: 618x232px
+    // 画像のオリジナルサイズ: 550x1100px
     // 攻撃範囲: 横2.8m(skillBWidth)、縦9.5m(skillBHeight)
-    const scaleX = this.skillBHeight / 618;  // 縦方向に伸ばす（画像の横を攻撃の縦に対応）
-    const scaleY = this.skillBWidth / 232;   // 横方向（画像の縦を攻撃の横に対応）
+    const scaleX = this.skillBWidth / 550;   // 横方向
+    const scaleY = this.skillBHeight / 1100; // 縦方向
 
     // 最初のフレームを表示
-    const effect = this.scene.add.image(effectX, effectY, 'shadow1-1');
+    const effect = this.scene.add.image(effectX, effectY, 'shadow3-0');
     effect.setDepth(DEPTH.BULLETS_ENEMY + 1);
     effect.setScale(scaleX, scaleY);
-    effect.setRotation(this.currentSkillAngle);  // 攻撃方向に回転
-    effect.setAlpha(0.8);
+    effect.setRotation(this.currentSkillAngle + Math.PI / 2);  // 攻撃方向に回転（画像は縦長なので+90度、180度反転）
+    effect.setAlpha(0.9);  // はっきり表示
 
-    // アニメーション: 各フレーム100msで切り替え
-    const frameDuration = 100;
+    // アニメーション: 各フレーム45msで切り替え（11フレーム × 45ms = 495ms ≈ 500ms）
+    // 3-0 → 3-1 → 3-2 → 3-3 → 3-4 → 3-5 → 3-4 → 3-3 → 3-2 → 3-1 → 3-0
+    const frameDuration = 45;
+    const frames = ['shadow3-0', 'shadow3-1', 'shadow3-2', 'shadow3-3', 'shadow3-4', 'shadow3-5', 'shadow3-4', 'shadow3-3', 'shadow3-2', 'shadow3-1', 'shadow3-0'];
 
-    this.scene.time.delayedCall(frameDuration, () => {
-      if (effect.active) effect.setTexture('shadow1-2');
-    });
-
-    this.scene.time.delayedCall(frameDuration * 2, () => {
-      if (effect.active) effect.setTexture('shadow1-3');
-    });
-
-    this.scene.time.delayedCall(frameDuration * 3, () => {
-      if (effect.active) effect.setTexture('shadow1-4');
+    frames.forEach((frame, index) => {
+      if (index === 0) return; // 最初のフレームはすでに表示
+      this.scene.time.delayedCall(frameDuration * index, () => {
+        if (effect.active) effect.setTexture(frame);
+      });
     });
 
     // アニメーション終了後に削除
-    this.scene.time.delayedCall(frameDuration * 4, () => {
+    this.scene.time.delayedCall(frameDuration * frames.length, () => {
       if (effect.active) effect.destroy();
     });
   }

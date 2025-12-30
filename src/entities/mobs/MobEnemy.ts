@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { MobGroupType, MobStats, MobExitMode, StatusEffect, StatusEffectType } from '@/types';
-import { DEPTH, COLORS, GAME_CONFIG, MOB_GROUP_CONFIG, MID_STAGE_CONFIG } from '@/config/GameConfig';
+import { DEPTH, GAME_CONFIG, MOB_GROUP_CONFIG, MID_STAGE_CONFIG } from '@/config/GameConfig';
 import { BulletPool } from '@/utils/ObjectPool';
 import { AudioManager } from '@/systems/AudioManager';
 
@@ -195,19 +195,11 @@ export abstract class MobEnemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * グループに応じた色を取得
+   * グループに応じた色を取得（現在は全グループ白=Tintなし）
    */
-  private getTintForGroup(groupType: MobGroupType): number {
-    switch (groupType) {
-      case MobGroupType.GROUP_A:
-        return 0x88aaff;  // 青っぽい
-      case MobGroupType.GROUP_B:
-        return 0xffaa88;  // オレンジっぽい
-      case MobGroupType.GROUP_C:
-        return 0xff4488;  // ピンク（フラグ持ち）
-      default:
-        return COLORS.ENEMY;
-    }
+  private getTintForGroup(_groupType: MobGroupType): number {
+    // 全グループ元の画像色を使用（Tintなし）
+    return 0xffffff;
   }
 
   /**
@@ -453,6 +445,7 @@ export abstract class MobEnemy extends Phaser.Physics.Arcade.Sprite {
     this.isFadingOut = false;
     this.isExiting = false;
     this.hasShot = false;
+    this.isCurving = false;  // カーブ状態をリセット（プール再利用時用）
 
     // 下降→発射→上昇パラメータを設定
     this.dsaTargetY = targetY;
@@ -569,7 +562,9 @@ export abstract class MobEnemy extends Phaser.Physics.Arcade.Sprite {
       if (this.hpBarFill) this.hpBarFill.setVisible(false);
     } else if (insidePlayArea && !this.visible) {
       this.setVisible(true);
-      // HPバーはupdateHpBar()で制御されるのでここでは変更しない
+      // HPバーも表示する
+      if (this.hpBarBg) this.hpBarBg.setVisible(true);
+      if (this.hpBarFill) this.hpBarFill.setVisible(true);
     }
 
     // 画面外に出たら非アクティブ化

@@ -69,6 +69,9 @@ export class BootScene extends Phaser.Scene {
     // 大玉: 4096x512px (512x512 × 8色)
     this.load.image('kshot_large_ball', 'img/bullets/kshot_large_ball.png');
 
+    // レーザー弾: 165x190px
+    this.load.image('laser', 'img/bullets/reazer.png');
+
     // 輪弾: 各278x278px × 8色（個別ファイル）
     this.load.image('rindan_9', 'img/bullets/rindan_red.png');
     this.load.image('rindan_10', 'img/bullets/rindan_yellow.png');
@@ -117,11 +120,18 @@ export class BootScene extends Phaser.Scene {
     this.load.audio('se_death_grasp', 'sound/se/koma_020.wav');   // デスグラスプヒットSE
     this.load.audio('se_obliterate', 'sound/se/ten_010.mp3');     // オブリテレイトヒットSE
 
-    // C-1 デスグラスプエフェクト画像
-    this.load.image('shadow1-1', 'img/fairy/attack/shadow/shadow1-1.png');
-    this.load.image('shadow1-2', 'img/fairy/attack/shadow/shadow1-2.png');
-    this.load.image('shadow1-3', 'img/fairy/attack/shadow/shadow1-3.png');
-    this.load.image('shadow1-4', 'img/fairy/attack/shadow/shadow1-4.png');
+    // C-1 デスグラスプエフェクト画像（shadow3シリーズ）
+    this.load.image('shadow3-0', 'img/effects/attack/shadow/shadow3-0.png');
+    this.load.image('shadow3-1', 'img/effects/attack/shadow/shadow3-1.png');
+    this.load.image('shadow3-2', 'img/effects/attack/shadow/shadow3-2.png');
+    this.load.image('shadow3-3', 'img/effects/attack/shadow/shadow3-3.png');
+    this.load.image('shadow3-4', 'img/effects/attack/shadow/shadow3-4.png');
+    this.load.image('shadow3-5', 'img/effects/attack/shadow/shadow3-5.png');
+
+    // C-1 オブリテレイトエフェクト画像（impactシリーズ）
+    this.load.image('impact1-1', 'img/effects/attack/impact/impact1-1.png');
+    this.load.image('impact1-2', 'img/effects/attack/impact/impact1-2.png');
+    this.load.image('impact1-3', 'img/effects/attack/impact/impact1-3.png');
   }
 
   create(): void {

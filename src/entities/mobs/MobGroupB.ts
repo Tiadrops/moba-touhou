@@ -582,9 +582,13 @@ export class MobGroupB extends MobEnemy {
       this.laserWarningLine = null;
     }
 
-    const bulletRadius = 1 * UNIT.METER_TO_PIXEL;  // 半径1m
-    const displayScale = (bulletRadius * 2) / 512;  // 中玉は512px
-    const bulletSpacing = bulletRadius;  // 弾の半径分の間隔（重なって密に見える）
+    // レーザー弾の設定（画像サイズ: 550x1100px、縦長）
+    const laserImageWidth = 550;
+    const laserImageHeight = 1100;
+    const targetWidth = 2 * UNIT.METER_TO_PIXEL;  // 横幅2m
+    const displayScale = targetWidth / laserImageWidth;  // 横幅を2mに合わせる
+    const displayHeight = laserImageHeight * displayScale;  // スケール後の縦幅
+    const bulletSpacing = displayHeight * 0.4;  // 弾の間隔（縦幅基準、60%重なる）
     const bulletCount = Math.ceil(this.LASER_LENGTH / bulletSpacing);
     const bulletSpeed = 20 * UNIT.METER_TO_PIXEL;  // 20m/s
 
@@ -606,14 +610,19 @@ export class MobGroupB extends MobEnemy {
         BulletType.ENEMY_NORMAL,
         this.stats.attackPower * 2,  // レーザーは高ダメージ
         null, false,
-        KSHOT.MEDIUM_BALL.YELLOW  // ID:3（黄色）
+        null  // kshotFrameIdはnull（カスタムテクスチャを使用）
       );
-      bullet.setScale(displayScale);
 
-      // 当たり判定を設定
+      // レーザー画像に変更
+      bullet.setTexture('laser');
+      bullet.setScale(displayScale);
+      bullet.setRotation(this.laserAngle + Math.PI / 2);  // 進行方向に回転
+
+      // 当たり判定を設定（横幅2m、縦はスケール後の高さ）
       const body = bullet.body as Phaser.Physics.Arcade.Body;
       if (body) {
-        body.setCircle(bulletRadius / displayScale, 0, 0);
+        body.setSize(targetWidth, displayHeight);
+        body.setOffset(0, 0);
         body.setVelocity(
           Math.cos(this.laserAngle) * bulletSpeed,
           Math.sin(this.laserAngle) * bulletSpeed

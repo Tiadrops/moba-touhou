@@ -523,7 +523,7 @@ export const WAVE_CONFIG = {
       POINTS_PER_SECOND: 100,      // 1秒あたりのボーナスポイント
       // 想定クリア時間（秒）- この時間より早いとボーナス
       EXPECTED_CLEAR_TIME: {
-        WAVE_1_1: 90,              // Wave 1-1: 90秒（1-1-6が70秒で出現）
+        WAVE_1_1: 75,              // Wave 1-1: 75秒
         WAVE_1_2: 30,              // Wave 1-2: 30秒（暫定）
       },
     },
