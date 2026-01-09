@@ -1028,6 +1028,9 @@ export class MobGroupB extends MobEnemy {
    * スクリームダメージ判定: 扇形内にプレイヤーがいればダメージ
    */
   private executeScreamDamage(): void {
+    // フラッシュエフェクトは常に表示
+    this.showScreamFlash();
+
     if (!this.playerPosition) return;
 
     // プレイヤーとの距離
@@ -1059,34 +1062,45 @@ export class MobGroupB extends MobEnemy {
         player.takeDamage(this.stats.attackPower);
       }
     }
-
-    // ダメージフラッシュエフェクト（範囲内にいた場合の視覚効果）
-    this.showScreamFlash();
   }
 
   /**
    * スクリームのフラッシュエフェクト
+   * 円形画像を扇形にマスクして表示
    */
   private showScreamFlash(): void {
-    const flash = this.scene.add.graphics();
-    flash.setDepth(DEPTH.BULLETS_ENEMY);
-
+    // 扇形マスクを作成（画面に追加しない）
+    const mask = new Phaser.GameObjects.Graphics(this.scene);
     const startAngle = this.screamTargetAngle - this.SCREAM_ANGLE / 2;
     const endAngle = this.screamTargetAngle + this.SCREAM_ANGLE / 2;
 
-    flash.fillStyle(0xffff00, 0.6);
-    flash.beginPath();
-    flash.moveTo(this.x, this.y);
-    flash.arc(this.x, this.y, this.SCREAM_RADIUS, startAngle, endAngle, false);
-    flash.closePath();
-    flash.fillPath();
+    mask.fillStyle(0xffffff);
+    mask.beginPath();
+    mask.moveTo(this.x, this.y);
+    mask.arc(this.x, this.y, this.SCREAM_RADIUS, startAngle, endAngle, false);
+    mask.closePath();
+    mask.fillPath();
 
-    // 0.1秒でフェードアウト
+    // 円形エフェクト画像（1400x1400px）をスケーリングして配置
+    const imageSize = 1400;
+    const scale = (this.SCREAM_RADIUS * 2) / imageSize;
+    const effect = this.scene.add.image(this.x, this.y, 'screem');
+    effect.setScale(scale);
+    effect.setDepth(DEPTH.BULLETS_ENEMY);
+    effect.setAlpha(0.8);
+
+    // 扇形マスクを適用
+    effect.setMask(mask.createGeometryMask());
+
+    // 0.15秒でフェードアウト
     this.scene.tweens.add({
-      targets: flash,
+      targets: effect,
       alpha: 0,
-      duration: 100,
-      onComplete: () => flash.destroy()
+      duration: 150,
+      onComplete: () => {
+        effect.destroy();
+        mask.destroy();
+      }
     });
   }
 
@@ -1542,21 +1556,23 @@ export class MobGroupB extends MobEnemy {
   }
 
   /**
-   * 恐怖弾のフラッシュエフェクト
+   * 恐怖弾のフラッシュエフェクト（screem画像を使用）
    */
   private showFearFlash(): void {
-    const flash = this.scene.add.graphics();
-    flash.setDepth(DEPTH.BULLETS_ENEMY);
+    // 円形エフェクト画像（1400x1400px）をスケーリングして配置
+    const imageSize = 1400;
+    const scale = (this.FEAR_RADIUS * 2) / imageSize;
+    const effect = this.scene.add.image(this.x, this.y, 'screem');
+    effect.setScale(scale);
+    effect.setDepth(DEPTH.BULLETS_ENEMY);
+    effect.setAlpha(0.8);
 
-    flash.fillStyle(0xcc00ff, 0.6);
-    flash.fillCircle(this.x, this.y, this.FEAR_RADIUS);
-
-    // 0.1秒でフェードアウト
+    // 0.15秒でフェードアウト
     this.scene.tweens.add({
-      targets: flash,
+      targets: effect,
       alpha: 0,
-      duration: 100,
-      onComplete: () => flash.destroy()
+      duration: 150,
+      onComplete: () => effect.destroy()
     });
   }
 }

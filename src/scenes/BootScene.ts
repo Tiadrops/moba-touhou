@@ -132,6 +132,21 @@ export class BootScene extends Phaser.Scene {
     this.load.image('impact1-1', 'img/effects/attack/impact/impact1-1.png');
     this.load.image('impact1-2', 'img/effects/attack/impact/impact1-2.png');
     this.load.image('impact1-3', 'img/effects/attack/impact/impact1-3.png');
+
+    // B-3 スクリームエフェクト画像（円形、扇形マスク用）
+    this.load.image('screem', 'img/effects/attack/screem/screem.png');
+
+    // C-2 Hisui Eスキルエフェクト画像
+    this.load.image('hisui_e', 'img/effects/attack/hisui/hisui_E.png');
+
+    // C-2 Hisui W2スキルエフェクト画像
+    this.load.image('hisui_w2', 'img/effects/attack/hisui/hisui_W2.png');
+
+    // C-2 Hisui Rスキルエフェクト画像（円形、半円マスク用）
+    this.load.image('hisui_r', 'img/effects/attack/hisui/hisui_R.png');
+
+    // C-2 Hisui R2スキルエフェクト画像（矩形）
+    this.load.image('hisui_r2', 'img/effects/attack/hisui/hisui_R2_2.png');
   }
 
   create(): void {

@@ -291,6 +291,12 @@ StageIntroScene → MidStageScene（道中）
   - 攻撃エフェクト: `img/effects/attack/`
     - impact: `impact1-1.png` 〜 `impact1-3.png`（オブリテレイト用）
     - shadow: `shadow3-0.png` 〜 `shadow3-5.png`（デスグラスプ用）
+    - screem: `screem.png`（B-3スクリーム、B-4恐怖弾用、円形1400x1400px）
+    - hisui: C-2 Hisuiスキルエフェクト
+      - `hisui_E.png`: Eスキル（円形1100x1100px、回転演出）
+      - `hisui_W2.png`: W2スキル（矩形550x1100px）
+      - `hisui_R.png`: Rスキル半円（円形、半円マスク用）
+      - `hisui_R2_2.png`: Rスキル矩形（矩形550x1100px）
 - 一時ファイル: `tmp/`
 
 ## トラブルシューティング記録

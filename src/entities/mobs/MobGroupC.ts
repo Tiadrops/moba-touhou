@@ -103,6 +103,9 @@ export class MobGroupC extends MobEnemy {
   private c2EBackTargetPos: { x: number; y: number } = { x: 0, y: 0 };
   private c2EForwardTargetPos: { x: number; y: number } = { x: 0, y: 0 };
   private c2EDamageDealt: boolean = false;  // 前進中のダメージ判定済みフラグ
+  private c2ESkillEffect: Phaser.GameObjects.Image | null = null;  // Eスキルエフェクト画像
+  private c2ESkillEffectStartTime: number = 0;  // エフェクト開始時間（回転用）
+  private readonly C2_E_ROTATION_SPEED = Math.PI * 2 / 3;  // 3秒で1回転
 
   // Skill Rパラメータ
   private readonly C2_R_CAST1_TIME = 500;      // 0.5秒
@@ -650,6 +653,7 @@ export class MobGroupC extends MobEnemy {
    */
   private endC2Skill(): void {
     this.cleanupWarning();
+    this.cleanupESkillEffect();
     this.c2CurrentSkill = null;
   }
 
@@ -699,7 +703,7 @@ export class MobGroupC extends MobEnemy {
         // ヒット時、プレイヤー方向に接近（重ならない程度に）
         this.moveTowardsPlayer();
       }
-      this.showDamageFlash(this.C2_W2_WIDTH, this.C2_W2_HEIGHT, 0xffff00);
+      this.showW2DamageFlash();
       this.endC2Skill();
     }
   }
@@ -772,57 +776,65 @@ export class MobGroupC extends MobEnemy {
       y: this.c2EBackTargetPos.y + Math.sin(this.currentSkillAngle) * this.C2_E_FORWARD_DISTANCE
     };
 
-    // 前進中の当たり判定範囲を表示（黄色）
-    this.showSkillEPreview();
+    // Eスキルエフェクト画像を表示（Phase 0〜2の間表示）
+    this.startESkillEffect();
   }
 
   /**
-   * Skill E 予告表示
+   * Skill E エフェクト開始
+   * キャラクターに追従する円形エフェクト画像を表示
    */
-  private showSkillEPreview(): void {
-    this.cleanupWarning();
-    this.warningGraphics = this.scene.add.graphics();
-    this.warningGraphics.setDepth(DEPTH.EFFECTS);
+  private startESkillEffect(): void {
+    // 既存のエフェクトがあれば削除
+    this.cleanupESkillEffect();
 
-    // 前進経路を黄色矩形で表示
-    const startX = this.c2EBackTargetPos.x;
-    const startY = this.c2EBackTargetPos.y;
-    const endX = this.c2EForwardTargetPos.x;
-    const endY = this.c2EForwardTargetPos.y;
+    // hisui_E画像（1100x1100px）をスケーリングして配置
+    const imageSize = 1100;
+    const scale = (this.C2_E_RADIUS * 2) / imageSize;
+    this.c2ESkillEffect = this.scene.add.image(this.x, this.y, 'hisui_e');
+    this.c2ESkillEffect.setScale(scale);
+    this.c2ESkillEffect.setDepth(DEPTH.EFFECTS);
+    this.c2ESkillEffect.setAlpha(0.8);
+    this.c2ESkillEffectStartTime = this.scene.time.now;
+  }
 
-    // 経路の長さと角度
-    const pathLength = this.C2_E_FORWARD_DISTANCE;
-    const cos = Math.cos(this.currentSkillAngle);
-    const sin = Math.sin(this.currentSkillAngle);
-
-    // 経路の中心
-    const centerX = (startX + endX) / 2;
-    const centerY = (startY + endY) / 2;
-
-    // 矩形の幅は当たり判定の直径
-    const width = this.C2_E_RADIUS * 2;
-    const halfWidth = width / 2;
-    const halfLength = pathLength / 2;
-
-    // 回転した矩形の4つの角
-    const corners = [
-      { x: centerX - cos * halfLength - sin * halfWidth, y: centerY - sin * halfLength + cos * halfWidth },
-      { x: centerX - cos * halfLength + sin * halfWidth, y: centerY - sin * halfLength - cos * halfWidth },
-      { x: centerX + cos * halfLength + sin * halfWidth, y: centerY + sin * halfLength - cos * halfWidth },
-      { x: centerX + cos * halfLength - sin * halfWidth, y: centerY + sin * halfLength + cos * halfWidth }
-    ];
-
-    this.warningGraphics.fillStyle(0xffff00, 0.3);
-    this.warningGraphics.lineStyle(3, 0xffff00, 0.8);
-
-    this.warningGraphics.beginPath();
-    this.warningGraphics.moveTo(corners[0].x, corners[0].y);
-    for (let i = 1; i < corners.length; i++) {
-      this.warningGraphics.lineTo(corners[i].x, corners[i].y);
+  /**
+   * Skill E エフェクト更新（キャラクターに追従 + 回転）
+   */
+  private updateESkillEffect(): void {
+    if (this.c2ESkillEffect) {
+      this.c2ESkillEffect.setPosition(this.x, this.y);
+      // 経過時間に基づいて回転
+      const elapsed = (this.scene.time.now - this.c2ESkillEffectStartTime) / 1000;  // 秒に変換
+      this.c2ESkillEffect.setRotation(elapsed * this.C2_E_ROTATION_SPEED);
     }
-    this.warningGraphics.closePath();
-    this.warningGraphics.fillPath();
-    this.warningGraphics.strokePath();
+  }
+
+  /**
+   * Skill E エフェクト終了（フェードアウト）
+   */
+  private endESkillEffect(): void {
+    if (this.c2ESkillEffect) {
+      const effect = this.c2ESkillEffect;
+      this.c2ESkillEffect = null;
+
+      this.scene.tweens.add({
+        targets: effect,
+        alpha: 0,
+        duration: 150,
+        onComplete: () => effect.destroy()
+      });
+    }
+  }
+
+  /**
+   * Skill E エフェクト即時削除
+   */
+  private cleanupESkillEffect(): void {
+    if (this.c2ESkillEffect) {
+      this.c2ESkillEffect.destroy();
+      this.c2ESkillEffect = null;
+    }
   }
 
   /**
@@ -830,6 +842,11 @@ export class MobGroupC extends MobEnemy {
    */
   private updateC2SkillE(time: number): void {
     const elapsed = time - this.c2SkillPhaseStartTime;
+
+    // Phase 0〜2の間、エフェクトをキャラクターに追従
+    if (this.c2SkillPhase <= 2) {
+      this.updateESkillEffect();
+    }
 
     // Phase 0: 後退 (0.13秒)
     if (this.c2SkillPhase === 0) {
@@ -873,8 +890,8 @@ export class MobGroupC extends MobEnemy {
       if (elapsed >= this.C2_E_FORWARD_TIME) {
         this.c2SkillPhase = 3;
         this.c2SkillPhaseStartTime = time;
-        // ダメージフラッシュ
-        this.showCircleDamageFlash(0xffff00);
+        // Phase 2終了時にエフェクトをフェードアウト
+        this.endESkillEffect();
       }
       return;
     }
@@ -1004,7 +1021,7 @@ export class MobGroupC extends MobEnemy {
             skillType: 'R2'
           });
         }
-        this.showDamageFlash(this.C2_R_RECT_WIDTH, this.C2_R_RECT_HEIGHT, 0xffff00);
+        this.showR2DamageFlash();
 
         // Phase 2: Wait
         this.c2SkillPhase = 2;
@@ -1027,82 +1044,99 @@ export class MobGroupC extends MobEnemy {
   // ----------------------------------------
 
   /**
-   * 矩形ダメージフラッシュ
+   * W2ダメージフラッシュ（hisui_W2画像を使用）
    */
-  private showDamageFlash(width: number, height: number, color: number): void {
-    const flash = this.scene.add.graphics();
-    flash.setDepth(DEPTH.EFFECTS);
+  private showW2DamageFlash(): void {
+    // hisui_W2画像（550x1100px）をW2の範囲に合わせてスケーリング
+    const imageWidth = 550;
+    const imageHeight = 1100;
+    const scaleX = this.C2_W2_WIDTH / imageWidth;
+    const scaleY = this.C2_W2_HEIGHT / imageHeight;
 
-    const cos = Math.cos(this.currentSkillAngle);
-    const sin = Math.sin(this.currentSkillAngle);
-    const centerX = this.x + cos * (height / 2);
-    const centerY = this.y + sin * (height / 2);
-    const halfWidth = width / 2;
-    const halfHeight = height / 2;
+    // 矩形の中心位置（自分の位置から前方に半分進んだ位置）
+    const centerX = this.x + Math.cos(this.currentSkillAngle) * (this.C2_W2_HEIGHT / 2);
+    const centerY = this.y + Math.sin(this.currentSkillAngle) * (this.C2_W2_HEIGHT / 2);
 
-    const corners = [
-      { x: centerX - cos * halfHeight - sin * halfWidth, y: centerY - sin * halfHeight + cos * halfWidth },
-      { x: centerX - cos * halfHeight + sin * halfWidth, y: centerY - sin * halfHeight - cos * halfWidth },
-      { x: centerX + cos * halfHeight + sin * halfWidth, y: centerY + sin * halfHeight - cos * halfWidth },
-      { x: centerX + cos * halfHeight - sin * halfWidth, y: centerY + sin * halfHeight + cos * halfWidth }
-    ];
-
-    flash.fillStyle(color, 0.6);
-    flash.beginPath();
-    flash.moveTo(corners[0].x, corners[0].y);
-    for (let i = 1; i < corners.length; i++) {
-      flash.lineTo(corners[i].x, corners[i].y);
-    }
-    flash.closePath();
-    flash.fillPath();
+    const effect = this.scene.add.image(centerX, centerY, 'hisui_w2');
+    effect.setScale(scaleX, scaleY);
+    effect.setDepth(DEPTH.EFFECTS);
+    effect.setAlpha(0.8);
+    // 画像を進行方向に回転（画像が下向きなので+90度）
+    effect.setRotation(this.currentSkillAngle + Math.PI / 2);
 
     this.scene.tweens.add({
-      targets: flash,
+      targets: effect,
       alpha: 0,
       duration: 150,
-      onComplete: () => flash.destroy()
+      onComplete: () => effect.destroy()
     });
   }
 
   /**
-   * 円形ダメージフラッシュ
+   * R2スキルダメージフラッシュ（hisui_R2画像を使用）
    */
-  private showCircleDamageFlash(color: number): void {
-    const flash = this.scene.add.graphics();
-    flash.setDepth(DEPTH.EFFECTS);
-    flash.fillStyle(color, 0.6);
-    flash.fillCircle(this.x, this.y, this.C2_E_RADIUS);
+  private showR2DamageFlash(): void {
+    // hisui_R2画像（550x1100px）をR2の範囲に合わせてスケーリング
+    const imageWidth = 550;
+    const imageHeight = 1100;
+    const scaleX = this.C2_R_RECT_WIDTH / imageWidth;
+    const scaleY = this.C2_R_RECT_HEIGHT / imageHeight;
+
+    // 矩形の中心位置（自分の位置から前方に半分進んだ位置）
+    const centerX = this.x + Math.cos(this.currentSkillAngle) * (this.C2_R_RECT_HEIGHT / 2);
+    const centerY = this.y + Math.sin(this.currentSkillAngle) * (this.C2_R_RECT_HEIGHT / 2);
+
+    const effect = this.scene.add.image(centerX, centerY, 'hisui_r2');
+    effect.setScale(scaleX, scaleY);
+    effect.setDepth(DEPTH.EFFECTS);
+    effect.setAlpha(0.8);
+    // 画像を進行方向に回転（画像が下向きなので+90度）
+    effect.setRotation(this.currentSkillAngle + Math.PI / 2);
 
     this.scene.tweens.add({
-      targets: flash,
+      targets: effect,
       alpha: 0,
       duration: 150,
-      onComplete: () => flash.destroy()
+      onComplete: () => effect.destroy()
     });
   }
 
   /**
-   * 半円ダメージフラッシュ
+   * 半円ダメージフラッシュ（hisui_R画像 + 半円マスク）
    */
-  private showSemicircleDamageFlash(radius: number, color: number): void {
-    const flash = this.scene.add.graphics();
-    flash.setDepth(DEPTH.EFFECTS);
-    flash.fillStyle(color, 0.6);
-
+  private showSemicircleDamageFlash(radius: number, _color: number): void {
+    // 半円マスクを作成（画面に追加しない）
+    const mask = new Phaser.GameObjects.Graphics(this.scene);
     const startAngle = this.currentSkillAngle - Math.PI / 2;
     const endAngle = this.currentSkillAngle + Math.PI / 2;
 
-    flash.beginPath();
-    flash.moveTo(this.x, this.y);
-    flash.arc(this.x, this.y, radius, startAngle, endAngle, false);
-    flash.closePath();
-    flash.fillPath();
+    mask.fillStyle(0xffffff);
+    mask.beginPath();
+    mask.moveTo(this.x, this.y);
+    mask.arc(this.x, this.y, radius, startAngle, endAngle, false);
+    mask.closePath();
+    mask.fillPath();
 
+    // 円形エフェクト画像（1100x1100px）をスケーリングして配置
+    const imageSize = 1100;
+    const scale = (radius * 2) / imageSize;
+    const effect = this.scene.add.image(this.x, this.y, 'hisui_r');
+    effect.setScale(scale);
+    effect.setDepth(DEPTH.EFFECTS);
+    effect.setAlpha(0.8);
+
+    // 半円マスクを適用
+    effect.setMask(mask.createGeometryMask());
+
+    // 0.15秒でフェードアウト
     this.scene.tweens.add({
-      targets: flash,
+      targets: effect,
       alpha: 0,
       duration: 150,
-      onComplete: () => flash.destroy()
+      onComplete: () => {
+        effect.destroy();
+        mask.destroy();
+      }
     });
   }
 
