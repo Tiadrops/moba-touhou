@@ -43,12 +43,36 @@ SEを追加した場合はこのファイルに追記してください。
 | `se_tan00` | MobGroupB.ts | 411 | B-1オーブ弾発射 | 0.6 |
 | `se_gun00` | MobGroupB.ts | 577 | B-2レーザー発射 | 0.6 |
 
+## 戦闘系SE（B-3スキル）
+
+| SEキー | ファイル | 行 | 用途 | 音量倍率 |
+|--------|----------|-----|------|---------|
+| `se_rupture` | MobGroupB.ts | 841 | ラプチャー発動 | 1.0 |
+| `se_scream` | MobGroupB.ts | 1076 | スクリーム発動 | 1.0 |
+
+## 戦闘系SE（B-4スキル）
+
+| SEキー | ファイル | 行 | 用途 | 音量倍率 |
+|--------|----------|-----|------|---------|
+| `se_fixed_shot` | MobGroupB.ts | 1351 | 固定射撃（1発ごと） | 0.75 |
+| `se_moving` | MobGroupB.ts | 1393 | ムービング発動 | 1.0 |
+| `se_fear` | MobGroupB.ts | 1575 | 恐怖弾発動 | 1.0 |
+
 ## 戦闘系SE（C-1スキル）
 
 | SEキー | ファイル | 行 | 用途 | 音量倍率 |
 |--------|----------|-----|------|---------|
 | `se_obliterate` | MobGroupC.ts | 441 | オブリテレイト発動 | 1.5 |
 | `se_death_grasp` | MobGroupC.ts | 461 | デスグラスプ発動 | 1.5 |
+
+## 戦闘系SE（C-2 Hisuiスキル）
+
+| SEキー | ファイル | 行 | 用途 | 音量倍率 |
+|--------|----------|-----|------|---------|
+| `se_hisui_e` | MobGroupC.ts | 789 | Eスキル発動 | 1.0 |
+| `se_hisui_w2` | MobGroupC.ts | 1054 | W2スキルヒット | 1.0 |
+| `se_hisui_r1` | MobGroupC.ts | 1118 | Rスキル半円発動 | 1.0 |
+| `se_hisui_r2` | MobGroupC.ts | 1086 | Rスキル矩形発動 | 1.0 |
 
 ## ボス系SE
 
@@ -83,3 +107,12 @@ SEを追加した場合はこのファイルに追記してください。
 | `se_gun00` | sound/se/se_gun00.wav |
 | `se_death_grasp` | sound/se/koma_020.wav |
 | `se_obliterate` | sound/se/ten_010.mp3 |
+| `se_hisui_e` | sound/se/lab_suburi.mp3 |
+| `se_hisui_w2` | sound/se/lab_kennuku.mp3 |
+| `se_hisui_r1` | sound/se/lab_ken5_a.mp3 |
+| `se_hisui_r2` | sound/se/lab_ken6_a.mp3 |
+| `se_rupture` | sound/se/lab_kaizyuu.mp3 |
+| `se_scream` | sound/se/lab_doragon.mp3 |
+| `se_fixed_shot` | sound/se/shot1_plus20hz.mp3 |
+| `se_moving` | sound/se/H_alice_002.mp3 |
+| `se_fear` | sound/se/lab_kenzyu.mp3 |

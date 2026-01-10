@@ -82,20 +82,23 @@ export class BootScene extends Phaser.Scene {
     this.load.image('rindan_15', 'img/bullets/rindan_purple.png');
     this.load.image('rindan_16', 'img/bullets/rindan_blue.png');
 
-    // 道中雑魚妖精スプライトシート（左右2フレーム）
+    // 道中雑魚妖精スプライトシート
     // GROUP_A用（パターンA-1, A-2, A-3）
-    this.load.spritesheet('fairy_a1', 'img/fairy/zakoC1.png', { frameWidth: 850, frameHeight: 1100 });
-    this.load.spritesheet('fairy_a2', 'img/fairy/zakoC2.png', { frameWidth: 850, frameHeight: 1100 });
-    this.load.spritesheet('fairy_a3', 'img/fairy/zakoC3.png', { frameWidth: 850, frameHeight: 1100 });
+    // moe-kedama (4x4スプライトシート、128x128px、1フレーム32x32px)
+    // A-1: 1行目(フレーム0-3)、A-2: 2行目(フレーム4-7)、A-3: 3行目(フレーム8-11)
+    this.load.spritesheet('fairy_a1', 'img/fairy/moe-kedama.png', { frameWidth: 32, frameHeight: 32 });
     // GROUP_B用（パターンB-1, B-2, B-3, B-4）
-    this.load.spritesheet('fairy_b1', 'img/fairy/zakoB1.png', { frameWidth: 1584, frameHeight: 1344 });
-    this.load.spritesheet('fairy_b2', 'img/fairy/zakoB2.png', { frameWidth: 1584, frameHeight: 1344 });
-    this.load.spritesheet('fairy_b3', 'img/fairy/zakoA1.png', { frameWidth: 1488, frameHeight: 1440 });
-    this.load.spritesheet('fairy_b4', 'img/fairy/zakoB1.png', { frameWidth: 1584, frameHeight: 1344 });
+    // zakoC1-C3: 1700x1100px (横2フレーム、各850x1100px)
+    // zakoC4: 850x550px (横2フレーム、各425x550px)
+    this.load.spritesheet('fairy_b1', 'img/fairy/zakoC1.png', { frameWidth: 850, frameHeight: 1100 });
+    this.load.spritesheet('fairy_b2', 'img/fairy/zakoC2.png', { frameWidth: 850, frameHeight: 1100 });
+    this.load.spritesheet('fairy_b3', 'img/fairy/zakoC3.png', { frameWidth: 850, frameHeight: 1100 });
+    this.load.spritesheet('fairy_b4', 'img/fairy/zakoC4.png', { frameWidth: 425, frameHeight: 550 });
     // GROUP_C用（フラグ持ち）
-    this.load.spritesheet('fairy_c', 'img/fairy/zakoA1.png', { frameWidth: 1488, frameHeight: 1440 });
+    // zakoB1-B2: 3168x1344px (横2フレーム、各1584x1344px)
+    this.load.spritesheet('fairy_c', 'img/fairy/zakoB1.png', { frameWidth: 1584, frameHeight: 1344 });
     // GROUP_C2用（Hisui）
-    this.load.spritesheet('fairy_c2', 'img/fairy/zakoA1.png', { frameWidth: 1488, frameHeight: 1440 });
+    this.load.spritesheet('fairy_c2', 'img/fairy/zakoB2.png', { frameWidth: 1584, frameHeight: 1344 });
 
     // BGM読み込み
     this.load.audio('bgm_title', 'sound/bgm/赤より紅い夢.mp3');
@@ -119,6 +122,18 @@ export class BootScene extends Phaser.Scene {
     this.load.audio('se_gun00', 'sound/se/se_gun00.wav');         // B-2レーザー発射SE
     this.load.audio('se_death_grasp', 'sound/se/koma_020.wav');   // デスグラスプヒットSE
     this.load.audio('se_obliterate', 'sound/se/ten_010.mp3');     // オブリテレイトヒットSE
+    // B-3 スキルSE
+    this.load.audio('se_rupture', 'sound/se/lab_kaizyuu.mp3');    // ラプチャー
+    this.load.audio('se_scream', 'sound/se/lab_doragon.mp3');     // スクリーム
+    // B-4 スキルSE
+    this.load.audio('se_fear', 'sound/se/lab_kenzyu.mp3');        // 恐怖弾
+    this.load.audio('se_moving', 'sound/se/H_alice_002.mp3');     // ムービング
+    this.load.audio('se_fixed_shot', 'sound/se/shot1_plus20hz.mp3'); // 固定射撃
+    // C-2 Hisui スキルSE
+    this.load.audio('se_hisui_r1', 'sound/se/lab_ken5_a.mp3');    // Rスキル半円
+    this.load.audio('se_hisui_r2', 'sound/se/lab_ken6_a.mp3');    // Rスキル矩形
+    this.load.audio('se_hisui_w2', 'sound/se/lab_kennuku.mp3');   // W2スキル
+    this.load.audio('se_hisui_e', 'sound/se/lab_suburi.mp3');     // Eスキル
 
     // C-1 デスグラスプエフェクト画像（shadow3シリーズ）
     this.load.image('shadow3-0', 'img/effects/attack/shadow/shadow3-0.png');
@@ -343,24 +358,27 @@ export class BootScene extends Phaser.Scene {
       repeat: -1,
     });
 
-    // 道中雑魚妖精アニメーション（2フレーム）
+    // 道中雑魚妖精アニメーション
     // GROUP_A用（パターンA-1, A-2, A-3）
+    // A-1: moe-kedama 4x4スプライトシートの1行目（フレーム0-3）
     this.anims.create({
       key: 'fairy_a1_idle',
-      frames: this.anims.generateFrameNumbers('fairy_a1', { frames: [0, 1] }),
-      frameRate: 2,
+      frames: this.anims.generateFrameNumbers('fairy_a1', { frames: [0, 1, 2, 3] }),
+      frameRate: 6,
       repeat: -1,
     });
+    // A-2: moe-kedama 4x4スプライトシートの2行目（フレーム4-7）
     this.anims.create({
       key: 'fairy_a2_idle',
-      frames: this.anims.generateFrameNumbers('fairy_a2', { frames: [0, 1] }),
-      frameRate: 2,
+      frames: this.anims.generateFrameNumbers('fairy_a1', { frames: [4, 5, 6, 7] }),
+      frameRate: 6,
       repeat: -1,
     });
+    // A-3: moe-kedama 4x4スプライトシートの3行目（フレーム8-11）
     this.anims.create({
       key: 'fairy_a3_idle',
-      frames: this.anims.generateFrameNumbers('fairy_a3', { frames: [0, 1] }),
-      frameRate: 2,
+      frames: this.anims.generateFrameNumbers('fairy_a1', { frames: [8, 9, 10, 11] }),
+      frameRate: 6,
       repeat: -1,
     });
     // GROUP_B用（パターンB-1, B-2, B-3, B-4）

@@ -22,20 +22,24 @@ export type MobAPatternType = 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6';
  * A-5: A-1と同様、ただし6m/s→10m/sに加速
  * A-6: 3way弾幕、逆方向に発射後、減速→停止→加速と重力軌道 8m/s→10m/s
  */
-// パターン別テクスチャ設定
-const PATTERN_TEXTURES: Record<MobAPatternType, { texture: string; animation: string }> = {
-  'A1': { texture: 'fairy_a1', animation: 'fairy_a1_idle' },
-  'A2': { texture: 'fairy_a2', animation: 'fairy_a2_idle' },
-  'A3': { texture: 'fairy_a3', animation: 'fairy_a3_idle' },
-  'A4': { texture: 'fairy_a1', animation: 'fairy_a1_idle' },
-  'A5': { texture: 'fairy_a2', animation: 'fairy_a2_idle' },
-  'A6': { texture: 'fairy_a3', animation: 'fairy_a3_idle' },
+// パターン別テクスチャ設定（全てmoe-kedamaを使用）
+const PATTERN_TEXTURES: Record<MobAPatternType, { texture: string; animation: string; scale: number; rotate: boolean }> = {
+  'A1': { texture: 'fairy_a1', animation: 'fairy_a1_idle', scale: 1.1, rotate: true },  // moe-kedama 1行目
+  'A2': { texture: 'fairy_a1', animation: 'fairy_a2_idle', scale: 1.1, rotate: true },  // moe-kedama 2行目
+  'A3': { texture: 'fairy_a1', animation: 'fairy_a3_idle', scale: 1.1, rotate: true },  // moe-kedama 3行目
+  'A4': { texture: 'fairy_a1', animation: 'fairy_a1_idle', scale: 1.1, rotate: true },  // moe-kedama 1行目
+  'A5': { texture: 'fairy_a1', animation: 'fairy_a2_idle', scale: 1.1, rotate: true },  // moe-kedama 2行目
+  'A6': { texture: 'fairy_a1', animation: 'fairy_a3_idle', scale: 1.1, rotate: true },  // moe-kedama 3行目
 };
 
 export class MobGroupA extends MobEnemy {
   private patternType: MobAPatternType = 'A1';
   private shootDelay: number = 1000;  // 登場後1秒後に発射
   private autoShootEnabled: boolean = true;  // 自動発射の有効/無効
+
+  // 回転アニメーション用
+  private shouldRotate: boolean = false;
+  private rotationSpeed: number = 2;  // ラジアン/秒
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     // 初期パターンを決定
@@ -44,7 +48,8 @@ export class MobGroupA extends MobEnemy {
     super(scene, x, y, MobGroupType.GROUP_A, config.texture);
     this.patternType = initialPattern;
     this.animationKey = config.animation;
-    this.displayScale = 0.04;  // 850x1100を約35pxに
+    this.displayScale = config.scale;
+    this.shouldRotate = config.rotate;
   }
 
   /**
@@ -76,6 +81,11 @@ export class MobGroupA extends MobEnemy {
     const config = PATTERN_TEXTURES[this.patternType];
     this.setTexture(config.texture);
     this.animationKey = config.animation;
+    this.displayScale = config.scale;
+    this.shouldRotate = config.rotate;
+
+    // 回転をリセット
+    this.setRotation(0);
 
     // 再利用時に自動発射をリセット（デフォルトは有効）
     this.autoShootEnabled = true;
@@ -99,6 +109,11 @@ export class MobGroupA extends MobEnemy {
     const config = PATTERN_TEXTURES[pattern];
     this.setTexture(config.texture);
     this.animationKey = config.animation;
+    this.displayScale = config.scale;
+    this.shouldRotate = config.rotate;
+
+    // 回転をリセット
+    this.setRotation(0);
 
     // 再利用時に自動発射をリセット（デフォルトは有効）
     this.autoShootEnabled = true;
@@ -130,6 +145,11 @@ export class MobGroupA extends MobEnemy {
     const config = PATTERN_TEXTURES[pattern];
     this.setTexture(config.texture);
     this.animationKey = config.animation;
+    this.displayScale = config.scale;
+    this.shouldRotate = config.rotate;
+
+    // 回転をリセット
+    this.setRotation(0);
 
     // 通過型スポーン
     this.spawnPassThrough(x, y, velocityX, velocityY, duration);
@@ -154,6 +174,11 @@ export class MobGroupA extends MobEnemy {
     const config = PATTERN_TEXTURES[pattern];
     this.setTexture(config.texture);
     this.animationKey = config.animation;
+    this.displayScale = config.scale;
+    this.shouldRotate = config.rotate;
+
+    // 回転をリセット
+    this.setRotation(0);
 
     // カーブ付き通過型スポーン
     this.spawnPassThroughCurve(x, y, velocityY, curveAtY, exitVelocityX, curveDuration);
@@ -183,6 +208,11 @@ export class MobGroupA extends MobEnemy {
     const config = PATTERN_TEXTURES[pattern];
     this.setTexture(config.texture);
     this.animationKey = config.animation;
+    this.displayScale = config.scale;
+    this.shouldRotate = config.rotate;
+
+    // 回転をリセット
+    this.setRotation(0);
 
     // 自動発射を無効化（目標到達時に手動で発射）
     this.autoShootEnabled = false;
@@ -213,6 +243,11 @@ export class MobGroupA extends MobEnemy {
     const config = PATTERN_TEXTURES[this.patternType];
     this.setTexture(config.texture);
     this.animationKey = config.animation;
+    this.displayScale = config.scale;
+    this.shouldRotate = config.rotate;
+
+    // 回転をリセット
+    this.setRotation(0);
 
     // 再利用時に自動発射をリセット（デフォルトは有効）
     this.autoShootEnabled = true;
@@ -327,6 +362,18 @@ export class MobGroupA extends MobEnemy {
       case 'A6':
         this.shootPatternA6();
         break;
+    }
+  }
+
+  /**
+   * 更新処理（回転アニメーション追加）
+   */
+  update(time: number, delta: number): void {
+    super.update(time, delta);
+
+    // 回転アニメーション（A-1, A-4用）
+    if (this.shouldRotate && this.isActive) {
+      this.rotation += this.rotationSpeed * (delta / 1000);
     }
   }
 

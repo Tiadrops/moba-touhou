@@ -22,11 +22,13 @@ export type MobBPatternType = 'B1' | 'B2' | 'B3' | 'B4';
  * B-4: 固定射撃（2.2秒間、0.22s毎に弾発射）＋ムービング（4m移動）＋恐怖弾（円形ダメージ）
  */
 // パターン別テクスチャ設定
-const PATTERN_TEXTURES: Record<MobBPatternType, { texture: string; animation: string }> = {
-  'B1': { texture: 'fairy_b1', animation: 'fairy_b1_idle' },
-  'B2': { texture: 'fairy_b2', animation: 'fairy_b2_idle' },
-  'B3': { texture: 'fairy_b3', animation: 'fairy_b3_idle' },
-  'B4': { texture: 'fairy_b4', animation: 'fairy_b4_idle' },
+// B-1〜B-3: zakoC1〜C3 (850x1100px/フレーム) → スケール0.8
+// B-4: zakoC4 (425x550px/フレーム、他の半分サイズ) → スケール1.6（B-1〜3の0.8×2相当）
+const PATTERN_TEXTURES: Record<MobBPatternType, { texture: string; animation: string; scale: number }> = {
+  'B1': { texture: 'fairy_b1', animation: 'fairy_b1_idle', scale: 0.8 },
+  'B2': { texture: 'fairy_b2', animation: 'fairy_b2_idle', scale: 0.8 },
+  'B3': { texture: 'fairy_b3', animation: 'fairy_b3_idle', scale: 0.8 },
+  'B4': { texture: 'fairy_b4', animation: 'fairy_b4_idle', scale: 1.6 },
 };
 
 export class MobGroupB extends MobEnemy {
@@ -91,11 +93,13 @@ export class MobGroupB extends MobEnemy {
   private moveStartTime: number = 0;
   private moveDuration: number = 0;  // 移動時間（距離に応じて変わる）
   private lastMoveTime: number = 0;  // ムービングのCD開始時刻
+  private moveEndTime: number = 0;  // ムービング終了時刻（スキル使用不可判定用）
   private readonly MOVE_SPEED = 10 * UNIT.METER_TO_PIXEL;    // 10m/s（ムービング用）
   private readonly BASE_MOVE_SPEED = 3 * UNIT.METER_TO_PIXEL;  // 3m/s（通常移動用）
   private readonly TARGET_DISTANCE = 7.5 * UNIT.METER_TO_PIXEL;  // 目標距離7.5m
   private readonly DISTANCE_TOLERANCE = 1 * UNIT.METER_TO_PIXEL;  // 許容誤差1m
   private readonly MOVE_COOLDOWN = 5000;  // ムービングのCD 5秒
+  private readonly MOVE_END_LOCKOUT = 500;  // ムービング後のスキル使用不可時間 0.5秒
   // 恐怖弾用
   private fearWarningCircle: Phaser.GameObjects.Graphics | null = null;
   private isFearCharging: boolean = false;
@@ -112,7 +116,8 @@ export class MobGroupB extends MobEnemy {
     super(scene, x, y, MobGroupType.GROUP_B, config.texture);
     this.patternType = initialPattern;
     this.animationKey = config.animation;
-    this.displayScale = 0.05;  // 1584x1344を約70pxに
+    // zakoC1-C3: 850pxを約70pxに (0.082)、zakoC4は画像が半分サイズなのでscale 2.0で補正
+    this.displayScale = 0.082 * config.scale;
   }
 
   /**
@@ -144,6 +149,7 @@ export class MobGroupB extends MobEnemy {
     const config = PATTERN_TEXTURES[this.patternType];
     this.setTexture(config.texture);
     this.animationKey = config.animation;
+    this.displayScale = 0.082 * config.scale;
 
     super.spawn(x, y, targetY, movePattern);
     this.resetAttackState();
@@ -164,6 +170,7 @@ export class MobGroupB extends MobEnemy {
     const config = PATTERN_TEXTURES[pattern];
     this.setTexture(config.texture);
     this.animationKey = config.animation;
+    this.displayScale = 0.082 * config.scale;
 
     super.spawn(x, y, targetY, movePattern);
     this.resetAttackState();
@@ -192,6 +199,7 @@ export class MobGroupB extends MobEnemy {
     const config = PATTERN_TEXTURES[pattern];
     this.setTexture(config.texture);
     this.animationKey = config.animation;
+    this.displayScale = 0.082 * config.scale;
 
     // 通過型スポーン
     this.spawnPassThrough(x, y, velocityX, velocityY, duration);
@@ -212,6 +220,7 @@ export class MobGroupB extends MobEnemy {
     const config = PATTERN_TEXTURES[pattern];
     this.setTexture(config.texture);
     this.animationKey = config.animation;
+    this.displayScale = 0.082 * config.scale;
 
     // プレイヤー追尾型スポーン
     this.spawnChasePlayer(x, y, speed);
@@ -233,6 +242,7 @@ export class MobGroupB extends MobEnemy {
     const config = PATTERN_TEXTURES[pattern];
     this.setTexture(config.texture);
     this.animationKey = config.animation;
+    this.displayScale = 0.082 * config.scale;
 
     // ランダム移動型スポーン
     this.spawnRandomWalk(x, y, speed, changeInterval);
@@ -256,6 +266,7 @@ export class MobGroupB extends MobEnemy {
     const config = PATTERN_TEXTURES[pattern];
     this.setTexture(config.texture);
     this.animationKey = config.animation;
+    this.displayScale = 0.082 * config.scale;
 
     // 下降→追尾型スポーン
     this.spawnDescendThenChase(x, y, targetY, descendSpeed, chaseSpeed);
@@ -280,10 +291,16 @@ export class MobGroupB extends MobEnemy {
     const config = PATTERN_TEXTURES[pattern];
     this.setTexture(config.texture);
     this.animationKey = config.animation;
+    this.displayScale = 0.082 * config.scale;
 
     // 下降→ランダム移動型スポーン
     this.spawnDescendThenRandomWalk(x, y, targetY, descendSpeed, walkSpeed, changeInterval);
     this.resetAttackState();
+
+    // B4はAI駆動なのでautoShootを有効にする
+    if (pattern === 'B4') {
+      this.setAutoShoot(true);
+    }
   }
 
   /**
@@ -837,6 +854,9 @@ export class MobGroupB extends MobEnemy {
   private fireRaptureBullets(): void {
     if (!this.bulletPool) return;
 
+    // SE再生
+    AudioManager.getInstance().playSe('se_rupture', { volume: 1.0 });
+
     const bulletCount = 16;  // 円周上に16発
     const bulletRadius = 0.3 * UNIT.METER_TO_PIXEL;  // 弾の半径0.3m
     const displayScale = (bulletRadius * 2) / 278;  // 輪弾(278px)のスケール
@@ -1069,6 +1089,9 @@ export class MobGroupB extends MobEnemy {
    * 円形画像を扇形にマスクして表示
    */
   private showScreamFlash(): void {
+    // SE再生
+    AudioManager.getInstance().playSe('se_scream', { volume: 1.0 });
+
     // 扇形マスクを作成（画面に追加しない）
     const mask = new Phaser.GameObjects.Graphics(this.scene);
     const startAngle = this.screamTargetAngle - this.SCREAM_ANGLE / 2;
@@ -1123,6 +1146,22 @@ export class MobGroupB extends MobEnemy {
   // =============================================
 
   /**
+   * スキル使用可否判定
+   * 固定射撃中、またはムービング終了後0.5秒以内はスキル使用不可
+   */
+  private canUseSkill(time: number): boolean {
+    // 固定射撃中はスキル使用不可
+    if (this.isFixedShotActive) {
+      return false;
+    }
+    // ムービング終了後0.5秒間はスキル使用不可
+    if (time - this.moveEndTime < this.MOVE_END_LOCKOUT) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
    * B-4 AIの継続的な更新
    * 毎フレーム呼ばれ、条件に応じて移動・射撃を開始する
    */
@@ -1136,9 +1175,12 @@ export class MobGroupB extends MobEnemy {
       return;
     }
 
+    // スキル使用可否を判定（固定射撃中、ムービング終了後0.5秒間はスキル使用不可）
+    const skillAvailable = this.canUseSkill(time);
+
     if (!this.playerPosition) {
       // プレイヤー位置が分からない場合は固定射撃のみ
-      if (!this.isFixedShotActive && time - this.lastFixedShotCDTime >= this.FIXED_SHOT_COOLDOWN) {
+      if (skillAvailable && time - this.lastFixedShotCDTime >= this.FIXED_SHOT_COOLDOWN) {
         this.startFixedShot(time);
       }
       return;
@@ -1154,24 +1196,26 @@ export class MobGroupB extends MobEnemy {
       this.updateBaseMovement(distance, dx, dy);
     }
 
-    // 恐怖弾：プレイヤーが射程内(4.5m)にいて、CDが上がっていて、チャージ中でなく、固定射撃中でない場合
+    // 恐怖弾：プレイヤーが射程内(4.5m)にいて、CDが上がっていて、チャージ中でなく、スキル使用可能な場合
     if (distance <= this.FEAR_RADIUS &&
         time - this.lastFearTime >= this.FEAR_COOLDOWN &&
         !this.isFearCharging &&
-        !this.isFixedShotActive) {
+        skillAvailable) {
       this.startFear(time);
       return;
     }
 
-    // ムービング：プレイヤーとの距離が目標距離(7.5m)から大きく離れていて、移動中でなく、CDが上がっている場合
+    // ムービング：プレイヤーとの距離が目標距離(7.5m)から大きく離れていて、移動中でなく、CDが上がっていて、固定射撃中でなく、恐怖弾詠唱中でない場合
     const distanceDiff = Math.abs(distance - this.TARGET_DISTANCE);
     if (distanceDiff > this.DISTANCE_TOLERANCE && !this.isMoving &&
-        time - this.lastMoveTime >= this.MOVE_COOLDOWN) {
+        time - this.lastMoveTime >= this.MOVE_COOLDOWN &&
+        !this.isFixedShotActive &&
+        !this.isFearCharging) {
       this.startMovingToTargetDistance(time, distance);
     }
 
-    // 固定射撃：CDが上がっていて、発射中でない場合（移動中でも発射可能）
-    if (!this.isFixedShotActive && time - this.lastFixedShotCDTime >= this.FIXED_SHOT_COOLDOWN) {
+    // 固定射撃：CDが上がっていて、スキル使用可能な場合（移動中でも発射可能）
+    if (skillAvailable && time - this.lastFixedShotCDTime >= this.FIXED_SHOT_COOLDOWN) {
       this.startFixedShot(time);
     }
   }
@@ -1256,11 +1300,15 @@ export class MobGroupB extends MobEnemy {
    * 3. 固定射撃: CDが上がっていれば使用（移動中でも発射可能）
    *
    * 固定射撃は移動と並行して使用可能
+   * ※固定射撃中、ムービング終了後0.5秒間はスキル使用不可（移動は可能）
    */
   private startB4Attack(time: number): void {
+    // スキル使用可否を判定
+    const skillAvailable = this.canUseSkill(time);
+
     if (!this.playerPosition) {
       // プレイヤー位置が分からない場合は固定射撃のみ
-      if (!this.isFixedShotActive && time - this.lastFixedShotCDTime >= this.FIXED_SHOT_COOLDOWN) {
+      if (skillAvailable && time - this.lastFixedShotCDTime >= this.FIXED_SHOT_COOLDOWN) {
         this.startFixedShot(time);
       }
       return;
@@ -1271,23 +1319,26 @@ export class MobGroupB extends MobEnemy {
     const dy = this.playerPosition.y - this.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
 
-    // 恐怖弾：プレイヤーが射程内(4.5m)にいて、CDが上がっていて、チャージ中でない場合
+    // 恐怖弾：プレイヤーが射程内(4.5m)にいて、CDが上がっていて、チャージ中でなく、スキル使用可能な場合
     if (distance <= this.FEAR_RADIUS &&
         time - this.lastFearTime >= this.FEAR_COOLDOWN &&
-        !this.isFearCharging) {
+        !this.isFearCharging &&
+        skillAvailable) {
       this.startFear(time);
       return;
     }
 
-    // 移動：プレイヤーとの距離が目標距離(7.5m)から大きく離れていて、移動中でなく、CDが上がっている場合
+    // 移動：プレイヤーとの距離が目標距離(7.5m)から大きく離れていて、移動中でなく、CDが上がっていて、固定射撃中でなく、恐怖弾詠唱中でない場合
     const distanceDiff = Math.abs(distance - this.TARGET_DISTANCE);
     if (distanceDiff > this.DISTANCE_TOLERANCE && !this.isMoving &&
-        time - this.lastMoveTime >= this.MOVE_COOLDOWN) {
+        time - this.lastMoveTime >= this.MOVE_COOLDOWN &&
+        !this.isFixedShotActive &&
+        !this.isFearCharging) {
       this.startMovingToTargetDistance(time, distance);
     }
 
-    // 固定射撃：CDが上がっていて、発射中でない場合（移動中でも発射可能）
-    if (!this.isFixedShotActive && time - this.lastFixedShotCDTime >= this.FIXED_SHOT_COOLDOWN) {
+    // 固定射撃：CDが上がっていて、スキル使用可能な場合（移動中でも発射可能）
+    if (skillAvailable && time - this.lastFixedShotCDTime >= this.FIXED_SHOT_COOLDOWN) {
       this.startFixedShot(time);
     }
   }
@@ -1341,6 +1392,9 @@ export class MobGroupB extends MobEnemy {
   private fireFixedShotBullet(): void {
     if (!this.bulletPool) return;
 
+    // SE再生（1発ごと）
+    AudioManager.getInstance().playSe('se_fixed_shot', { volume: 0.75 });
+
     const bullet = this.bulletPool.acquire();
     if (!bullet) return;
 
@@ -1379,6 +1433,9 @@ export class MobGroupB extends MobEnemy {
    */
   private startMovingToTargetDistance(time: number, currentDistance: number): void {
     if (!this.playerPosition) return;
+
+    // SE再生
+    AudioManager.getInstance().playSe('se_moving', { volume: 1.0 });
 
     this.isMoving = true;
     this.moveStartTime = time;
@@ -1461,6 +1518,7 @@ export class MobGroupB extends MobEnemy {
       this.y = this.moveTargetPos.y;
       this.isMoving = false;
       this.lastMoveTime = time;  // CD開始
+      this.moveEndTime = time;   // スキル使用不可期間開始
       return;
     }
 
@@ -1559,6 +1617,9 @@ export class MobGroupB extends MobEnemy {
    * 恐怖弾のフラッシュエフェクト（screem画像を使用）
    */
   private showFearFlash(): void {
+    // SE再生
+    AudioManager.getInstance().playSe('se_fear', { volume: 1.0 });
+
     // 円形エフェクト画像（1400x1400px）をスケーリングして配置
     const imageSize = 1400;
     const scale = (this.FEAR_RADIUS * 2) / imageSize;

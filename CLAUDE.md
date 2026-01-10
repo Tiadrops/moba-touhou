@@ -53,6 +53,31 @@ rm old_file.ts
   - 待機・詠唱のフレーム順: 1→3→2→4
   - Rスキル中のスケール: 55px / 390px ≈ 0.14（1m x 1mサイズ）
 
+### 雑魚妖精スプライト
+
+詳細は `docs/ANIMATION_LIST.md` を参照。
+
+- **GROUP_A (moe-kedama)**: `img/fairy/moe-kedama.png`
+  - 素材提供: 7B(点睛集積)
+  - サイズ: 128x128px (4x4グリッド、各32x32px)
+  - アニメーション: 6fps、回転アニメーション付き（2rad/s）
+  - スケール: 1.1（約35px表示）
+  - パターン割り当て:
+    | パターン | 使用行 | フレーム |
+    |---------|--------|----------|
+    | A-1, A-4 | 1行目 | 0-3 |
+    | A-2, A-5 | 2行目 | 4-7 |
+    | A-3, A-6 | 3行目 | 8-11 |
+- **GROUP_B**: 個別スプライトシート
+  - B-1, B-4: `img/fairy/zakoB1.png` (1584x1344px, 2フレーム)
+  - B-2: `img/fairy/zakoB2.png` (1584x1344px, 2フレーム)
+  - B-3: `img/fairy/zakoA1.png` (1488x1440px, 2フレーム)
+  - アニメーション: 2fps
+- **GROUP_C**: 個別スプライトシート
+  - C-1: `img/fairy/zakoA1.png` (1488x1440px, 2フレーム)
+  - C-2: `img/fairy/zakoA1.png` (1488x1440px, 2フレーム)
+  - アニメーション: 2fps
+
 ### ステージ背景
 - 背景画像: `img/background/stage1.png`
 - 読み込み: `src/scenes/BootScene.ts`

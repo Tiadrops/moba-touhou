@@ -310,7 +310,9 @@ export class MobTestScene extends Phaser.Scene {
       this.mobGroupB = new MobGroupB(this, spawnX, spawnY);
       this.mobGroupB.setDepth(DEPTH.ENEMIES);
       this.mobGroupB.setBulletPool(this.bulletPool);
-      this.mobGroupB.setAutoShoot(false);  // 手動発射
+      // B-4はAI駆動なので自動発射を有効にする、それ以外は手動発射
+      const isB4 = pattern.pattern === 'B4';
+      this.mobGroupB.setAutoShoot(isB4);
 
       // 移動パターンに応じたスポーン
       const movement = pattern.movement || 'stay';

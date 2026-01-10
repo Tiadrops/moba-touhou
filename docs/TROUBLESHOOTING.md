@@ -423,6 +423,73 @@ if (this.confirmSelectedIndex === 0) {
 
 ---
 
+## 2026年 - B-4がスキルを使用しない問題
+
+### 問題の症状
+
+Wave 1-2-5およびWave 1-2-6で出現するB-4敵がスキル（固定射撃、ムービング、恐怖弾）を一切使用しなかった。
+- B-4は画面上に出現するが、完全に攻撃しない状態
+- MobTestSceneでも同様の問題が発生
+
+### 原因
+
+**B-4生成時に`setAutoShoot(true)`が呼ばれていなかった**のが原因。
+
+B-4は他のB系敵（B-1〜B-3）と異なり、AI駆動で動作する：
+- B-1〜B-3: インターバル攻撃（`autoShootEnabled`に依存しない）
+- B-4: `updateB4AI()`が毎フレーム呼ばれて自律判断（`autoShootEnabled=true`が必須）
+
+```typescript
+// 問題のあったコード（MobGroupB.ts）
+// updateB4AIはautoShootEnabledがtrueの時のみ実行される
+if (this.patternType === 'B4' && this.autoShootEnabled) {
+  this.updateB4AI(time);
+}
+
+// しかし生成時にsetAutoShoot(true)が呼ばれていなかった
+// spawnDescendThenRandomWalkWithPattern() 内でパターン設定のみ
+```
+
+デバッグログで`autoShootEnabled=false`を確認：
+```
+[B-4 updateShooting] autoShootEnabled=false, bulletPool=true, playerPosition=true
+```
+
+### 解決策
+
+`spawnDescendThenRandomWalkWithPattern()`メソッド内で、B4パターンの場合は自動的に`setAutoShoot(true)`を呼び出すように修正。
+
+```typescript
+// 修正後のコード（MobGroupB.ts）
+spawnDescendThenRandomWalkWithPattern(...) {
+  // パターン設定...
+  this.spawnDescendThenRandomWalk(...);
+  this.resetAttackState();
+
+  // B4はAI駆動なのでautoShootを有効にする
+  if (pattern === 'B4') {
+    this.setAutoShoot(true);
+  }
+}
+```
+
+### 修正箇所
+
+1. `src/entities/mobs/MobGroupB.ts`
+   - `spawnDescendThenRandomWalkWithPattern()`メソッド（300-303行）にB4用autoShoot有効化を追加
+
+2. `src/scenes/debug/MobTestScene.ts`
+   - B-4テスト時にautoShootを有効にするよう修正（313-315行）
+
+### 教訓
+
+- 同じクラス内でも、パターンによって動作方式が異なる場合がある（インターバル vs AI駆動）
+- AI駆動の敵は必要なフラグ（`autoShootEnabled`）が有効になっているか確認
+- デバッグログで状態フラグの値を出力することで、問題の原因を特定できる
+- 新しいパターンを追加する際は、既存の生成処理が対応しているか確認する
+
+---
+
 ## テンプレート
 
 ### 問題の症状

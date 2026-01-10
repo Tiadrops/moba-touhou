@@ -118,7 +118,7 @@ export class MobGroupC extends MobEnemy {
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, MobGroupType.GROUP_C, 'fairy_c');
     this.animationKey = 'fairy_c_idle';
-    this.displayScale = 0.045;  // 1488x1440を約65pxに
+    this.displayScale = 0.048;  // 1584x1344を約76pxに
   }
 
   /**
@@ -785,6 +785,9 @@ export class MobGroupC extends MobEnemy {
    * キャラクターに追従する円形エフェクト画像を表示
    */
   private startESkillEffect(): void {
+    // SE再生
+    AudioManager.getInstance().playSe('se_hisui_e', { volume: 1.0 });
+
     // 既存のエフェクトがあれば削除
     this.cleanupESkillEffect();
 
@@ -1047,6 +1050,9 @@ export class MobGroupC extends MobEnemy {
    * W2ダメージフラッシュ（hisui_W2画像を使用）
    */
   private showW2DamageFlash(): void {
+    // SE再生
+    AudioManager.getInstance().playSe('se_hisui_w2', { volume: 1.0 });
+
     // hisui_W2画像（550x1100px）をW2の範囲に合わせてスケーリング
     const imageWidth = 550;
     const imageHeight = 1100;
@@ -1076,6 +1082,9 @@ export class MobGroupC extends MobEnemy {
    * R2スキルダメージフラッシュ（hisui_R2画像を使用）
    */
   private showR2DamageFlash(): void {
+    // SE再生
+    AudioManager.getInstance().playSe('se_hisui_r2', { volume: 1.0 });
+
     // hisui_R2画像（550x1100px）をR2の範囲に合わせてスケーリング
     const imageWidth = 550;
     const imageHeight = 1100;
@@ -1105,6 +1114,9 @@ export class MobGroupC extends MobEnemy {
    * 半円ダメージフラッシュ（hisui_R画像 + 半円マスク）
    */
   private showSemicircleDamageFlash(radius: number, _color: number): void {
+    // SE再生
+    AudioManager.getInstance().playSe('se_hisui_r1', { volume: 1.0 });
+
     // 半円マスクを作成（画面に追加しない）
     const mask = new Phaser.GameObjects.Graphics(this.scene);
     const startAngle = this.currentSkillAngle - Math.PI / 2;
