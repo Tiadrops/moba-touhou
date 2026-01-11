@@ -117,7 +117,7 @@ export class BootScene extends Phaser.Scene {
     this.load.audio('se_hit_enemy', 'sound/se/hit_enemy.mp3');
     this.load.audio('se_spellcard', 'sound/se/spellcard.mp3');
     this.load.audio('se_enep00', 'sound/se/se_enep00.mp3');       // 雑魚撃破SE
-    this.load.audio('se_hit_arrow', 'sound/se/se_hisou_orizin_009.mp3'); // プレイヤー攻撃ヒットSE
+    this.load.audio('se_hit_arrow', 'sound/se/H_reimu_021.wav'); // プレイヤー攻撃ヒットSE
     this.load.audio('se_tan00', 'sound/se/se_tan00.wav');         // 雑魚弾幕発射SE（A系、B-1）
     this.load.audio('se_gun00', 'sound/se/se_gun00.wav');         // B-2レーザー発射SE
     this.load.audio('se_death_grasp', 'sound/se/koma_020.wav');   // デスグラスプヒットSE

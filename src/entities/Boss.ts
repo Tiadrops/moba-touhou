@@ -427,8 +427,8 @@ export abstract class Boss extends Phaser.Physics.Arcade.Sprite {
 
     this.currentHp -= damage;
 
-    // 被弾SE再生
-    AudioManager.getInstance().playSe('se_hit_enemy');
+    // 被弾SE再生（プレイヤー攻撃ヒット音）
+    AudioManager.getInstance().playSe('se_hit_arrow');
 
     this.flashDamage();
 

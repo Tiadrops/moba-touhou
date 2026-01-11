@@ -747,6 +747,9 @@ export class Rumia extends Boss {
       );
     };
 
+    // Qスキル詠唱中のみ（実行中は移動可能）
+    const isQSkillCasting = () => qSkill && qSkill.state === BossSkillState.CASTING;
+
     // Rスキルの処理（最優先）
     switch (rSkill.state) {
       case BossSkillState.READY:
@@ -857,9 +860,13 @@ export class Rumia extends Boss {
       }
     }
 
-    // 移動AI（Rスキル・Qスキル・Eスキル実行中以外はプレイヤーに近づく）
-    if (!isRSkillActive() && !isQSkillActive() && !isESkillActive()) {
+    // 移動AI（Rスキル・Eスキル実行中、Qスキル詠唱中以外はプレイヤーに近づく）
+    // Qスキルは詠唱中のみ移動停止、実行中は移動可能
+    if (!isRSkillActive() && !isQSkillCasting() && !isESkillActive()) {
       this.updateApproachPlayerMovement();
+    } else {
+      // スキル詠唱/実行中は移動を停止
+      this.setVelocity(0, 0);
     }
   }
 
