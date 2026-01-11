@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { SCENES, GAME_CONFIG } from '@/config/GameConfig';
 import { SpellCardCutIn } from '@/ui/components/SpellCardCutIn';
 import { SpellCardCutInV2 } from '@/ui/components/SpellCardCutInV2';
+import { BossEntranceCutIn } from '@/ui/components/BossEntranceCutIn';
 
 /**
  * カットインプリセット
@@ -11,12 +12,13 @@ interface CutInPreset {
   spellName: string;
   bossName: string;
   portraitKey: string;
+  isEntrance?: boolean;  // ボス登場用かどうか
 }
 
 /**
  * カットインバージョン
  */
-type CutInVersion = 'V1' | 'V2';
+type CutInVersion = 'V1' | 'V2' | 'Entrance';
 
 /**
  * 色テーマ定義
@@ -35,7 +37,8 @@ interface ColorTheme {
 export class CutInTestScene extends Phaser.Scene {
   private cutInV1!: SpellCardCutIn;
   private cutInV2!: SpellCardCutInV2;
-  private currentVersion: CutInVersion = 'V2';
+  private cutInEntrance!: BossEntranceCutIn;
+  private currentVersion: CutInVersion = 'Entrance';
   private infoText!: Phaser.GameObjects.Text;
   private versionText!: Phaser.GameObjects.Text;
   private colorText!: Phaser.GameObjects.Text;
@@ -55,8 +58,8 @@ export class CutInTestScene extends Phaser.Scene {
     // 初期化
     this.currentPresetIndex = 0;
     this.isPlaying = false;
-    this.currentVersion = 'V2';
-    this.currentColorIndex = 0;
+    this.currentVersion = 'Entrance';
+    this.currentColorIndex = 1;  // 闇紅テーマをデフォルト
 
     // プリセット定義
     this.initPresets();
@@ -71,6 +74,7 @@ export class CutInTestScene extends Phaser.Scene {
     // カットインシステム初期化
     this.cutInV1 = new SpellCardCutIn(this);
     this.cutInV2 = new SpellCardCutInV2(this);
+    this.cutInEntrance = new BossEntranceCutIn(this);
 
     // キーボード入力
     this.setupKeyboardInput();
@@ -81,8 +85,38 @@ export class CutInTestScene extends Phaser.Scene {
    */
   private initPresets(): void {
     this.presets = [
+      // === ボス登場カットイン案（Entrance用） ===
       {
-        name: 'ルーミア - ダークサイドオブザムーン',
+        name: '【登場案A】宵闇の妖怪',
+        spellName: '宵闇の妖怪',
+        bossName: 'ルーミア',
+        portraitKey: 'cutin_rumia_entrance',
+        isEntrance: true,
+      },
+      {
+        name: '【登場案B】闇よりの訪問者',
+        spellName: '闇よりの訪問者',
+        bossName: 'ルーミア',
+        portraitKey: 'cutin_rumia_entrance',
+        isEntrance: true,
+      },
+      {
+        name: '【登場案C】月下の宵闇',
+        spellName: '月下の宵闇',
+        bossName: 'ルーミア',
+        portraitKey: 'cutin_rumia_entrance',
+        isEntrance: true,
+      },
+      {
+        name: '【登場案D】Stage1 Boss',
+        spellName: 'Stage 1 Boss',
+        bossName: 'ルーミア',
+        portraitKey: 'cutin_rumia_entrance',
+        isEntrance: true,
+      },
+      // === スペルカード（既存） ===
+      {
+        name: 'スペル - ダークサイドオブザムーン',
         spellName: '闇符「ダークサイドオブザムーン」',
         bossName: 'Rumia',
         portraitKey: 'cutin_rumia',
@@ -173,7 +207,7 @@ export class CutInTestScene extends Phaser.Scene {
     // 色テーマ表示
     this.colorText = this.add.text(420, 28, '', {
       fontFamily: 'Arial, sans-serif',
-      fontSize: '24px',
+      fontSize: '20px',
       color: '#ffffff',
     });
     this.updateColorText();
@@ -188,16 +222,14 @@ export class CutInTestScene extends Phaser.Scene {
     this.updateInfoText();
 
     // 操作説明
-    this.add.text(20, GAME_CONFIG.HEIGHT - 220, [
+    this.add.text(20, GAME_CONFIG.HEIGHT - 180, [
       '【操作】',
       '←→: プリセット切替',
-      '↑↓: バージョン切替 (V1/V2)',
-      'C: 色テーマ切替 (V2のみ)',
+      '↑↓: バージョン切替 (V1/V2/Entrance)',
+      'C: 色テーマ切替',
       'Space/Enter: カットイン再生',
       'R: 連続再生（3回）',
       'Esc: 戻る',
-      '',
-      '※ V1: SpellCardCutIn.ts / V2: SpellCardCutInV2.ts',
     ].join('\n'), {
       fontFamily: 'Arial, sans-serif',
       fontSize: '16px',
@@ -249,7 +281,12 @@ export class CutInTestScene extends Phaser.Scene {
    */
   private updateVersionText(): void {
     this.versionText.setText(`[ ${this.currentVersion} ]`);
-    this.versionText.setColor(this.currentVersion === 'V2' ? '#00ffff' : '#ffff00');
+    const colors: Record<CutInVersion, string> = {
+      'V1': '#ffff00',
+      'V2': '#00ffff',
+      'Entrance': '#ff3366',
+    };
+    this.versionText.setColor(colors[this.currentVersion]);
   }
 
   /**
@@ -269,7 +306,7 @@ export class CutInTestScene extends Phaser.Scene {
     const preset = this.presets[this.currentPresetIndex];
     const theme = this.colorThemes[this.currentColorIndex];
 
-    this.infoText.setText([
+    const lines = [
       `バージョン: ${this.currentVersion}`,
       `プリセット: ${this.currentPresetIndex + 1}/${this.presets.length}`,
       `名前: ${preset.name}`,
@@ -279,7 +316,9 @@ export class CutInTestScene extends Phaser.Scene {
       `色テーマ: ${theme.name}`,
       '',
       `状態: ${this.isPlaying ? '再生中...' : '待機中'}`,
-    ].join('\n'));
+    ];
+
+    this.infoText.setText(lines.join('\n'));
   }
 
   /**
@@ -302,7 +341,7 @@ export class CutInTestScene extends Phaser.Scene {
 
     this.input.keyboard?.on('keydown-UP', () => {
       if (!this.isPlaying) {
-        this.currentVersion = this.currentVersion === 'V1' ? 'V2' : 'V1';
+        this.cycleVersion(1);
         this.updateVersionText();
         this.updateInfoText();
       }
@@ -310,7 +349,7 @@ export class CutInTestScene extends Phaser.Scene {
 
     this.input.keyboard?.on('keydown-DOWN', () => {
       if (!this.isPlaying) {
-        this.currentVersion = this.currentVersion === 'V1' ? 'V2' : 'V1';
+        this.cycleVersion(-1);
         this.updateVersionText();
         this.updateInfoText();
       }
@@ -343,18 +382,22 @@ export class CutInTestScene extends Phaser.Scene {
   }
 
   /**
-   * 色テーマをV2に適用
+   * バージョンを循環切替
+   */
+  private cycleVersion(direction: number): void {
+    const versions: CutInVersion[] = ['V1', 'V2', 'Entrance'];
+    const currentIndex = versions.indexOf(this.currentVersion);
+    const newIndex = (currentIndex + direction + versions.length) % versions.length;
+    this.currentVersion = versions[newIndex];
+  }
+
+  /**
+   * 色テーマを適用
    */
   private applyColorTheme(): void {
     const theme = this.colorThemes[this.currentColorIndex];
     this.cutInV2.setColorTheme(theme.borderColor, theme.bgColor1, theme.bgColor2);
-  }
-
-  /**
-   * 現在のカットインインスタンスを取得
-   */
-  private getCurrentCutIn(): SpellCardCutIn | SpellCardCutInV2 {
-    return this.currentVersion === 'V1' ? this.cutInV1 : this.cutInV2;
+    this.cutInEntrance.setColorTheme(theme.borderColor);
   }
 
   /**
@@ -367,16 +410,29 @@ export class CutInTestScene extends Phaser.Scene {
     this.isPlaying = true;
     this.updateInfoText();
 
-    const cutIn = this.getCurrentCutIn();
-    cutIn.show(
-      preset.spellName,
-      preset.bossName,
-      () => {
-        this.isPlaying = false;
-        this.updateInfoText();
-      },
-      preset.portraitKey
-    );
+    const onComplete = () => {
+      this.isPlaying = false;
+      this.updateInfoText();
+    };
+
+    if (this.currentVersion === 'Entrance') {
+      // ボス登場カットイン
+      this.cutInEntrance.show(
+        preset.spellName,  // title (二つ名)
+        preset.bossName,   // name
+        onComplete,
+        preset.portraitKey
+      );
+    } else {
+      // スペルカードカットイン（V1/V2）
+      const cutIn = this.currentVersion === 'V1' ? this.cutInV1 : this.cutInV2;
+      cutIn.show(
+        preset.spellName,
+        preset.bossName,
+        onComplete,
+        preset.portraitKey
+      );
+    }
   }
 
   /**
@@ -399,16 +455,27 @@ export class CutInTestScene extends Phaser.Scene {
       this.isPlaying = true;
       this.updateInfoText();
 
-      const cutIn = this.getCurrentCutIn();
-      cutIn.show(
-        preset.spellName,
-        preset.bossName,
-        () => {
-          // 少し間を開けて次を再生
-          this.time.delayedCall(500, playNext);
-        },
-        preset.portraitKey
-      );
+      const onComplete = () => {
+        // 少し間を開けて次を再生
+        this.time.delayedCall(500, playNext);
+      };
+
+      if (this.currentVersion === 'Entrance') {
+        this.cutInEntrance.show(
+          preset.spellName,
+          preset.bossName,
+          onComplete,
+          preset.portraitKey
+        );
+      } else {
+        const cutIn = this.currentVersion === 'V1' ? this.cutInV1 : this.cutInV2;
+        cutIn.show(
+          preset.spellName,
+          preset.bossName,
+          onComplete,
+          preset.portraitKey
+        );
+      }
     };
 
     playNext();
@@ -423,6 +490,9 @@ export class CutInTestScene extends Phaser.Scene {
     }
     if (this.cutInV2.isPlaying()) {
       this.cutInV2.hide();
+    }
+    if (this.cutInEntrance.isPlaying()) {
+      this.cutInEntrance.hide();
     }
 
     this.cameras.main.fadeOut(300, 0, 0, 0);
@@ -440,6 +510,9 @@ export class CutInTestScene extends Phaser.Scene {
     }
     if (this.cutInV2) {
       this.cutInV2.destroy();
+    }
+    if (this.cutInEntrance) {
+      this.cutInEntrance.destroy();
     }
   }
 }

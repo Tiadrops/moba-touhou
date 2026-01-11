@@ -497,7 +497,7 @@ export class GameScene extends Phaser.Scene {
     this.player.setBoss(this.rumia);
     this.inputManager.setBoss(this.rumia);
 
-    // UIにルーミアを表示（フェーズ名付き）
+    // ボス登場カットインはMidStageSceneで表示済みなので、即座にUIを表示
     const currentPhase = this.rumia.getCurrentPhase();
     const phaseName = currentPhase?.name || 'ノーマル';
     this.uiManager?.showBoss(this.rumia, `ルーミア - ${phaseName}`);
@@ -534,7 +534,8 @@ export class GameScene extends Phaser.Scene {
       this.uiManager?.onBreak();
     });
 
-    console.log(`Rumia spawned! Phase: ${phaseName}, HP: ${currentPhase?.hp}`);
+    const initialPhase = this.rumia.getCurrentPhase();
+    console.log(`Rumia spawned! Phase: ${initialPhase?.name || 'ノーマル'}, HP: ${initialPhase?.hp}`);
   }
 
   /**

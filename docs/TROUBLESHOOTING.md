@@ -490,6 +490,83 @@ spawnDescendThenRandomWalkWithPattern(...) {
 
 ---
 
+## 2026年 - ボスシーン遷移時にリザルトSEが再生される問題
+
+### 問題の症状
+
+Wave 1-2クリア後、リザルト表示終了 → BGM停止 → ボス登場カットイン（MidStageScene）の間に、リザルト行表示SE（`lab_taiko1.mp3`, `lab_taiko2.mp3`）が意図せず再生されていた。
+
+### 原因
+
+**ボスシーン遷移開始後もMidStageSceneのupdate()が動作を続け、Wave処理が重複実行された**のが原因。
+
+遷移の流れ：
+1. Wave 1-2-6完了 → `transitionToBossScene()`呼び出し
+2. ボス登場カットイン表示開始
+3. **MidStageSceneのupdate()がまだ動作中**
+4. update()内で敵撃破判定 → C-2撃破検出 → `showWaveClearUI()`再実行
+5. 新たにリザルトUIが作成され、SE再生のdelayedCallが登録される
+6. カットイン演出中にSEが再生される
+
+デバッグログで確認された重複処理：
+```
+[transitionToBossScene] Called at 1736673456789, pendingTimers=0
+[Wave 1-2-6] B-4出現!
+[Wave 1-2-6] C-2撃破! Waveクリア
+[showWaveClearUI] SE登録開始...
+```
+
+### 解決策
+
+**`isTransitioningToBoss`フラグを追加し、遷移中のWave処理を防止**した。
+
+1. `MidStageScene`クラスに`isTransitioningToBoss`フラグを追加
+2. `transitionToBossScene()`の冒頭でフラグをチェックし、既に遷移中なら早期リターン
+3. 遷移開始時にフラグをtrueに設定
+4. `showWaveClearUI()`でもフラグをチェックし、遷移中なら処理をスキップ
+5. シーン再初期化時（`init()`）にフラグをfalseにリセット
+
+```typescript
+// MidStageScene.ts
+
+// フラグ追加
+private isTransitioningToBoss: boolean = false;
+
+// showWaveClearUIでの早期リターン
+private showWaveClearUI(): void {
+  if (this.isTransitioningToBoss) {
+    return;
+  }
+  // ...
+}
+
+// transitionToBossSceneでの重複防止
+private transitionToBossScene(): void {
+  if (this.isTransitioningToBoss) {
+    return;
+  }
+  this.isTransitioningToBoss = true;
+  // ...
+}
+```
+
+### 修正箇所
+
+1. `src/scenes/MidStageScene.ts`
+   - 149-150行: `isTransitioningToBoss`フラグ追加
+   - 273行: `init()`でフラグをリセット
+   - 1881-1884行: `showWaveClearUI()`に遷移中チェック追加
+   - 2380-2384行: `transitionToBossScene()`に重複遷移防止を追加
+
+### 教訓
+
+- Phaserのシーン遷移は非同期であり、遷移開始後も元シーンのupdate()は動作を続ける
+- delayedCallでスケジュールされたSE再生は、元のシーンが破棄されるまで実行される可能性がある
+- シーン遷移時は「遷移中」フラグを設けて、後続の処理をブロックする
+- 「条件を満たしたらXを実行」のパターンでは、一度実行したら再実行を防ぐガードが必要
+
+---
+
 ## テンプレート
 
 ### 問題の症状

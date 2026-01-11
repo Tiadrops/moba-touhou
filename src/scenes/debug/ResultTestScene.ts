@@ -26,7 +26,10 @@ export class ResultTestScene extends Phaser.Scene {
 
   // リザルトUI要素
   private resultOverlay: Phaser.GameObjects.Rectangle | null = null;
+  private resultBackground: Phaser.GameObjects.Image | null = null;
   private resultContainer: Phaser.GameObjects.Container | null = null;
+  private countdownText: Phaser.GameObjects.Text | null = null;
+  private countdownTimer: Phaser.Time.TimerEvent | null = null;
 
   constructor() {
     super({ key: SCENES.RESULT_TEST });
@@ -320,142 +323,219 @@ export class ResultTestScene extends Phaser.Scene {
     );
     this.resultOverlay.setDepth(DEPTH.UI - 10);
 
-    // コンテナを作成
-    this.resultContainer = this.add.container(centerX, centerY);
+    // コンテナを作成（左寄せ: 中央から120px左にシフト）
+    const containerOffsetX = -120;
+    this.resultContainer = this.add.container(centerX + containerOffsetX, centerY);
     this.resultContainer.setDepth(DEPTH.UI);
 
-    // 上部の装飾ライン
-    const topLine = this.add.rectangle(0, -200, 600, 4, 0xffcc00);
+    // 霊夢立ち絵を右側に配置（下端をプレイエリア下端に合わせる）
+    // コンテナはプレイエリア中央にあるので、HEIGHT/2 で下端に配置
+    const reimuImage = this.add.image(360, HEIGHT / 2, 'result_reimu');
+    reimuImage.setScale(0.6);
+    reimuImage.setOrigin(0.5, 1); // 下端基準
+    reimuImage.setAlpha(0);
+    this.resultContainer.add(reimuImage);
+
+    // リザルト背景画像（スコア表示部分のみをカバー、霊夢の上・テキストの下）
+    // スコア表示範囲: Y = -200 から +280 程度
+    this.resultBackground = this.add.image(0, 30, 'result_background');
+    this.resultBackground.setDisplaySize(500, 520);
+    this.resultBackground.setAlpha(0);
+    this.resultContainer.add(this.resultBackground);
+
+    // 上部の装飾ライン（和紙に合う深紅色）
+    const topLine = this.add.rectangle(0, -200, 450, 4, 0x8b0000);
+    topLine.setAlpha(0);
     this.resultContainer.add(topLine);
 
-    // Waveクリアテキスト
+    // Waveクリアテキスト（墨色系）
     const waveStr = `${preset.waveId.stage}-${preset.waveId.wave}`;
     const waveClearText = this.add.text(0, -170, `Wave ${waveStr} クリア!`, {
       font: 'bold 42px sans-serif',
-      color: '#ffff00',
-      stroke: '#000000',
-      strokeThickness: 4,
+      color: '#8b0000',
+      stroke: '#ffffff',
+      strokeThickness: 3,
     });
     waveClearText.setOrigin(0.5);
+    waveClearText.setAlpha(0);
     this.resultContainer.add(waveClearText);
 
-    // 中央の装飾ライン
-    const midLine = this.add.rectangle(0, -135, 500, 2, 0x888888);
+    // 中央の装飾ライン（深紅色）
+    const midLine = this.add.rectangle(0, -135, 380, 2, 0x8b0000);
+    midLine.setAlpha(0);
     this.resultContainer.add(midLine);
+
+    // ヘッダー要素（SE再生と同時に表示、霊夢も含む）
+    const headerElements = [topLine, waveClearText, midLine, reimuImage];
 
     // スコア内訳の開始Y座標
     let scoreY = -100;
     const lineHeight = 36;
-    const labelX = -180;
-    const valueX = 180;
+    const labelX = -150;
+    const valueX = 150;
 
-    // 撃破スコア
+    // 順次表示用の要素配列
+    const sequentialElements: Phaser.GameObjects.GameObject[][] = [];
+
+    // 撃破スコア（Waveのみ有効）- 墨色系
     const killLabel = this.add.text(labelX, scoreY, '撃破スコア', {
       font: '24px sans-serif',
-      color: '#ffffff',
+      color: '#2d2d2d',
     });
     killLabel.setOrigin(0, 0.5);
+    killLabel.setAlpha(0);
     this.resultContainer.add(killLabel);
 
     const killValue = this.add.text(valueX, scoreY, resultScores.killScore.toLocaleString(), {
       font: 'bold 24px sans-serif',
-      color: '#ffffff',
+      color: '#1a1a1a',
     });
     killValue.setOrigin(1, 0.5);
+    killValue.setAlpha(0);
     this.resultContainer.add(killValue);
 
     const killDetail = this.add.text(valueX + 10, scoreY, `(${preset.killCount}体)`, {
       font: '18px sans-serif',
-      color: '#aaaaaa',
+      color: '#555555',
     });
     killDetail.setOrigin(0, 0.5);
+    killDetail.setAlpha(0);
     this.resultContainer.add(killDetail);
 
     scoreY += lineHeight;
 
-    // タイムボーナス
+    // ブレイクスコア（Bossのみ有効、Waveでは--表示）
+    const breakLabel = this.add.text(labelX, scoreY, 'ブレイクスコア', {
+      font: '24px sans-serif',
+      color: '#2d2d2d',
+    });
+    breakLabel.setOrigin(0, 0.5);
+    breakLabel.setAlpha(0);
+    this.resultContainer.add(breakLabel);
+
+    const breakValue = this.add.text(valueX, scoreY, '--', {
+      font: 'bold 24px sans-serif',
+      color: '#888888',
+    });
+    breakValue.setOrigin(1, 0.5);
+    breakValue.setAlpha(0);
+    this.resultContainer.add(breakValue);
+
+    const breakDetail = this.add.text(valueX + 10, scoreY, '(Boss only)', {
+      font: '18px sans-serif',
+      color: '#888888',
+    });
+    breakDetail.setOrigin(0, 0.5);
+    breakDetail.setAlpha(0);
+    this.resultContainer.add(breakDetail);
+
+    // 撃破スコアとブレイクスコアを同時に表示
+    sequentialElements.push([killLabel, killValue, killDetail, breakLabel, breakValue, breakDetail]);
+
+    scoreY += lineHeight;
+
+    // タイムボーナス - 墨色系
     const timeLabel = this.add.text(labelX, scoreY, 'タイムボーナス', {
       font: '24px sans-serif',
-      color: '#ffffff',
+      color: '#2d2d2d',
     });
     timeLabel.setOrigin(0, 0.5);
+    timeLabel.setAlpha(0);
     this.resultContainer.add(timeLabel);
 
-    const timeBonusColor = resultScores.timeBonus > 0 ? '#00ff00' : '#ff6666';
+    const timeBonusColor = resultScores.timeBonus > 0 ? '#006400' : '#8b0000';
     const timeBonusPrefix = resultScores.timeBonus >= 0 ? '+' : '';
     const timeValue = this.add.text(valueX, scoreY, `${timeBonusPrefix}${resultScores.timeBonus.toLocaleString()}`, {
       font: 'bold 24px sans-serif',
       color: timeBonusColor,
     });
     timeValue.setOrigin(1, 0.5);
+    timeValue.setAlpha(0);
     this.resultContainer.add(timeValue);
 
     const timeDetail = this.add.text(valueX + 10, scoreY, `(${preset.clearTimeSeconds}秒)`, {
       font: '18px sans-serif',
-      color: '#aaaaaa',
+      color: '#555555',
     });
     timeDetail.setOrigin(0, 0.5);
+    timeDetail.setAlpha(0);
     this.resultContainer.add(timeDetail);
+
+    sequentialElements.push([timeLabel, timeValue, timeDetail]);
 
     scoreY += lineHeight;
 
-    // ノーダメージボーナス
+    // ノーダメージボーナス - 墨色系
     const noDamageLabel = this.add.text(labelX, scoreY, 'ノーダメボーナス', {
       font: '24px sans-serif',
-      color: '#ffffff',
+      color: '#2d2d2d',
     });
     noDamageLabel.setOrigin(0, 0.5);
+    noDamageLabel.setAlpha(0);
     this.resultContainer.add(noDamageLabel);
 
-    const noDamageBonusColor = resultScores.noDamageBonus > 0 ? '#ffff00' : '#666666';
+    const noDamageBonusColor = resultScores.noDamageBonus > 0 ? '#b8860b' : '#888888';
     const noDamageValue = this.add.text(valueX, scoreY, resultScores.noDamageBonus > 0 ? `+${resultScores.noDamageBonus.toLocaleString()}` : '---', {
       font: 'bold 24px sans-serif',
       color: noDamageBonusColor,
     });
     noDamageValue.setOrigin(1, 0.5);
+    noDamageValue.setAlpha(0);
     this.resultContainer.add(noDamageValue);
+
+    const noDamageElements: Phaser.GameObjects.GameObject[] = [noDamageLabel, noDamageValue];
 
     if (preset.damageTaken > 0) {
       const damageDetail = this.add.text(valueX + 10, scoreY, `(被ダメ: ${preset.damageTaken})`, {
         font: '18px sans-serif',
-        color: '#ff6666',
+        color: '#8b0000',
       });
       damageDetail.setOrigin(0, 0.5);
+      damageDetail.setAlpha(0);
       this.resultContainer.add(damageDetail);
+      noDamageElements.push(damageDetail);
     }
+
+    sequentialElements.push(noDamageElements);
 
     scoreY += lineHeight + 10;
 
-    // 区切り線
-    const separatorLine = this.add.rectangle(0, scoreY, 400, 2, 0xffffff);
+    // 区切り線（深紅色）
+    const separatorLine = this.add.rectangle(0, scoreY, 400, 2, 0x8b0000);
+    separatorLine.setAlpha(0);
     this.resultContainer.add(separatorLine);
 
     scoreY += 20;
 
-    // Wave合計
+    // Wave合計 - 深紅色で強調
     const totalLabel = this.add.text(labelX, scoreY, 'Wave合計', {
       font: 'bold 28px sans-serif',
-      color: '#ffcc00',
+      color: '#8b0000',
     });
     totalLabel.setOrigin(0, 0.5);
+    totalLabel.setAlpha(0);
     this.resultContainer.add(totalLabel);
 
     const totalValue = this.add.text(valueX, scoreY, resultScores.totalScore.toLocaleString(), {
       font: 'bold 28px sans-serif',
-      color: '#ffcc00',
+      color: '#8b0000',
     });
     totalValue.setOrigin(1, 0.5);
+    totalValue.setAlpha(0);
     this.resultContainer.add(totalValue);
+
+    sequentialElements.push([separatorLine, totalLabel, totalValue]);
 
     scoreY += lineHeight + 20;
 
-    // 下部の装飾ライン
-    const bottomLine1 = this.add.rectangle(0, scoreY, 600, 4, 0xffcc00);
+    // 下部の装飾ライン（深紅色）
+    const bottomLine1 = this.add.rectangle(0, scoreY, 450, 4, 0x8b0000);
+    bottomLine1.setAlpha(0);
     this.resultContainer.add(bottomLine1);
 
     scoreY += 25;
 
-    // 報酬テキスト
+    // 報酬テキスト - 深緑色
     const waveNum = preset.waveId.wave;
     const rewards = waveNum === 1 ? WAVE_CONFIG.REWARDS.WAVE_1_1 : WAVE_CONFIG.REWARDS.WAVE_1_2;
     let rewardText = '';
@@ -467,46 +547,136 @@ export class ResultTestScene extends Phaser.Scene {
 
     const waveRewardText = this.add.text(0, scoreY, rewardText, {
       font: 'bold 30px sans-serif',
-      color: '#00ff00',
-      stroke: '#000000',
-      strokeThickness: 3,
+      color: '#006400',
+      stroke: '#ffffff',
+      strokeThickness: 2,
     });
     waveRewardText.setOrigin(0.5);
+    waveRewardText.setAlpha(0);
     this.resultContainer.add(waveRewardText);
 
     scoreY += 50;
 
-    // 下部の装飾ライン
-    const bottomLine2 = this.add.rectangle(0, scoreY, 600, 4, 0xffcc00);
+    // 下部の装飾ライン（深紅色）
+    const bottomLine2 = this.add.rectangle(0, scoreY, 450, 4, 0x8b0000);
+    bottomLine2.setAlpha(0);
     this.resultContainer.add(bottomLine2);
+
+    sequentialElements.push([bottomLine1, waveRewardText, bottomLine2]);
 
     scoreY += 30;
 
-    // 次へ進むテキスト
+    // 次へ進むテキスト - 墨色系
     const isFinalWave = preset.waveId.wave >= WAVE_CONFIG.STAGE_1.TOTAL_WAVES;
     const nextText = isFinalWave ? 'ボス戦へ...' : `Wave ${preset.waveId.stage}-${preset.waveId.wave + 1} へ...`;
     const waveNextText = this.add.text(0, scoreY, nextText, {
       font: '22px sans-serif',
-      color: '#aaaaaa',
-      stroke: '#000000',
-      strokeThickness: 2,
+      color: '#555555',
     });
     waveNextText.setOrigin(0.5);
+    waveNextText.setAlpha(0);
     this.resultContainer.add(waveNextText);
 
-    // フェードインアニメーション
+    sequentialElements.push([waveNextText]);
+
+    // フェードインアニメーション（オーバーレイと背景）
     this.resultOverlay.setAlpha(0);
-    this.resultContainer.setAlpha(0);
+    this.resultContainer.setAlpha(1);
 
     this.tweens.add({
-      targets: [this.resultOverlay, this.resultContainer],
-      alpha: 1,
+      targets: this.resultOverlay,
+      alpha: 0.7,
+      duration: 500,
+      ease: 'Power2',
+    });
+
+    this.tweens.add({
+      targets: this.resultBackground,
+      alpha: 0.7,
       duration: 500,
       ease: 'Power2',
     });
 
     // SE再生
     AudioManager.getInstance().playSe('se_spellcard');
+
+    // ヘッダー部分を即座に表示
+    this.tweens.add({
+      targets: headerElements,
+      alpha: 1,
+      duration: 300,
+      ease: 'Power2',
+    });
+
+    // 順次表示アニメーション（SE後0.5秒ごとに各行を表示）
+    const displayInterval = 500; // 0.5秒
+    const lastIndex = sequentialElements.length - 1;
+    const totalIndex = 3;  // Wave合計のインデックス
+    const rewardIndex = 4; // 報酬のインデックス
+    sequentialElements.forEach((elements, index) => {
+      this.time.delayedCall(displayInterval * (index + 1), () => {
+        // 行ごとのSE再生
+        if (index === totalIndex) {
+          // Wave合計
+          AudioManager.getInstance().playSe('se_result_total');
+        } else if (index === rewardIndex) {
+          // 報酬
+          AudioManager.getInstance().playSe('se_result_reward');
+        } else if (index < lastIndex) {
+          // 通常行（最後の「次へ進む」テキストでは鳴らさない）
+          AudioManager.getInstance().playSe('se_result_line');
+        }
+        this.tweens.add({
+          targets: elements,
+          alpha: 1,
+          duration: 200,
+          ease: 'Power2',
+        });
+      });
+    });
+
+    // 右下にカウントダウン表示（コンテナ内の相対座標）
+    // 全要素表示後から開始
+    const allElementsDisplayedTime = displayInterval * sequentialElements.length;
+    const countdownDuration = Math.ceil((WAVE_CONFIG.RESULT.DISPLAY_DURATION - allElementsDisplayedTime) / 1000);
+    let remainingSeconds = countdownDuration;
+
+    // カウントダウンテキストを作成（最初は非表示）- 大きく表示
+    this.countdownText = this.add.text(
+      180,  // コンテナ中心から右に180px
+      scoreY + 20,  // 最後の要素の下
+      `${remainingSeconds}`,
+      {
+        font: 'bold 48px sans-serif',
+        color: '#8b0000',
+        stroke: '#ffffff',
+        strokeThickness: 3,
+      }
+    );
+    this.countdownText.setOrigin(1, 0.5);
+    this.countdownText.setAlpha(0);
+    this.resultContainer.add(this.countdownText);
+
+    // 全要素表示後にカウントダウン開始
+    this.time.delayedCall(allElementsDisplayedTime, () => {
+      if (this.countdownText) {
+        this.countdownText.setAlpha(1);
+        AudioManager.getInstance().playSe('se_result_countdown');
+      }
+
+      // 1秒ごとにカウントダウン（0まで表示）
+      this.countdownTimer = this.time.addEvent({
+        delay: 1000,
+        callback: () => {
+          remainingSeconds--;
+          if (this.countdownText && remainingSeconds >= 0) {
+            this.countdownText.setText(`${remainingSeconds}`);
+            AudioManager.getInstance().playSe('se_result_countdown');
+          }
+        },
+        repeat: countdownDuration,
+      });
+    });
 
     // 表示時間後に非表示
     this.time.delayedCall(WAVE_CONFIG.RESULT.DISPLAY_DURATION, () => {
@@ -518,6 +688,13 @@ export class ResultTestScene extends Phaser.Scene {
    * リザルトUIを非表示
    */
   private hideResultUI(): void {
+    // カウントダウンタイマーを停止
+    if (this.countdownTimer) {
+      this.countdownTimer.destroy();
+      this.countdownTimer = null;
+    }
+
+    // 背景はコンテナ内にあるため、コンテナと一緒にフェードアウト
     const targets = [this.resultOverlay, this.resultContainer]
       .filter(t => t !== null);
 
@@ -541,6 +718,9 @@ export class ResultTestScene extends Phaser.Scene {
           this.resultContainer.destroy();
           this.resultContainer = null;
         }
+        // 背景はコンテナ内なのでコンテナ破棄で一緒に破棄される
+        this.resultBackground = null;
+        this.countdownText = null;
         this.isPlaying = false;
         this.updateInfoText();
       },
@@ -560,6 +740,8 @@ export class ResultTestScene extends Phaser.Scene {
       this.resultContainer.destroy();
       this.resultContainer = null;
     }
+    // 背景はコンテナ内なのでコンテナ破棄で一緒に破棄される
+    this.resultBackground = null;
 
     this.cameras.main.fadeOut(300, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {

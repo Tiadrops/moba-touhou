@@ -62,6 +62,12 @@ export class BootScene extends Phaser.Scene {
 
     // カットイン用立ち絵
     this.load.image('cutin_rumia', 'img/Rumia/rumia_3.png');
+    this.load.image('cutin_rumia_entrance', 'img/Rumia/rumia_4.png');
+
+    // リザルト画面用立ち絵
+    this.load.image('result_reimu', 'img/reimu/result_reimu_.png');
+    // リザルト画面用背景
+    this.load.image('result_background', 'img/others/result_background.png');
 
     // 弾幕スプライトシートの読み込み
     // 黒縁中玉: 4096x512px (512x512 × 8色)
@@ -134,6 +140,14 @@ export class BootScene extends Phaser.Scene {
     this.load.audio('se_hisui_r2', 'sound/se/lab_ken6_a.mp3');    // Rスキル矩形
     this.load.audio('se_hisui_w2', 'sound/se/lab_kennuku.mp3');   // W2スキル
     this.load.audio('se_hisui_e', 'sound/se/lab_suburi.mp3');     // Eスキル
+    // ボス登場カットインSE
+    this.load.audio('se_boss_entrance', 'sound/se/対戦カード表示2.mp3');
+
+    // リザルト画面SE
+    this.load.audio('se_result_line', 'sound/se/lab_taiko1.mp3'); // リザルト行表示
+    this.load.audio('se_result_total', 'sound/se/lab_taiko2.mp3'); // Wave合計表示
+    this.load.audio('se_result_reward', 'sound/se/nc10323.mp3');   // 報酬表示
+    this.load.audio('se_result_countdown', 'sound/se/nc12518.mp3'); // カウントダウン
 
     // C-1 デスグラスプエフェクト画像（shadow3シリーズ）
     this.load.image('shadow3-0', 'img/effects/attack/shadow/shadow3-0.png');

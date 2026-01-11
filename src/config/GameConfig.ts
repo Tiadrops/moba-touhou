@@ -499,8 +499,8 @@ export const MID_STAGE_CONFIG = {
  *   z: Wave内の枝番（サブウェーブ）
  */
 export const WAVE_CONFIG = {
-  // Wave間インターバル（ms）
-  CLEAR_INTERVAL_MS: 5000,
+  // Wave間インターバル（ms）- DISPLAY_DURATIONと同じ値にする
+  CLEAR_INTERVAL_MS: 6000,
 
   // Wave報酬設定
   REWARDS: {
@@ -533,7 +533,7 @@ export const WAVE_CONFIG = {
       WAVE_1_2: 10000,             // Wave 1-2: 10000点
     },
     // 表示時間（ms）
-    DISPLAY_DURATION: 5000,
+    DISPLAY_DURATION: 6000,
   },
 
   // ステージ1のWave構成

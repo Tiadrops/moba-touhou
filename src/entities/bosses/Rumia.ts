@@ -228,6 +228,10 @@ export class Rumia extends Boss {
   private foxfireMsBuffRemainingTime: number = 0;         // バフ残り時間（ms）
   private _wSkillInterrupted: boolean = false;            // Wスキルが中断されたか（Breakシステム用）
 
+  // ボス登場カットイン用
+  private _isInvincible: boolean = false;                 // 外部から設定可能な無敵フラグ
+  private _skillsEnabled: boolean = true;                 // スキル有効フラグ
+
   /** Wスキルが中断されたかどうか（Breakシステム用） */
   get wSkillWasInterrupted(): boolean {
     return this._wSkillInterrupted;
@@ -427,6 +431,14 @@ export class Rumia extends Boss {
    */
   protected updateAI(time: number, delta: number): void {
     if (!this.playerPosition) return;
+
+    // スキルが無効化されている場合はAI更新をスキップ
+    if (!this._skillsEnabled) {
+      // アニメーション状態のみ更新
+      this.updateAnimation();
+      this.drawHitbox();
+      return;
+    }
 
     // スペルカードフェーズかどうかでAIを切り替え
     const phase = this.getCurrentPhase();
@@ -2052,10 +2064,31 @@ export class Rumia extends Boss {
   // }
 
   /**
-   * Rスキル中の無敵判定
+   * 無敵判定（Rスキル中 or 外部設定）
    */
   isInvincible(): boolean {
-    return this.rSkillInvincibilityRemaining > 0;
+    return this._isInvincible || this.rSkillInvincibilityRemaining > 0;
+  }
+
+  /**
+   * 外部から無敵状態を設定（カットイン演出用）
+   */
+  setInvincible(value: boolean): void {
+    this._isInvincible = value;
+  }
+
+  /**
+   * スキルの有効/無効を設定（カットイン演出用）
+   */
+  setSkillsEnabled(value: boolean): void {
+    this._skillsEnabled = value;
+  }
+
+  /**
+   * スキルが有効かどうか
+   */
+  areSkillsEnabled(): boolean {
+    return this._skillsEnabled;
   }
 
   // ========================================
