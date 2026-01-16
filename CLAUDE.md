@@ -201,9 +201,32 @@ StageIntroScene → MidStageScene（道中）
                     ↓ Wave 1-2 クリア（最終Wave）
                     ↓
                   GameScene（ボス戦）
+                    ↓ ボス撃破 → リザルト画面（5秒）
+                    ↓
+                  StageIntroScene（Stage 2出撃画面）
                     ↑
 練習モード「ボスのみ」の場合は直接GameSceneへ
 ```
+
+### ボス撃破リザルト画面
+- 実装: `src/scenes/GameScene.ts` の `showBossResultUI()`
+- テスト: `src/scenes/debug/BossResultTestScene.ts`
+
+#### 表示内容
+| 項目 | 表示 | 備考 |
+|------|------|------|
+| 撃破スコア | -- | (mid only)表示、道中のみ |
+| ブレイクスコア | break回数 × 100pt | ボス戦で有効 |
+| タイムボーナス | +0 | 未実装 |
+| ノーダメボーナス | --- | 未実装 |
+| ボス合計 | ブレイクスコア合計 | |
+
+#### 演出フロー
+1. ボス撃破 → SE再生（se_boss_defeat）
+2. 1秒後 → リザルトUI表示開始
+3. 各行順次表示（0.5秒間隔）
+4. 全表示後 → 5秒カウントダウン
+5. カウントダウン0 → Stage 2出撃画面へ遷移
 
 ### デバッグシーン
 | シーン | 説明 | ファイル |
@@ -213,6 +236,7 @@ StageIntroScene → MidStageScene（道中）
 | CutInTestScene | カットイン演出テスト | `src/scenes/debug/CutInTestScene.ts` |
 | MobTestScene | 雑魚弾幕テスト（A1-A6, B1-B4, C1-C2） | `src/scenes/debug/MobTestScene.ts` |
 | ResultTestScene | Waveリザルト演出テスト | `src/scenes/debug/ResultTestScene.ts` |
+| BossResultTestScene | ボス撃破リザルト演出テスト | `src/scenes/debug/BossResultTestScene.ts` |
 | WaveDebugScene | Wave単位デバッグ（1-1-1〜1-2-6） | `src/scenes/debug/WaveDebugScene.ts` |
 
 ### ドキュメント
