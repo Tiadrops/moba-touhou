@@ -123,6 +123,7 @@ export const SCENES = {
   CUTIN_TEST: 'CutInTestScene',
   MOB_TEST: 'MobTestScene',
   RESULT_TEST: 'ResultTestScene',
+  BOSS_RESULT_TEST: 'BossResultTestScene',
   WAVE_DEBUG: 'WaveDebugScene',
 } as const;
 

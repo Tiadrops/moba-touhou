@@ -128,6 +128,13 @@ export class UIManager {
   }
 
   /**
+   * ブレイクカウントを取得
+   */
+  getBreakCount(): number {
+    return this.playerZone.getBreakCount();
+  }
+
+  /**
    * 破棄
    */
   destroy(): void {

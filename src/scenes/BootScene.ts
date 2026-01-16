@@ -16,8 +16,8 @@ export class BootScene extends Phaser.Scene {
 
     // キャラクター立ち絵の読み込み
     this.load.image('portrait_reimu', 'img/reimu/reimu_1.png');
-    this.load.image('portrait_rumia_1', 'img/Rumia/rumia_1.png');
-    this.load.image('portrait_rumia_2', 'img/Rumia/rumia_2.png');
+    this.load.image('portrait_rumia_1', 'img/Rumia/rumia_5.png');
+    this.load.image('portrait_rumia_2', 'img/Rumia/rumia_6.png');
 
     // 霊夢スキル画像
     this.load.image('reimu_skill_q', 'img/reimu/reimu_Q.png');
@@ -142,6 +142,8 @@ export class BootScene extends Phaser.Scene {
     this.load.audio('se_hisui_e', 'sound/se/lab_suburi.mp3');     // Eスキル
     // ボス登場カットインSE
     this.load.audio('se_boss_entrance', 'sound/se/対戦カード表示2.mp3');
+    // ボス撃破SE
+    this.load.audio('se_boss_defeat', 'sound/se/se_enep01.mp3');
 
     // リザルト画面SE
     this.load.audio('se_result_line', 'sound/se/lab_taiko1.mp3'); // リザルト行表示

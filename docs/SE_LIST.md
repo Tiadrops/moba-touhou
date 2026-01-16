@@ -86,6 +86,7 @@ SEを追加した場合はこのファイルに追記してください。
 | `se_spellcard` | SpellCardCutIn.ts | 123 | スペルカード宣言 | 1.0 |
 | `se_spellcard` | SpellCardCutInV2.ts | 318 | スペルカード宣言 | 1.0 |
 | `se_spellcard` | MidStageScene.ts | 2079 | カットイン演出 | 1.0 |
+| `se_boss_defeat` | GameScene.ts | 838 | ボス撃破 | 1.0 |
 
 ## SEファイル一覧
 
@@ -116,3 +117,4 @@ SEを追加した場合はこのファイルに追記してください。
 | `se_fixed_shot` | sound/se/shot1_plus20hz.mp3 |
 | `se_moving` | sound/se/H_alice_002.mp3 |
 | `se_fear` | sound/se/lab_kenzyu.mp3 |
+| `se_boss_defeat` | sound/se/se_enep01.mp3 |

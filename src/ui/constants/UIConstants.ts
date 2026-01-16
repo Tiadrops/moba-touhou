@@ -71,8 +71,8 @@ export const UI_LAYOUT = {
     PORTRAIT: {
       X: 280,                   // ゾーン中央
       Y: (1080 - HUD_HEIGHT) / 2, // プレイヤーと同じY座標（中央）
-      WIDTH: 500,               // プレイヤーと同じサイズ
-      HEIGHT: 800,              // プレイヤーと同じサイズ
+      WIDTH: 500,               // 前の画像と同じ幅
+      HEIGHT: 680,              // 882x1200画像の比率に合わせて調整
       ALPHA: 0.4,
     },
     INFO_PANEL: {

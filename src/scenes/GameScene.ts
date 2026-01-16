@@ -43,6 +43,14 @@ export class GameScene extends Phaser.Scene {
   private enemySpawnInterval: number = 2000; // 2秒ごと
   private score: number = 0;
 
+  // ボス撃破リザルトUI
+  private bossResultOverlay: Phaser.GameObjects.Rectangle | null = null;
+  private bossResultContainer: Phaser.GameObjects.Container | null = null;
+  private bossResultDelayedCalls: Phaser.Time.TimerEvent[] = [];
+  private bossResultCountdownText: Phaser.GameObjects.Text | null = null;
+  private bossResultCountdownTimer: Phaser.Time.TimerEvent | null = null;
+  private isBossDefeated: boolean = false;
+
   // ゲーム開始データ（リトライ時に使用）
   private gameStartData: GameStartData | null = null;
 
@@ -121,19 +129,26 @@ export class GameScene extends Phaser.Scene {
     }
 
     // ルーミア（中ボス）の更新
-    if (this.rumia && this.rumia.getIsActive()) {
-      if (this.player) {
-        this.rumia.setPlayerPosition(this.player.x, this.player.y);
-      }
-      this.rumia.update(time, delta);
+    if (this.rumia) {
+      if (this.rumia.getIsActive()) {
+        if (this.player) {
+          this.rumia.setPlayerPosition(this.player.x, this.player.y);
+        }
+        this.rumia.update(time, delta);
 
-      // ルーミアとの衝突判定（手動チェック）
-      this.checkRumiaCollision();
+        // ルーミアとの衝突判定（手動チェック）
+        this.checkRumiaCollision();
+      } else if (!this.isBossDefeated) {
+        // ボスが非アクティブ化された（スキル等で撃破された）
+        this.score += 5000;
+        console.log('Rumia defeated by skill! Score: +5000');
+        this.onBossDefeated();
+      }
     }
 
-    // 敵の生成（ボス戦中は雑魚敵をスポーンしない）
+    // 敵の生成（ボス戦中・ボス撃破後は雑魚敵をスポーンしない）
     const isBossBattle = this.rumia && this.rumia.getIsActive();
-    if (this.player && !isBossBattle && time - this.lastEnemySpawnTime > this.enemySpawnInterval) {
+    if (this.player && !isBossBattle && !this.isBossDefeated && time - this.lastEnemySpawnTime > this.enemySpawnInterval) {
       this.spawnEnemy();
       this.lastEnemySpawnTime = time;
     }
@@ -621,14 +636,9 @@ export class GameScene extends Phaser.Scene {
         const defenseReduction = DamageCalculator.calculateDamageReduction(this.rumia.getDefense());
         const finalDamage = Math.max(1, Math.floor(rawDamage * defenseReduction));
 
-        // ダメージを与える
-        const destroyed = this.rumia.takeDamage(finalDamage);
+        // ダメージを与える（撃破判定はupdateループで行う）
+        this.rumia.takeDamage(finalDamage);
         bullet.deactivate();
-
-        if (destroyed) {
-          this.score += 5000; // ボス撃破スコア
-          console.log('Rumia defeated! Score: +5000');
-        }
       }
     }
   }
@@ -816,5 +826,410 @@ export class GameScene extends Phaser.Scene {
         },
       });
     });
+  }
+
+  /**
+   * ボス撃破時の処理
+   */
+  private onBossDefeated(): void {
+    if (this.isBossDefeated) return;
+    this.isBossDefeated = true;
+
+    // ボス撃破SE再生
+    AudioManager.getInstance().playSe('se_boss_defeat');
+
+    // 敵弾を全消去
+    this.bulletPool.deactivateEnemyBullets();
+
+    // ボスUIを非表示
+    this.uiManager?.hideBossInfo();
+
+    // BGMをフェードアウト
+    AudioManager.getInstance().stopBgm();
+
+    // 少し遅延してリザルト画面を表示
+    this.time.delayedCall(1000, () => {
+      this.showBossResultUI();
+    });
+  }
+
+  /**
+   * ボス撃破リザルトUIを表示
+   */
+  private showBossResultUI(): void {
+    // 前回の遅延呼び出しをクリア（念のため）
+    this.bossResultDelayedCalls.forEach(timer => {
+      if (timer && !timer.hasDispatched) {
+        timer.destroy();
+      }
+    });
+    this.bossResultDelayedCalls = [];
+
+    // カウントダウンタイマーをクリア
+    if (this.bossResultCountdownTimer) {
+      this.bossResultCountdownTimer.destroy();
+      this.bossResultCountdownTimer = null;
+    }
+
+    const { X, Y, WIDTH, HEIGHT } = GAME_CONFIG.PLAY_AREA;
+    const centerX = X + WIDTH / 2;
+    const centerY = Y + HEIGHT / 2;
+
+    // ブレイクスコアを取得
+    const breakCount = this.uiManager?.getBreakCount() ?? 0;
+    const breakScore = breakCount * 100;
+
+    // 半透明オーバーレイ
+    this.bossResultOverlay = this.add.rectangle(
+      centerX,
+      centerY,
+      WIDTH,
+      HEIGHT,
+      0x000000,
+      0.7
+    );
+    this.bossResultOverlay.setDepth(DEPTH.UI - 10);
+
+    // コンテナを作成（スコアボードは中央に配置）
+    this.bossResultContainer = this.add.container(centerX, centerY);
+    this.bossResultContainer.setDepth(DEPTH.UI);
+
+    // ルーミア立ち絵を左側に配置（スコアボードの反対側）
+    const rumiaImage = this.add.image(-500, HEIGHT / 2, 'portrait_rumia_2');
+    rumiaImage.setScale(0.7);
+    rumiaImage.setOrigin(0.5, 1); // 下端基準
+    rumiaImage.setAlpha(0);
+    rumiaImage.setFlipX(true); // 左向きに反転
+    this.bossResultContainer.add(rumiaImage);
+
+    // 霊夢立ち絵を右側に配置
+    const reimuImage = this.add.image(360, HEIGHT / 2, 'result_reimu');
+    reimuImage.setScale(0.6);
+    reimuImage.setOrigin(0.5, 1);
+    reimuImage.setAlpha(0);
+    this.bossResultContainer.add(reimuImage);
+
+    // リザルト背景画像
+    const resultBackground = this.add.image(0, 30, 'result_background');
+    resultBackground.setDisplaySize(500, 520);
+    resultBackground.setAlpha(0);
+    this.bossResultContainer.add(resultBackground);
+
+    // 上部の装飾ライン（深紅色）
+    const topLine = this.add.rectangle(0, -200, 450, 4, 0x8b0000);
+    topLine.setAlpha(0);
+    this.bossResultContainer.add(topLine);
+
+    // ボス撃破テキスト
+    const clearText = this.add.text(0, -170, 'ルーミア 撃破!', {
+      font: 'bold 42px sans-serif',
+      color: '#8b0000',
+      stroke: '#ffffff',
+      strokeThickness: 3,
+    });
+    clearText.setOrigin(0.5);
+    clearText.setAlpha(0);
+    this.bossResultContainer.add(clearText);
+
+    // 中央の装飾ライン（深紅色）
+    const midLine = this.add.rectangle(0, -135, 380, 2, 0x8b0000);
+    midLine.setAlpha(0);
+    this.bossResultContainer.add(midLine);
+
+    // ヘッダー要素（SE再生と同時に表示）
+    const headerElements = [topLine, clearText, midLine, rumiaImage, reimuImage];
+
+    // スコア内訳の開始Y座標
+    let scoreY = -100;
+    const lineHeight = 36;
+    const labelX = -150;
+    const valueX = 150;
+
+    // 順次表示用の要素配列
+    const sequentialElements: Phaser.GameObjects.GameObject[][] = [];
+
+    // 撃破スコア（ボスでは--表示）
+    const killLabel = this.add.text(labelX, scoreY, '撃破スコア', {
+      font: '24px sans-serif',
+      color: '#2d2d2d',
+    });
+    killLabel.setOrigin(0, 0.5);
+    killLabel.setAlpha(0);
+    this.bossResultContainer.add(killLabel);
+
+    const killValue = this.add.text(valueX, scoreY, '--', {
+      font: 'bold 24px sans-serif',
+      color: '#888888',
+    });
+    killValue.setOrigin(1, 0.5);
+    killValue.setAlpha(0);
+    this.bossResultContainer.add(killValue);
+
+    const killDetail = this.add.text(valueX + 10, scoreY, '(mid only)', {
+      font: '18px sans-serif',
+      color: '#888888',
+    });
+    killDetail.setOrigin(0, 0.5);
+    killDetail.setAlpha(0);
+    this.bossResultContainer.add(killDetail);
+
+    scoreY += lineHeight;
+
+    // ブレイクスコア（ボスで有効）
+    const breakLabel = this.add.text(labelX, scoreY, 'ブレイクスコア', {
+      font: '24px sans-serif',
+      color: '#2d2d2d',
+    });
+    breakLabel.setOrigin(0, 0.5);
+    breakLabel.setAlpha(0);
+    this.bossResultContainer.add(breakLabel);
+
+    const breakValue = this.add.text(valueX, scoreY, this.formatScore(breakScore), {
+      font: 'bold 24px sans-serif',
+      color: '#1a1a1a',
+    });
+    breakValue.setOrigin(1, 0.5);
+    breakValue.setAlpha(0);
+    this.bossResultContainer.add(breakValue);
+
+    const breakDetail = this.add.text(valueX + 10, scoreY, `(${breakCount}回)`, {
+      font: '18px sans-serif',
+      color: '#555555',
+    });
+    breakDetail.setOrigin(0, 0.5);
+    breakDetail.setAlpha(0);
+    this.bossResultContainer.add(breakDetail);
+
+    // 撃破スコアとブレイクスコアを同時に表示
+    sequentialElements.push([killLabel, killValue, killDetail, breakLabel, breakValue, breakDetail]);
+
+    scoreY += lineHeight;
+
+    // タイムボーナス（仮 - 0表示）
+    const timeLabel = this.add.text(labelX, scoreY, 'タイムボーナス', {
+      font: '24px sans-serif',
+      color: '#2d2d2d',
+    });
+    timeLabel.setOrigin(0, 0.5);
+    timeLabel.setAlpha(0);
+    this.bossResultContainer.add(timeLabel);
+
+    const timeValue = this.add.text(valueX, scoreY, '+0', {
+      font: 'bold 24px sans-serif',
+      color: '#888888',
+    });
+    timeValue.setOrigin(1, 0.5);
+    timeValue.setAlpha(0);
+    this.bossResultContainer.add(timeValue);
+
+    sequentialElements.push([timeLabel, timeValue]);
+
+    scoreY += lineHeight;
+
+    // ノーダメージボーナス（仮 - 0表示）
+    const noDamageLabel = this.add.text(labelX, scoreY, 'ノーダメボーナス', {
+      font: '24px sans-serif',
+      color: '#2d2d2d',
+    });
+    noDamageLabel.setOrigin(0, 0.5);
+    noDamageLabel.setAlpha(0);
+    this.bossResultContainer.add(noDamageLabel);
+
+    const noDamageValue = this.add.text(valueX, scoreY, '---', {
+      font: 'bold 24px sans-serif',
+      color: '#888888',
+    });
+    noDamageValue.setOrigin(1, 0.5);
+    noDamageValue.setAlpha(0);
+    this.bossResultContainer.add(noDamageValue);
+
+    sequentialElements.push([noDamageLabel, noDamageValue]);
+
+    scoreY += lineHeight + 10;
+
+    // 区切り線（深紅色）
+    const separatorLine = this.add.rectangle(0, scoreY, 400, 2, 0x8b0000);
+    separatorLine.setAlpha(0);
+    this.bossResultContainer.add(separatorLine);
+
+    scoreY += 20;
+
+    // ボス合計
+    const totalLabel = this.add.text(labelX, scoreY, 'ボス合計', {
+      font: 'bold 28px sans-serif',
+      color: '#8b0000',
+    });
+    totalLabel.setOrigin(0, 0.5);
+    totalLabel.setAlpha(0);
+    this.bossResultContainer.add(totalLabel);
+
+    const totalValue = this.add.text(valueX, scoreY, this.formatScore(breakScore), {
+      font: 'bold 28px sans-serif',
+      color: '#8b0000',
+    });
+    totalValue.setOrigin(1, 0.5);
+    totalValue.setAlpha(0);
+    this.bossResultContainer.add(totalValue);
+
+    sequentialElements.push([separatorLine, totalLabel, totalValue]);
+
+    scoreY += lineHeight + 20;
+
+    // 下部の装飾ライン（深紅色）
+    const bottomLine1 = this.add.rectangle(0, scoreY, 450, 4, 0x8b0000);
+    bottomLine1.setAlpha(0);
+    this.bossResultContainer.add(bottomLine1);
+
+    scoreY += 25;
+
+    // クリアテキスト
+    const completeText = this.add.text(0, scoreY, 'Stage 1 クリア!', {
+      font: 'bold 30px sans-serif',
+      color: '#006400',
+      stroke: '#ffffff',
+      strokeThickness: 2,
+    });
+    completeText.setOrigin(0.5);
+    completeText.setAlpha(0);
+    this.bossResultContainer.add(completeText);
+
+    scoreY += 50;
+
+    // 下部の装飾ライン（深紅色）
+    const bottomLine2 = this.add.rectangle(0, scoreY, 450, 4, 0x8b0000);
+    bottomLine2.setAlpha(0);
+    this.bossResultContainer.add(bottomLine2);
+
+    sequentialElements.push([bottomLine1, completeText, bottomLine2]);
+
+    // フェードインアニメーション（オーバーレイと背景とヘッダー部分）
+    this.bossResultOverlay.setAlpha(0);
+    this.bossResultContainer.setAlpha(1);
+
+    this.tweens.add({
+      targets: this.bossResultOverlay,
+      alpha: 0.7,
+      duration: 500,
+      ease: 'Power2',
+    });
+
+    this.tweens.add({
+      targets: resultBackground,
+      alpha: 0.7,
+      duration: 500,
+      ease: 'Power2',
+    });
+
+    // SE再生
+    AudioManager.getInstance().playSe('se_spellcard');
+
+    // ヘッダー部分を即座に表示
+    this.tweens.add({
+      targets: headerElements,
+      alpha: 1,
+      duration: 300,
+      ease: 'Power2',
+    });
+
+    // 順次表示アニメーション（SE後0.5秒ごとに各行を表示）
+    const displayInterval = 500;
+    const totalIndex = 3;  // ボス合計のインデックス
+    const completeIndex = 4; // Stage クリアのインデックス
+    sequentialElements.forEach((elements, index) => {
+      const timerEvent = this.time.delayedCall(displayInterval * (index + 1), () => {
+        // 行ごとのSE再生
+        if (index === totalIndex) {
+          AudioManager.getInstance().playSe('se_result_total');
+        } else if (index === completeIndex) {
+          AudioManager.getInstance().playSe('se_result_reward');
+        } else if (index < sequentialElements.length - 1) {
+          AudioManager.getInstance().playSe('se_result_line');
+        }
+        this.tweens.add({
+          targets: elements,
+          alpha: 1,
+          duration: 200,
+          ease: 'Power2',
+        });
+      });
+      this.bossResultDelayedCalls.push(timerEvent);
+    });
+
+    // カウントダウン表示（Waveと同様）
+    const allElementsDisplayedTime = displayInterval * sequentialElements.length;
+    const countdownDuration = 5; // 5秒カウントダウン
+    let remainingSeconds = countdownDuration;
+
+    // カウントダウンテキストを作成（最初は非表示）
+    this.bossResultCountdownText = this.add.text(
+      180,  // コンテナ中心から右に180px
+      scoreY + 40,  // 最後の要素の下
+      `${remainingSeconds}`,
+      {
+        font: 'bold 48px sans-serif',
+        color: '#8b0000',
+        stroke: '#ffffff',
+        strokeThickness: 3,
+      }
+    );
+    this.bossResultCountdownText.setOrigin(1, 0.5);
+    this.bossResultCountdownText.setAlpha(0);
+    this.bossResultContainer.add(this.bossResultCountdownText);
+
+    // 全要素表示後にカウントダウン開始
+    const countdownStartTimer = this.time.delayedCall(allElementsDisplayedTime + displayInterval, () => {
+      if (this.bossResultCountdownText) {
+        this.bossResultCountdownText.setAlpha(1);
+        AudioManager.getInstance().playSe('se_result_countdown');
+      }
+
+      // 1秒ごとにカウントダウン（0まで表示）
+      this.bossResultCountdownTimer = this.time.addEvent({
+        delay: 1000,
+        callback: () => {
+          remainingSeconds--;
+          if (this.bossResultCountdownText && remainingSeconds >= 0) {
+            this.bossResultCountdownText.setText(`${remainingSeconds}`);
+            AudioManager.getInstance().playSe('se_result_countdown');
+          }
+          // カウントダウン終了後に遷移
+          if (remainingSeconds <= 0) {
+            this.transitionToStage2();
+          }
+        },
+        repeat: countdownDuration,
+      });
+    });
+    this.bossResultDelayedCalls.push(countdownStartTimer);
+  }
+
+  /**
+   * ステージ2の出撃画面へ遷移
+   */
+  private transitionToStage2(): void {
+    // フェードアウト
+    this.cameras.main.fadeOut(500, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      // ステージ2の出撃画面データを作成
+      const stage2Data: StageIntroData = {
+        mode: this.gameStartData?.mode ?? GameMode.ARCADE,
+        character: this.gameStartData?.character ?? CharacterType.REIMU,
+        difficulty: this.gameStartData?.difficulty ?? Difficulty.NORMAL,
+        stageNumber: 2,
+        continueData: {
+          score: this.score,
+          lives: 3, // TODO: 現在の残機を引き継ぐ
+        },
+      };
+
+      this.scene.start(SCENES.STAGE_INTRO, stage2Data);
+    });
+  }
+
+  /**
+   * スコアをカンマ区切りでフォーマット
+   */
+  private formatScore(score: number): string {
+    return score.toLocaleString();
   }
 }

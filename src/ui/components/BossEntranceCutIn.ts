@@ -64,7 +64,7 @@ export class BossEntranceCutIn {
   private static readonly BORDER_WIDTH = 4;            // ボーダーの太さ
   private static readonly OVERLAY_ALPHA = 0.75;        // 暗転の濃さ
   private static readonly SPELL_FRAME_HEIGHT = 80;     // スペルカードフレームの高さ
-  private static readonly SPELL_FRAME_SKEW = -80 * Math.PI / 180;  // スペルフレームの傾き（ラジアン）80度
+  private static readonly SPELL_FRAME_SKEW = -60 * Math.PI / 180;  // スペルフレームの傾き（ラジアン）60度
   private static readonly SPELL_FRAME_Y = 750;         // スペルカードフレームのY位置
 
   // ズーム設定
@@ -363,16 +363,15 @@ export class BossEntranceCutIn {
     // 線形補間でX位置に応じた中央Y座標を計算
     const getCenterYAtX = (x: number) => skewOffset * (1 - 2 * x / WIDTH);
 
-    // テキストの傾き角度（テロップと同じ角度 + 微調整）
-    const textAngle = Math.atan(skewOffset * 2 / WIDTH) - 0.05;  // 少し時計回りに調整
+    // テキストの傾き角度（フレームの上辺/下辺の傾きに合わせる）
+    // フレームは左から右へ下がる傾き（左端が高く、右端が低い）
+    // getCenterYAtXの傾き: 左端Y=skewOffset、右端Y=-skewOffset → 傾き=-2*skewOffset/WIDTH
+    const textRotation = Math.atan(-skewOffset * 2 / WIDTH);
 
-    // テキストのY座標オフセット（中央線からの調整、正で下方向）
-    const textYOffset = 15;
-
-    // 「宵闘の妖怪」テキスト（白文字、黒縁）
-    const titleX = WIDTH - 520;
-    const titleY = getCenterYAtX(titleX) + textYOffset;
-    const titleText = this.scene.add.text(titleX, titleY, '宵闇の妖怪', {
+    // 「宵闘の妖怪」テキスト（白文字、黒縁）- 右寄せでルーミアの左隣に配置
+    const titleX = WIDTH - 460;
+    const titleY = getCenterYAtX(titleX);
+    const titleText = this.scene.add.text(titleX, titleY, '宵闇の妖怪    ', {
       fontFamily: '"SawarabiMincho", "Yu Mincho", "游明朝", serif',
       fontSize: '36px',
       color: '#ffffff',
@@ -380,13 +379,13 @@ export class BossEntranceCutIn {
       strokeThickness: 4,
     });
     titleText.setOrigin(1, 0.5);
-    titleText.setRotation(-textAngle);  // テロップの傾きに合わせる
+    titleText.setRotation(textRotation);
     titleText.setAlpha(0);
     this.spellFrameContainer.add(titleText);
 
-    // 「ルーミア」テキスト（赤文字、白縁）
-    const nameX = WIDTH - 340;
-    const nameY = getCenterYAtX(nameX) + textYOffset;
+    // 「ルーミア」テキスト（赤文字、白縁）- 宵闘の妖怪の右隣に配置
+    const nameX = WIDTH - 300;
+    const nameY = getCenterYAtX(nameX);
     this.spellNameText = this.scene.add.text(nameX, nameY, 'ルーミア', {
       fontFamily: '"SawarabiMincho", "Yu Mincho", "游明朝", serif',
       fontSize: '42px',
@@ -395,7 +394,7 @@ export class BossEntranceCutIn {
       strokeThickness: 4,
     });
     this.spellNameText.setOrigin(1, 0.5);  // 右寄せ
-    this.spellNameText.setRotation(-textAngle);  // テロップの傾きに合わせる
+    this.spellNameText.setRotation(textRotation);  // テロップの傾きに合わせる
     this.spellNameText.setAlpha(0);
     this.spellFrameContainer.add(this.spellNameText);
 
