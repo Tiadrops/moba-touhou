@@ -8,7 +8,7 @@ import { StageIntroData, GameStartData, PlayerSkillType, SummonerSkillConfig } f
 export class StageIntroScene extends Phaser.Scene {
   private stageData!: StageIntroData;
   private selectedSkillD: PlayerSkillType = PlayerSkillType.FLASH;
-  private selectedSkillF: PlayerSkillType = PlayerSkillType.HEAL;
+  private selectedSkillF: PlayerSkillType = PlayerSkillType.SPIRIT_STRIKE;
   private skillDButtons: Phaser.GameObjects.Container[] = [];
   private skillFButtons: Phaser.GameObjects.Container[] = [];
   private skillDescriptionText!: Phaser.GameObjects.Text;
@@ -24,7 +24,7 @@ export class StageIntroScene extends Phaser.Scene {
   create(): void {
     // 状態をリセット
     this.selectedSkillD = PlayerSkillType.FLASH;
-    this.selectedSkillF = PlayerSkillType.HEAL;
+    this.selectedSkillF = PlayerSkillType.SPIRIT_STRIKE;
     this.skillDButtons = [];
     this.skillFButtons = [];
 
