@@ -614,40 +614,66 @@ export const STAGE_INFO = [
  * サモナースキル情報
  */
 export const SUMMONER_SKILLS = {
+  // フラッシュ: 3m以内のカーソル位置に即座にワープ
   flash: {
     id: 'flash',
     name: 'フラッシュ',
-    description: '短距離瞬間移動。緊急回避に最適。',
-    cooldown: 180000,
+    description: '3m以内のカーソル位置に瞬間移動。',
+    cooldown: 30000,              // 30秒
+    range: 3 * UNIT.METER_TO_PIXEL, // 3m = 165px
+    isSelectable: true,
   },
-  heal: {
-    id: 'heal',
-    name: 'ヒール',
-    description: 'HPを30%回復。持久戦に有効。',
-    cooldown: 180000,
+  // 霊撃(α): 自身を中心に5.5m範囲に0.1秒スタン
+  spirit: {
+    id: 'spirit',
+    name: '霊撃(α)',
+    description: '5.5m範囲の敵に0.1秒スタン。',
+    cooldown: 10000,              // 10秒
+    range: 5.5 * UNIT.METER_TO_PIXEL, // 5.5m = 302.5px
+    stunDuration: 100,            // 0.1秒 = 100ms
+    isSelectable: true,
   },
-  shield: {
-    id: 'shield',
-    name: 'バリア',
-    description: '3秒間ダメージを無効化。',
-    cooldown: 210000,
+  // ガード反撃: 0.75秒防御態勢→台形範囲攻撃
+  guard: {
+    id: 'guard',
+    name: 'ガード反撃',
+    description: '0.75秒防御態勢後、カーソル方向へ台形範囲攻撃。攻撃を防いだらCD50%減少。',
+    cooldown: 12000,              // 12秒
+    guardDuration: 750,           // 0.75秒 = 750ms
+    // 台形攻撃範囲（下底が霊夢側）
+    attackBottomWidth: 3 * UNIT.METER_TO_PIXEL,   // 下底 3m = 165px
+    attackTopWidth: 0.8 * UNIT.METER_TO_PIXEL,    // 上底 0.8m = 44px
+    attackHeight: 6 * UNIT.METER_TO_PIXEL,        // 高さ 6m = 330px
+    damageRatio: 1.0,             // 攻撃力の100%
+    cdReductionOnBlock: 0.50,     // CD50%減少
+    isSelectable: true,
   },
-  bomb: {
-    id: 'bomb',
-    name: 'ボム',
-    description: '画面上の敵弾を消去。',
-    cooldown: 120000,
+  // 制御棒: 5秒間射程+1.5m、攻撃力+10%
+  control: {
+    id: 'control',
+    name: '制御棒',
+    description: '5秒間射程+1.5m、攻撃力+10%。',
+    cooldown: 20000,              // 20秒
+    duration: 5000,               // 5秒
+    rangeBonus: 1.5 * UNIT.METER_TO_PIXEL, // 1.5m = 82.5px
+    attackPowerBonus: 0.10,       // 10%
+    isSelectable: true,
   },
-  timestop: {
-    id: 'timestop',
-    name: '時間停止',
-    description: '2秒間敵の動きを止める。',
-    cooldown: 240000,
+  // 霊撃(β): 5.5m以内の敵弾を消去
+  tengu: {
+    id: 'tengu',
+    name: '霊撃(β)',
+    description: '5.5m以内の敵弾をすべて消去。',
+    cooldown: 15000,              // 15秒
+    range: 5.5 * UNIT.METER_TO_PIXEL, // 5.5m = 302.5px
+    isSelectable: true,
   },
+  // ブースト: 検討中
   boost: {
     id: 'boost',
     name: 'ブースト',
-    description: '10秒間攻撃力50%上昇。',
-    cooldown: 150000,
+    description: '検討中',
+    cooldown: 60000,
+    isSelectable: false,          // 選択不可
   },
 } as const;

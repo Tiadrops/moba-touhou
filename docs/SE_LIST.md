@@ -74,6 +74,18 @@ SEを追加した場合はこのファイルに追記してください。
 | `se_hisui_r1` | MobGroupC.ts | 1118 | Rスキル半円発動 | 1.0 |
 | `se_hisui_r2` | MobGroupC.ts | 1086 | Rスキル矩形発動 | 1.0 |
 
+## サモナースキルSE
+
+| SEキー | ファイル | 行 | 用途 | 音量倍率 |
+|--------|----------|-----|------|---------|
+| `se_flash` | SummonerSkillManager.ts | 169 | フラッシュ発動 | 1.0 |
+| `se_spirit` | SummonerSkillManager.ts | 212 | 霊撃(α)発動 | 1.0 |
+| `se_spirit` | SummonerSkillManager.ts | 312 | 霊撃(β)発動 | 1.0 |
+| `se_guard_start` | SummonerSkillManager.ts | 244 | ガード反撃発動 | 1.5 |
+| `se_guard_success` | SummonerSkillManager.ts | 329 | ガード成功 | 1.5 |
+| `se_hit_enemy` | SummonerSkillManager.ts | 418 | ガード反撃ヒット | 1.0 |
+| `se_control` | SummonerSkillManager.ts | 274 | 制御棒発動 | 1.0 |
+
 ## ボス系SE
 
 | SEキー | ファイル | 行 | 用途 | 音量倍率 |
@@ -118,3 +130,8 @@ SEを追加した場合はこのファイルに追記してください。
 | `se_moving` | sound/se/H_alice_002.mp3 |
 | `se_fear` | sound/se/lab_kenzyu.mp3 |
 | `se_boss_defeat` | sound/se/se_enep01.mp3 |
+| `se_flash` | sound/se/H_reimu_006.mp3 |
+| `se_spirit` | sound/se/nc159380.mp3 |
+| `se_guard_start` | sound/se/on_tuba04.mp3 |
+| `se_guard_success` | sound/se/on_saber.mp3 |
+| `se_control` | sound/se/nc229363.mp3 |

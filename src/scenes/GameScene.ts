@@ -7,11 +7,12 @@ import { Rumia } from '@/entities/bosses/Rumia';
 import { Boss } from '@/entities/Boss';
 import { InputManager } from '@/systems/InputManager';
 import { AudioManager } from '@/systems/AudioManager';
+import { SummonerSkillManager } from '@/systems/SummonerSkillManager';
 import { BulletPool } from '@/utils/ObjectPool';
 import { DamageCalculator } from '@/utils/DamageCalculator';
 import { UIManager } from '@/ui/UIManager';
 import { SpellCardCutInV2 } from '@/ui/components/SpellCardCutInV2';
-import { CharacterType, EnemyType, BulletType, BossPhaseType, GameMode, Difficulty, GameStartData, StageIntroData } from '@/types';
+import { CharacterType, EnemyType, BulletType, BossPhaseType, GameMode, Difficulty, GameStartData, StageIntroData, PlayerSkillType, SummonerSkillConfig } from '@/types';
 import { PauseData } from './PauseScene';
 
 /**
@@ -31,6 +32,7 @@ export class GameScene extends Phaser.Scene {
   // ゲームオブジェクト
   private player!: Player;
   private inputManager!: InputManager;
+  private summonerSkillManager!: SummonerSkillManager;
   private bulletPool!: BulletPool;
   private enemies: Enemy[] = [];
   private rumia: Rumia | null = null; // ルーミア（ボス）
@@ -100,6 +102,27 @@ export class GameScene extends Phaser.Scene {
     // 入力管理の更新
     if (this.inputManager) {
       this.inputManager.update(time, delta);
+    }
+
+    // サモナースキルマネージャーの更新
+    if (this.summonerSkillManager) {
+      // 敵弾リストを設定（天狗団扇用）
+      const enemyBullets = this.bulletPool?.getActiveBullets().filter(
+        (b: Bullet) => b.getBulletType() === BulletType.ENEMY_NORMAL
+      ) || [];
+      this.summonerSkillManager.setEnemyBullets(enemyBullets);
+
+      // 敵リストを設定（霊撃用）- ボスと通常敵を含む
+      const activeEnemies: import('@/types').Attackable[] = [...this.enemies.filter(e => e.getIsActive())];
+      if (this.rumia && this.rumia.getIsActive()) {
+        activeEnemies.push(this.rumia);
+      }
+      this.summonerSkillManager.setEnemies(activeEnemies);
+
+      // 射程ボーナスをプレイヤーに反映
+      this.player?.setRangeBonus(this.summonerSkillManager.getRangeBonus());
+
+      this.summonerSkillManager.update(time, delta);
     }
 
     // 弾の更新
@@ -402,6 +425,15 @@ export class GameScene extends Phaser.Scene {
     this.inputManager = new InputManager(this, this.player);
     this.inputManager.setEnemies(this.enemies);
 
+    // サモナースキルマネージャー（デフォルトでフラッシュと霊撃を設定）
+    const summonerConfig: SummonerSkillConfig = this.gameStartData?.summonerSkills || {
+      D: PlayerSkillType.FLASH,
+      F: PlayerSkillType.SPIRIT_STRIKE,
+    };
+    this.summonerSkillManager = new SummonerSkillManager(this, this.player, summonerConfig);
+    this.inputManager.setSummonerSkillManager(this.summonerSkillManager);
+    this.player.setSummonerSkillManager(this.summonerSkillManager);
+
     // 衝突判定を設定
     this.setupCollisions();
 
@@ -412,6 +444,7 @@ export class GameScene extends Phaser.Scene {
 
     // UIマネージャーを初期化
     this.uiManager = new UIManager(this, this.player);
+    this.uiManager.setSummonerSkillManager(this.summonerSkillManager);
 
     // テスト用: ルーミア（中ボス）を配置
     this.spawnRumia();

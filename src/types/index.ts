@@ -33,14 +33,14 @@ export enum SkillSlot {
   F = 'F',
 }
 
-// プレイヤー選択スキル（D/Fスロット）
+// プレイヤー選択スキル（D/Fスロット）- サモナースキル
 export enum PlayerSkillType {
-  FLASH = 'flash',           // 瞬間移動
-  SHIELD = 'shield',         // シールド生成
-  TIME_STOP = 'timestop',    // 時間停止
-  BOMB = 'bomb',             // 弾幕消去（ボム）
-  HEAL = 'heal',             // HP回復
-  DAMAGE_BOOST = 'boost',    // ダメージブースト
+  FLASH = 'flash',              // フラッシュ - 3m以内のカーソル位置にワープ
+  SPIRIT_STRIKE = 'spirit',     // 霊撃 - 5.5m範囲に0.1秒スタン
+  GUARD_COUNTER = 'guard',      // ガード反撃 - 0.75秒防御態勢→3m移動
+  CONTROL_ROD = 'control',      // 制御棒 - 5秒間射程+1.5m、攻撃力+10%
+  TENGU_FAN = 'tengu',          // 天狗団扇 - 5.5m以内の敵弾を消去
+  BOOST = 'boost',              // ブースト - 検討中（選択不可）
 }
 
 // スキルの基本情報

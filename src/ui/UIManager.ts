@@ -5,6 +5,7 @@ import { Boss } from '@/entities/Boss';
 import { EnemyType } from '@/types';
 import { PlayerZone } from './components/PlayerZone';
 import { EnemyZone } from './components/EnemyZone';
+import { SummonerSkillManager } from '@/systems/SummonerSkillManager';
 
 /**
  * UI全体を管理するクラス
@@ -132,6 +133,13 @@ export class UIManager {
    */
   getBreakCount(): number {
     return this.playerZone.getBreakCount();
+  }
+
+  /**
+   * サモナースキルマネージャーを設定（D/FスキルのCD表示用）
+   */
+  setSummonerSkillManager(manager: SummonerSkillManager): void {
+    this.playerZone.setSummonerSkillManager(manager);
   }
 
   /**

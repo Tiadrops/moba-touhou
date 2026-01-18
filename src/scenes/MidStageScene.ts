@@ -5,11 +5,12 @@ import { Bullet } from '@/entities/Bullet';
 import { MobEnemy, MobGroupA, MobGroupB, MobGroupC } from '@/entities/mobs';
 import { InputManager } from '@/systems/InputManager';
 import { AudioManager } from '@/systems/AudioManager';
+import { SummonerSkillManager } from '@/systems/SummonerSkillManager';
 import { BulletPool } from '@/utils/ObjectPool';
 import { DamageCalculator } from '@/utils/DamageCalculator';
 import { UIManager } from '@/ui/UIManager';
 import { BossEntranceCutIn } from '@/ui/components/BossEntranceCutIn';
-import { CharacterType, BulletType, GameMode, Difficulty, GameStartData, StageIntroData, WaveId, WaveState } from '@/types';
+import { CharacterType, BulletType, GameMode, Difficulty, GameStartData, StageIntroData, WaveId, WaveState, PlayerSkillType, SummonerSkillConfig } from '@/types';
 import { PauseData } from './PauseScene';
 
 /**
@@ -32,6 +33,7 @@ export class MidStageScene extends Phaser.Scene {
   // ゲームオブジェクト
   private player!: Player;
   private inputManager!: InputManager;
+  private summonerSkillManager!: SummonerSkillManager;
   private bulletPool!: BulletPool;
   private bulletTrailGraphics!: Phaser.GameObjects.Graphics;
   private uiManager!: UIManager;
@@ -309,6 +311,23 @@ export class MidStageScene extends Phaser.Scene {
     // 入力管理の更新
     if (this.inputManager) {
       this.inputManager.update(time, delta);
+    }
+
+    // サモナースキルマネージャーの更新
+    if (this.summonerSkillManager) {
+      // 敵弾リストを設定（天狗団扇用）
+      const enemyBullets = this.bulletPool?.getActiveBullets().filter(
+        (b: Bullet) => b.getBulletType() === BulletType.ENEMY_NORMAL
+      ) || [];
+      this.summonerSkillManager.setEnemyBullets(enemyBullets);
+
+      // 敵リストを設定（霊撃用）
+      this.summonerSkillManager.setEnemies(this.allMobs.filter(m => m.getIsActive()));
+
+      // 射程ボーナスをプレイヤーに反映
+      this.player?.setRangeBonus(this.summonerSkillManager.getRangeBonus());
+
+      this.summonerSkillManager.update(time, delta);
     }
 
     // 弾の更新
@@ -2591,6 +2610,15 @@ export class MidStageScene extends Phaser.Scene {
     // 入力管理システム
     this.inputManager = new InputManager(this, this.player);
 
+    // サモナースキルマネージャー（デフォルトでフラッシュと霊撃を設定）
+    const summonerConfig: SummonerSkillConfig = this.gameStartData?.summonerSkills || {
+      D: PlayerSkillType.FLASH,
+      F: PlayerSkillType.SPIRIT_STRIKE,
+    };
+    this.summonerSkillManager = new SummonerSkillManager(this, this.player, summonerConfig);
+    this.inputManager.setSummonerSkillManager(this.summonerSkillManager);
+    this.player.setSummonerSkillManager(this.summonerSkillManager);
+
     // 衝突判定
     this.setupCollisions();
 
@@ -2601,6 +2629,7 @@ export class MidStageScene extends Phaser.Scene {
 
     // UIマネージャー
     this.uiManager = new UIManager(this, this.player);
+    this.uiManager.setSummonerSkillManager(this.summonerSkillManager);
 
     // ポーズ入力
     this.setupPauseInput();

@@ -151,6 +151,13 @@ export class BootScene extends Phaser.Scene {
     this.load.audio('se_result_reward', 'sound/se/nc10323.mp3');   // 報酬表示
     this.load.audio('se_result_countdown', 'sound/se/nc12518.mp3'); // カウントダウン
 
+    // サモナースキルSE
+    this.load.audio('se_flash', 'sound/se/H_reimu_006.mp3');       // フラッシュ発動
+    this.load.audio('se_spirit', 'sound/se/nc159380.mp3');         // 霊撃発動、天狗団扇発動
+    this.load.audio('se_guard_start', 'sound/se/on_tuba04.mp3');   // ガード反撃発動
+    this.load.audio('se_guard_success', 'sound/se/on_saber.mp3');  // ガード成功
+    this.load.audio('se_control', 'sound/se/nc229363.mp3');        // 制御棒発動
+
     // C-1 デスグラスプエフェクト画像（shadow3シリーズ）
     this.load.image('shadow3-0', 'img/effects/attack/shadow/shadow3-0.png');
     this.load.image('shadow3-1', 'img/effects/attack/shadow/shadow3-1.png');

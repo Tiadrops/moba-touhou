@@ -1,11 +1,12 @@
 import Phaser from 'phaser';
 import { Player } from '@/entities/Player';
 import { SkillSlot, SkillState, BuffType, StatusEffectType } from '@/types';
-import { SKILL_CONFIG } from '@/config/GameConfig';
+import { SKILL_CONFIG, SUMMONER_SKILLS } from '@/config/GameConfig';
 import { UI_LAYOUT, UI_DEPTH, SKILL_KEY_LABELS } from '../constants/UIConstants';
 import { SkillSlotUI } from './SkillSlotUI';
 import { HealthBar } from './HealthBar';
 import { CombinedStatusEffectBar } from './StatusEffectSlotUI';
+import { SummonerSkillManager } from '@/systems/SummonerSkillManager';
 
 /**
  * プレイヤーゾーン（右側全体）
@@ -14,6 +15,7 @@ import { CombinedStatusEffectBar } from './StatusEffectSlotUI';
  */
 export class PlayerZone extends Phaser.GameObjects.Container {
   private player: Player;
+  private summonerSkillManager: SummonerSkillManager | null = null;
 
   // 表示要素
   private portrait!: Phaser.GameObjects.Image;
@@ -85,6 +87,21 @@ export class PlayerZone extends Phaser.GameObjects.Container {
 
     scene.add.existing(this);
     this.setDepth(UI_DEPTH.ZONE_BG);
+  }
+
+  /**
+   * サモナースキルマネージャーを設定（D/FスキルのCD表示用）
+   */
+  setSummonerSkillManager(manager: SummonerSkillManager): void {
+    this.summonerSkillManager = manager;
+
+    // D/Fスキルの最大CDを更新
+    const dSkillType = manager.getSkillType(SkillSlot.D);
+    const fSkillType = manager.getSkillType(SkillSlot.F);
+    const dConfig = SUMMONER_SKILLS[dSkillType as keyof typeof SUMMONER_SKILLS];
+    const fConfig = SUMMONER_SKILLS[fSkillType as keyof typeof SUMMONER_SKILLS];
+    (this.maxCooldowns as Record<SkillSlot, number>)[SkillSlot.D] = dConfig.cooldown;
+    (this.maxCooldowns as Record<SkillSlot, number>)[SkillSlot.F] = fConfig.cooldown;
   }
 
   private createPortrait(): void {
@@ -411,7 +428,26 @@ export class PlayerZone extends Phaser.GameObjects.Container {
       const slotUI = this.skillSlots[index];
 
       if (slot === SkillSlot.D || slot === SkillSlot.F) {
-        slotUI.updateState(SkillState.READY, 0, 0);
+        // D/Fスキル（サモナースキル）
+        if (this.summonerSkillManager) {
+          const cooldownRemaining = this.summonerSkillManager.getCooldownRemaining(
+            slot as SkillSlot.D | SkillSlot.F,
+            time
+          );
+          const maxCooldown = this.maxCooldowns[slot];
+
+          let state: SkillState;
+          if (cooldownRemaining > 0) {
+            state = SkillState.COOLDOWN;
+          } else {
+            state = SkillState.READY;
+          }
+
+          slotUI.updateState(state, cooldownRemaining, maxCooldown);
+        } else {
+          // マネージャーがない場合はREADY表示
+          slotUI.updateState(SkillState.READY, 0, 0);
+        }
       } else {
         const cooldownRemaining = this.player.getSkillCooldownRemaining(slot, time);
         const maxCooldown = this.maxCooldowns[slot];

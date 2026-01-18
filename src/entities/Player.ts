@@ -7,6 +7,7 @@ import { DamageCalculator } from '@/utils/DamageCalculator';
 import { AudioManager } from '@/systems/AudioManager';
 import { Enemy } from './Enemy';
 import { SkillProjectile } from './SkillProjectile';
+import type { SummonerSkillManager } from '@/systems/SummonerSkillManager';
 
 /**
  * プレイヤーキャラクタークラス
@@ -90,6 +91,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   // バフ関連
   private buffs: Buff[] = [];
+
+  // サモナースキル射程ボーナス（制御棒用）
+  private rangeBonus: number = 0;
+
+  // サモナースキルマネージャー参照（ガード反撃用）
+  private summonerSkillManager: SummonerSkillManager | null = null;
 
   constructor(
     scene: Phaser.Scene,
@@ -1053,6 +1060,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
    * ダメージを受ける
    */
   takeDamage(damage: number): void {
+    // ガード反撃のガード中の場合、攻撃をブロック
+    if (this.summonerSkillManager && this.summonerSkillManager.isGuarding()) {
+      this.summonerSkillManager.onAttackReceived();
+      // ダメージは受けない（無敵状態）
+      return;
+    }
+
     if (this.isInvincible) {
       return;
     }
@@ -1088,8 +1102,20 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   /**
    * 無敵状態を設定
+   * @param durationOrFlag - 数値の場合は持続時間（ms）、booleanの場合は無敵フラグ
    */
-  setInvincible(duration: number): void {
+  setInvincible(durationOrFlag: number | boolean): void {
+    if (typeof durationOrFlag === 'boolean') {
+      // booleanの場合は直接フラグを設定
+      this.isInvincible = durationOrFlag;
+      if (!durationOrFlag) {
+        this.setAlpha(1);
+      }
+      return;
+    }
+
+    // 数値の場合は従来の動作（点滅アニメーション付き）
+    const duration = durationOrFlag;
     this.isInvincible = true;
 
     // 点滅アニメーション
@@ -1179,7 +1205,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.currentAttackTarget.y
     );
 
-    if (distance <= this.characterConfig.stats.attackRange) {
+    // 制御棒バフを考慮した射程を使用
+    if (distance <= this.getAttackRange()) {
       // ターゲットが射程内に入ったら攻撃して停止
       this.attackTarget(time, this.currentAttackTarget);
       // 攻撃後はターゲットをクリア（1クリック1発）
@@ -1224,7 +1251,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.currentAttackTarget.y
     );
 
-    if (distance <= this.characterConfig.stats.attackRange) {
+    // 制御棒バフを考慮した射程を使用
+    if (distance <= this.getAttackRange()) {
       // 射程内なら攻撃
       this.attackTarget(time, this.currentAttackTarget);
       // 攻撃後はターゲットをクリア（1クリック1発）
@@ -1370,7 +1398,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   findNearestEnemyToPositionInRange(x: number, y: number): Attackable | null {
     let nearestTarget: Attackable | null = null;
     let nearestDistanceToCursor = Infinity;
-    const attackRange = this.characterConfig.stats.attackRange;
+    // 制御棒バフを考慮した射程を使用
+    const attackRange = this.getAttackRange();
 
     console.log(`[Player] findNearestEnemyToPositionInRange: cursor=(${x.toFixed(0)}, ${y.toFixed(0)}), player=(${this.x.toFixed(0)}, ${this.y.toFixed(0)}), range=${attackRange.toFixed(0)}, mobs=${this.mobs.length}, enemies=${this.enemies.length}`);
 
@@ -1480,7 +1509,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       return;
     }
 
-    // 射程内かチェック
+    // 射程内かチェック（制御棒バフを考慮）
     const distance = Phaser.Math.Distance.Between(
       this.x,
       this.y,
@@ -1488,7 +1517,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       target.y
     );
 
-    if (distance > this.characterConfig.stats.attackRange) {
+    if (distance > this.getAttackRange()) {
       return;
     }
 
@@ -1588,7 +1617,21 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   getAttackRange(): number {
-    return this.characterConfig.stats.attackRange;
+    return this.characterConfig.stats.attackRange + this.rangeBonus;
+  }
+
+  /**
+   * 射程ボーナスを設定（制御棒用）
+   */
+  setRangeBonus(bonus: number): void {
+    this.rangeBonus = bonus;
+  }
+
+  /**
+   * サモナースキルマネージャーを設定（ガード反撃用）
+   */
+  setSummonerSkillManager(manager: SummonerSkillManager): void {
+    this.summonerSkillManager = manager;
   }
 
   getIsAttackMove(): boolean {

@@ -3,6 +3,7 @@ import { Player } from '@/entities/Player';
 import { Enemy } from '@/entities/Enemy';
 import { GAME_CONFIG, COLORS, DEPTH } from '@/config/GameConfig';
 import { SkillSlot, Attackable } from '@/types';
+import { SummonerSkillManager } from '@/systems/SummonerSkillManager';
 
 /**
  * 入力管理システム
@@ -25,6 +26,9 @@ export class InputManager {
   // プレイエリアの境界
   private playAreaBounds: Phaser.Geom.Rectangle;
 
+  // サモナースキルマネージャー
+  private summonerSkillManager: SummonerSkillManager | null = null;
+
   constructor(scene: Phaser.Scene, player: Player) {
     this.scene = scene;
     this.player = player;
@@ -34,6 +38,13 @@ export class InputManager {
     this.playAreaBounds = new Phaser.Geom.Rectangle(X, Y, WIDTH, HEIGHT);
 
     this.setupInput();
+  }
+
+  /**
+   * サモナースキルマネージャーを設定
+   */
+  setSummonerSkillManager(manager: SummonerSkillManager): void {
+    this.summonerSkillManager = manager;
   }
 
   /**
@@ -498,9 +509,10 @@ export class InputManager {
         this.handleRSkill(currentTime);
         break;
       case 'D':
+        this.handleSummonerSkill(SkillSlot.D, currentTime);
+        break;
       case 'F':
-        // TODO: 他のスキルを実装
-        console.log(`Skill ${key} not implemented yet`);
+        this.handleSummonerSkill(SkillSlot.F, currentTime);
         break;
     }
   }
@@ -616,6 +628,38 @@ export class InputManager {
     const success = this.player.useQSkill(currentTime, cursorX, cursorY);
     if (success) {
       console.log('Q skill activated!');
+    }
+  }
+
+  /**
+   * サモナースキル処理（D/Fスロット）
+   */
+  private handleSummonerSkill(slot: SkillSlot.D | SkillSlot.F, currentTime: number): void {
+    if (!this.summonerSkillManager) {
+      console.log('Summoner skill manager not set');
+      return;
+    }
+
+    // スキル使用可能か確認
+    if (!this.summonerSkillManager.canUseSkill(slot, currentTime)) {
+      const remaining = this.summonerSkillManager.getCooldownRemaining(slot, currentTime);
+      if (remaining > 0) {
+        const skillConfig = this.summonerSkillManager.getSkillConfig(slot);
+        console.log(`${skillConfig.name} on cooldown: ${(remaining / 1000).toFixed(1)}s`);
+      }
+      return;
+    }
+
+    // 現在のマウスカーソル位置を取得
+    const pointer = this.scene.input.activePointer;
+    const cursorX = pointer.x;
+    const cursorY = pointer.y;
+
+    // スキル発動
+    const success = this.summonerSkillManager.useSkill(slot, currentTime, cursorX, cursorY);
+    if (success) {
+      const skillConfig = this.summonerSkillManager.getSkillConfig(slot);
+      console.log(`${skillConfig.name} activated!`);
     }
   }
 
